@@ -14,7 +14,7 @@ import {
   IconUsers,
   IconWallet,
 } from "@tabler/icons-react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useCooperativeDarkTheme } from "@/components/cooperative/CooperativeThemeContext";
 import { getAuthUser } from "@/lib/auth";
@@ -139,6 +139,17 @@ const copy = {
     assignedAccount: "Numéro de compte attribué",
     accountNumberHelp:
       "Ce numéro est généré automatiquement avec un code de section et un identifiant aléatoire.",
+    refreshAccountNumber: "Régénérer",
+    accountNumberLoading: "Génération du numéro…",
+    accountNumberUnavailable: "Aperçu indisponible",
+    fieldRequiredError: "Ce champ est obligatoire.",
+    nameFieldError: "Saisissez au moins 2 caractères.",
+    phoneFieldError: "Saisissez un numéro valide (au moins 7 chiffres).",
+    emailFieldError: "Saisissez une adresse e-mail valide.",
+    selectFieldError: "Sélectionnez une option.",
+    dateFieldError: "Saisissez une date valide.",
+    nationalIdFieldError: "Saisissez au moins 4 caractères pour la pièce d’identité.",
+    formInvalidNotice: "Complétez les champs en rouge pour activer la création.",
     memberIdentity: "Identité du Membre",
     photoMember: "Photo Membre",
     changePhoto: "Clic pour changer",
@@ -268,6 +279,17 @@ const copy = {
     assignedAccount: "Assigned account number",
     accountNumberHelp:
       "This number is generated automatically using a section code and a random identifier.",
+    refreshAccountNumber: "Regenerate",
+    accountNumberLoading: "Generating account number…",
+    accountNumberUnavailable: "Preview unavailable",
+    fieldRequiredError: "This field is required.",
+    nameFieldError: "Enter at least 2 characters.",
+    phoneFieldError: "Enter a valid phone number (at least 7 digits).",
+    emailFieldError: "Enter a valid email address.",
+    selectFieldError: "Select an option.",
+    dateFieldError: "Enter a valid date.",
+    nationalIdFieldError: "Enter at least 4 characters for the ID document.",
+    formInvalidNotice: "Complete the fields marked in red to enable creation.",
     memberIdentity: "Member Identity",
     photoMember: "Member Photo",
     changePhoto: "Click to change",
@@ -372,6 +394,9 @@ function MemberEnrollmentDialog({
   onCreated: (numeroCompte: string) => void;
 }) {
   const [accountType, setAccountType] = useState("PRINCIPAL");
+  const [generatedAccountNumber, setGeneratedAccountNumber] = useState("");
+  const [generatingAccountNumber, setGeneratingAccountNumber] = useState(false);
+  const [accountNumberError, setAccountNumberError] = useState("");
   const [delegateOpen, setDelegateOpen] = useState(false);
   const [delegate, setDelegate] = useState<DelegateDraft | null>(null);
   const [capturedDelegateUserId, setCapturedDelegateUserId] = useState("");
@@ -384,6 +409,10 @@ function MemberEnrollmentDialog({
   const [memberFingerprintError, setMemberFingerprintError] = useState("");
   const [creatingMember, setCreatingMember] = useState(false);
   const [createError, setCreateError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [touchedFields, setTouchedFields] = useState<Record<string, boolean>>({});
+  const [memberFormValid, setMemberFormValid] = useState(false);
+  const memberFormRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {
     if (memberPhoto) return () => URL.revokeObjectURL(memberPhoto);
@@ -396,6 +425,9 @@ function MemberEnrollmentDialog({
     setWasOpen(open);
     if (!open) {
       setAccountType("PRINCIPAL");
+      setGeneratedAccountNumber("");
+      setGeneratingAccountNumber(false);
+      setAccountNumberError("");
       setDelegate(null);
       setCapturedDelegateUserId("");
       setDelegateFingerprintError("");
@@ -404,7 +436,91 @@ function MemberEnrollmentDialog({
       setMemberUserId("");
       setMemberFingerprintError("");
       setCreateError("");
+      setFieldErrors({});
+      setTouchedFields({});
+      setMemberFormValid(false);
     }
+  }
+
+  const refreshAccountNumber = useCallback(async () => {
+    setGeneratingAccountNumber(true);
+    setAccountNumberError("");
+    setGeneratedAccountNumber("");
+    try {
+      const response = await apiClient.get<{ numero: string }>("/membres/generate-numero", {
+        params: { section: accountType },
+      });
+      setGeneratedAccountNumber(response.data.numero);
+    } catch (error: any) {
+      const message = error?.response?.data?.message;
+      setAccountNumberError(Array.isArray(message) ? message.join(" ") : message || t.accountNumberUnavailable);
+    } finally {
+      setGeneratingAccountNumber(false);
+    }
+  }, [accountType, t.accountNumberUnavailable]);
+
+  useEffect(() => {
+    if (open) void refreshAccountNumber();
+  }, [open, refreshAccountNumber]);
+
+  useEffect(() => {
+    if (open && memberFormRef.current) validateMemberForm(memberFormRef.current);
+  }, [open, generatedAccountNumber, generatingAccountNumber, accountNumberError]);
+
+  function validateMemberForm(form: HTMLFormElement, touchAll = false, touchedName?: string) {
+    const nextErrors: Record<string, string> = {};
+    const nextTouched = { ...touchedFields };
+    const requiredNames = ["memberName", "memberPhone", "memberEmail", "memberSex", "joinDate"];
+    const fields = Array.from(form.elements).filter(
+      (element): element is HTMLInputElement | HTMLSelectElement =>
+        (element instanceof HTMLInputElement || element instanceof HTMLSelectElement) &&
+        element.name !== "" && element.type !== "file",
+    );
+
+    for (const field of fields) {
+      const value = field.value.trim();
+      const required = requiredNames.includes(field.name);
+      if (touchAll || field.name === touchedName || field === form.ownerDocument.activeElement) nextTouched[field.name] = true;
+      if (!value && !required) continue;
+
+      let error = "";
+      if (!value && required) error = t.fieldRequiredError;
+      else if (field.name === "memberName" && value.length < 2) error = t.nameFieldError;
+      else if (field.name === "memberPhone" && (value.replace(/\D/g, "").length < 7 || !/^[+\d\s().-]+$/.test(value))) error = t.phoneFieldError;
+      else if (field.name === "memberEmail" && !(field as HTMLInputElement).validity.valid) error = t.emailFieldError;
+      else if (field.name === "memberSex" && !value) error = t.selectFieldError;
+      else if ((field.name === "joinDate" || field.name === "birthDate") && value && Number.isNaN(Date.parse(value))) error = t.dateFieldError;
+      else if (field.name === "nationalId" && value.length < 4) error = t.nationalIdFieldError;
+      if (error) nextErrors[field.name] = error;
+    }
+
+    setFieldErrors(nextErrors);
+    setTouchedFields(nextTouched);
+    const requiredValid = requiredNames.every((name) => {
+      const field = form.elements.namedItem(name) as HTMLInputElement | HTMLSelectElement | null;
+      return Boolean(field?.value.trim()) && !nextErrors[name];
+    });
+    setMemberFormValid(
+      requiredValid &&
+      !Object.keys(nextErrors).length &&
+      Boolean(generatedAccountNumber) &&
+      !generatingAccountNumber &&
+      !accountNumberError &&
+      !creatingMember,
+    );
+    return requiredValid && !Object.keys(nextErrors).length;
+  }
+
+  function fieldState(name: string) {
+    if (!touchedFields[name]) return "";
+    return fieldErrors[name] ? " has-error" : " is-valid";
+  }
+
+  function fieldFeedback(name: string) {
+    if (!touchedFields[name]) return null;
+    return fieldErrors[name]
+      ? <small className="mw-field-feedback is-error" role="alert">{fieldErrors[name]}</small>
+      : <small className="mw-field-feedback is-valid">✓ Correct</small>;
   }
 
   function saveDelegate(event: React.FormEvent<HTMLFormElement>) {
@@ -468,10 +584,15 @@ function MemberEnrollmentDialog({
 
   async function createMember(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!validateMemberForm(event.currentTarget, true)) {
+      event.currentTarget.querySelector<HTMLElement>(".has-error input, .has-error select")?.focus();
+      return;
+    }
     setCreatingMember(true);
     setCreateError("");
     const data = new FormData(event.currentTarget);
     const payload = {
+      numeroCompte: generatedAccountNumber || undefined,
       nomComplet: String(data.get("memberName") || "").trim(),
       telephone: String(data.get("memberPhone") || "").trim(),
       email: String(data.get("memberEmail") || "").trim(),
@@ -527,7 +648,11 @@ function MemberEnrollmentDialog({
           </DialogHeader>
 
           <form
+            ref={memberFormRef}
             className="mw-member-form"
+            onInput={(event) => validateMemberForm(event.currentTarget)}
+            onChange={(event) => validateMemberForm(event.currentTarget)}
+            onBlur={(event) => validateMemberForm(event.currentTarget, false, (event.target as HTMLElement).getAttribute("name") || undefined)}
             onSubmit={createMember}
           >
             <section
@@ -561,9 +686,21 @@ function MemberEnrollmentDialog({
               <div className="mw-generated-account">
                 <div>
                   <span>{t.assignedAccount}</span>
-                  <strong>{t.accountAssignedOnSave}</strong>
+                  <strong aria-live="polite">
+                    {generatingAccountNumber ? t.accountNumberLoading : generatedAccountNumber || t.accountNumberUnavailable}
+                  </strong>
                 </div>
-                <p>{t.accountAssignedOnSave}</p>
+                <button
+                  type="button"
+                  className="mw-account-refresh"
+                  onClick={() => void refreshAccountNumber()}
+                  disabled={generatingAccountNumber}
+                >
+                  {t.refreshAccountNumber}
+                </button>
+                <p className={accountNumberError ? "is-error" : undefined}>
+                  {accountNumberError || t.accountNumberHelp}
+                </p>
               </div>
             </section>
 
@@ -612,7 +749,7 @@ function MemberEnrollmentDialog({
                 </div>
                 <div className="mw-form-grid">
                   <label
-                    className="mw-field mw-field-wide"
+                    className={`mw-field mw-field-wide${fieldState("memberName")}`}
                     htmlFor="mw-member-full-name"
                   >
                     <span>
@@ -625,8 +762,9 @@ function MemberEnrollmentDialog({
                       required
                       placeholder="e.g. Jean Kabila"
                     />
+                    {fieldFeedback("memberName")}
                   </label>
-                  <label className="mw-field" htmlFor="mw-member-phone">
+                  <label className={`mw-field${fieldState("memberPhone")}`} htmlFor="mw-member-phone">
                     <span>
                       {t.requiredPhone} <b>*</b>
                     </span>
@@ -638,8 +776,9 @@ function MemberEnrollmentDialog({
                       required
                       placeholder="0812345678"
                     />
+                    {fieldFeedback("memberPhone")}
                   </label>
-                  <label className="mw-field" htmlFor="mw-member-email">
+                  <label className={`mw-field${fieldState("memberEmail")}`} htmlFor="mw-member-email">
                     <span>
                       {t.emailAddress} <b>*</b>
                     </span>
@@ -651,8 +790,9 @@ function MemberEnrollmentDialog({
                       required
                       placeholder="membre@example.com"
                     />
+                    {fieldFeedback("memberEmail")}
                   </label>
-                  <label className="mw-field" htmlFor="mw-member-sex">
+                  <label className={`mw-field${fieldState("memberSex")}`} htmlFor="mw-member-sex">
                     <span>
                       {t.sex} <b>*</b>
                     </span>
@@ -669,8 +809,9 @@ function MemberEnrollmentDialog({
                       <option value="M">{t.male}</option>
                       <option value="AUTRE">{t.sexOther}</option>
                     </select>
+                    {fieldFeedback("memberSex")}
                   </label>
-                  <label className="mw-field" htmlFor="mw-member-join-date">
+                  <label className={`mw-field${fieldState("joinDate")}`} htmlFor="mw-member-join-date">
                     <span>
                       {t.joinDate} <b>*</b>
                     </span>
@@ -681,6 +822,7 @@ function MemberEnrollmentDialog({
                       required
                       defaultValue={localDateInputValue()}
                     />
+                    {fieldFeedback("joinDate")}
                   </label>
                 </div>
               </div>
@@ -697,16 +839,17 @@ function MemberEnrollmentDialog({
                 </div>
               </div>
               <div className="mw-form-grid">
-                <label className="mw-field" htmlFor="mw-member-activity">
+                <label className={`mw-field${fieldState("activity")}`} htmlFor="mw-member-activity">
                   <span>{t.memberActivity}</span>
                   <input
                     id="mw-member-activity"
                     name="activity"
                     placeholder={t.memberActivityPlaceholder}
                   />
+                  {fieldFeedback("activity")}
                 </label>
                 <label
-                  className="mw-field mw-field-wide"
+                  className={`mw-field mw-field-wide${fieldState("address")}`}
                   htmlFor="mw-member-address"
                 >
                   <span>{t.address}</span>
@@ -716,27 +859,30 @@ function MemberEnrollmentDialog({
                     autoComplete="street-address"
                     placeholder={t.addressPlaceholder}
                   />
+                  {fieldFeedback("address")}
                 </label>
-                <label className="mw-field" htmlFor="mw-member-national-id">
+                <label className={`mw-field${fieldState("nationalId")}`} htmlFor="mw-member-national-id">
                   <span>{t.nationalId}</span>
                   <input
                     id="mw-member-national-id"
                     name="nationalId"
                     placeholder="00000000000"
                   />
+                  {fieldFeedback("nationalId")}
                 </label>
                 <p className="mw-password-notice">{t.emailCredentialNotice}</p>
               </div>
               <details className="mw-extra-options">
                 <summary>{t.moreOptions}</summary>
                 <div className="mw-extra-grid">
-                  <label className="mw-field" htmlFor="mw-member-birth-date">
+                  <label className={`mw-field${fieldState("birthDate")}`} htmlFor="mw-member-birth-date">
                     <span>{t.birthDate}</span>
                     <input
                       id="mw-member-birth-date"
                       name="birthDate"
                       type="date"
                     />
+                    {fieldFeedback("birthDate")}
                   </label>
                 </div>
               </details>
@@ -837,9 +983,12 @@ function MemberEnrollmentDialog({
               >
                 {t.cancel}
               </button>
-              <button type="submit" className="mw-primary" disabled={creatingMember}>
+              <button type="submit" className="mw-primary" disabled={creatingMember || !memberFormValid}>
                 {creatingMember ? t.creatingMember : t.createMember}
               </button>
+              {!memberFormValid && !creatingMember && (
+                <p className="mw-form-validation-hint" role="status">{t.formInvalidNotice}</p>
+              )}
             </div>
           </form>
         </DialogContent>
