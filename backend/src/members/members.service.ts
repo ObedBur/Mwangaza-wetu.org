@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { MemberMailService } from './member-mail.service';
+import { CloudinaryService } from './cloudinary.service';
 import { CreateMemberDto, Sexe } from './dto/create-member.dto';
 import {
   normalizeSectionName,
@@ -21,51 +22,45 @@ import {
   Devise,
 } from '@prisma/client';
 
+type CloudinaryPhoto = { url: string; publicId: string };
+
 @Injectable()
 export class MembersService {
   private readonly logger = new Logger(MembersService.name);
   constructor(
     private prisma: PrismaService,
     private memberMail: MemberMailService,
+    private cloudinary: CloudinaryService,
   ) {}
 
   private readonly uploadsDir = path.join(process.cwd(), 'uploads');
 
-  private ensureUploadsDir() {
-    if (!fs.existsSync(this.uploadsDir)) {
-      fs.mkdirSync(this.uploadsDir, { recursive: true });
-    }
-  }
-
-  private saveBase64Image(base64: string, prefix: string): string | null {
-    if (
-      !base64 ||
-      typeof base64 !== 'string' ||
-      !base64.startsWith('data:image')
-    ) {
-      return null;
-    }
-
-    const matches = base64.match(/^data:([A-Za-z-+/]+);base64,(.+)$/);
-    if (!matches || matches.length !== 3) {
-      return null;
-    }
-
-    this.ensureUploadsDir();
-
-    const imageType = matches[1];
-    const imageData = matches[2];
-    const buffer = Buffer.from(imageData, 'base64');
-
-    let extension = 'jpg';
-    if (imageType.includes('png')) extension = 'png';
-    else if (imageType.includes('gif')) extension = 'gif';
-    else if (imageType.includes('jpeg')) extension = 'jpg';
-
-    const fileName = `${prefix}_${Date.now()}.${extension}`;
-    fs.writeFileSync(path.join(this.uploadsDir, fileName), buffer);
-
-    return fileName;
+  private async deletePhotoAssets(
+    photos: Array<{
+      url: string | null | undefined;
+      publicId: string | null | undefined;
+    }>,
+  ) {
+    await Promise.all(
+      photos.map(async ({ url, publicId }) => {
+        try {
+          if (publicId) {
+            await this.cloudinary.deleteImage(publicId);
+          } else if (
+            url &&
+            !/^https?:\/\//i.test(url) &&
+            path.basename(url) === url
+          ) {
+            const legacyPath = path.join(this.uploadsDir, url);
+            if (fs.existsSync(legacyPath)) fs.unlinkSync(legacyPath);
+          }
+        } catch (error) {
+          this.logger.warn(
+            `Unable to delete photo asset: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
+      }),
+    );
   }
 
   async findAll(
@@ -287,13 +282,22 @@ export class MembersService {
     const activationExpires = new Date();
     activationExpires.setHours(activationExpires.getHours() + 24);
 
-    // Gérer la photo du membre
-    const photoFileName = this.saveBase64Image(
-      createMemberDto.photoProfil || '',
-      'photo',
-    );
+    let memberPhoto: CloudinaryPhoto | null = null;
+    let delegatePhoto: CloudinaryPhoto | null = null;
 
-    return this.prisma.$transaction(async (tx) => {
+    try {
+      memberPhoto = await this.cloudinary.uploadBase64Image(
+        createMemberDto.photoProfil || '',
+        'mwangaza/membres',
+      );
+      if (delegue) {
+        delegatePhoto = await this.cloudinary.uploadBase64Image(
+          delegue.photoProfil || '',
+          'mwangaza/delegues',
+        );
+      }
+
+      return await this.prisma.$transaction(async (tx) => {
       const membre = await tx.membre.create({
         data: {
           numeroCompte: finalNumeroCompte,
@@ -305,7 +309,8 @@ export class MembersService {
           typeCompte: typeNormalise, // Utiliser la valeur normalisée
           activite: createMemberDto.activite?.trim() || null,
           statut: createMemberDto.statut,
-          photoProfil: photoFileName,
+          photoProfil: memberPhoto?.url ?? null,
+          photoProfilPublicId: memberPhoto?.publicId ?? null,
           userId: createMemberDto.userId || null,
           dateAdhesion: new Date(dateAdhesion),
           motDePasse: hashedPassword,
@@ -367,10 +372,6 @@ export class MembersService {
 
       // 2. Gérer le délégué
       if (delegue) {
-        const deleguePhotoFileName = this.saveBase64Image(
-          delegue.photoProfil || '',
-          'photo_delegue',
-        );
         await tx.delegue.create({
           data: {
             membreId: membre.id,
@@ -379,7 +380,8 @@ export class MembersService {
             relation: delegue.relation,
             pieceIdentite: delegue.pieceIdentite,
             userId: delegue.userId,
-            photoProfil: deleguePhotoFileName,
+            photoProfil: delegatePhoto?.url ?? null,
+            photoProfilPublicId: delegatePhoto?.publicId ?? null,
           },
         });
       }
@@ -396,7 +398,14 @@ export class MembersService {
       );
       const { motDePasse: _passwordHash, activationToken: _token, ...safeMembre } = membre;
       return { ...safeMembre, credentialsSent: true };
-    });
+      });
+    } catch (error) {
+      await this.deletePhotoAssets([
+        { url: memberPhoto?.url, publicId: memberPhoto?.publicId },
+        { url: delegatePhoto?.url, publicId: delegatePhoto?.publicId },
+      ]);
+      throw error;
+    }
   }
 
   async generateNumero(year: number, section?: string) {
@@ -577,32 +586,44 @@ export class MembersService {
     if (updateDto.idNationale !== undefined)
       data.idNationale = updateDto.idNationale;
 
+    let memberPhoto: CloudinaryPhoto | null = null;
+    let delegatePhoto: CloudinaryPhoto | null = null;
+
     // Gérer la photo du membre si fournie en base64
     if (
       updateDto.photoProfil &&
       updateDto.photoProfil.startsWith('data:image')
     ) {
-      const photoFileName = this.saveBase64Image(
+      memberPhoto = await this.cloudinary.uploadBase64Image(
         updateDto.photoProfil,
-        'photo',
+        'mwangaza/membres',
       );
-      if (photoFileName) {
-        data.photoProfil = photoFileName;
-        // Supprimer l'ancienne photo
-        if (membre.photoProfil) {
-          const oldPath = path.join(this.uploadsDir, membre.photoProfil);
-          if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
-        }
+      if (memberPhoto) {
+        data.photoProfil = memberPhoto.url;
+        data.photoProfilPublicId = memberPhoto.publicId;
       }
     } else if (updateDto.photoProfil === null || updateDto.photoProfil === '') {
       data.photoProfil = null;
-      if (membre.photoProfil) {
-        const oldPath = path.join(this.uploadsDir, membre.photoProfil);
-        if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
+      data.photoProfilPublicId = null;
+    }
+
+    if (updateDto.delegue) {
+      try {
+        delegatePhoto = await this.cloudinary.uploadBase64Image(
+          updateDto.delegue.photoProfil || '',
+          'mwangaza/delegues',
+        );
+      } catch (error) {
+        await this.deletePhotoAssets([
+          { url: memberPhoto?.url, publicId: memberPhoto?.publicId },
+        ]);
+        throw error;
       }
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    let updatedMembre;
+    try {
+      updatedMembre = await this.prisma.$transaction(async (tx) => {
       const updatedMembre = await tx.membre.update({
         where: { id },
         data,
@@ -611,11 +632,6 @@ export class MembersService {
       // Gérer le délégué
       if (updateDto.delegue) {
         const existingDelegue = membre.delegues[0];
-        const deleguePhotoFileName = this.saveBase64Image(
-          updateDto.delegue.photoProfil || '',
-          'photo_delegue',
-        );
-
         if (existingDelegue) {
           await tx.delegue.update({
             where: { id: existingDelegue.id },
@@ -625,7 +641,9 @@ export class MembersService {
               relation: updateDto.delegue.relation,
               pieceIdentite: updateDto.delegue.pieceIdentite,
               userId: updateDto.delegue.userId,
-              photoProfil: deleguePhotoFileName || existingDelegue.photoProfil,
+              photoProfil: delegatePhoto?.url || existingDelegue.photoProfil,
+              photoProfilPublicId:
+                delegatePhoto?.publicId || existingDelegue.photoProfilPublicId,
             },
           });
         } else {
@@ -637,14 +655,43 @@ export class MembersService {
               relation: updateDto.delegue.relation,
               pieceIdentite: updateDto.delegue.pieceIdentite,
               userId: updateDto.delegue.userId,
-              photoProfil: deleguePhotoFileName,
+              photoProfil: delegatePhoto?.url ?? null,
+              photoProfilPublicId: delegatePhoto?.publicId ?? null,
             },
           });
         }
       }
 
       return updatedMembre;
-    });
+      });
+    } catch (error) {
+      await this.deletePhotoAssets([
+        { url: memberPhoto?.url, publicId: memberPhoto?.publicId },
+        { url: delegatePhoto?.url, publicId: delegatePhoto?.publicId },
+      ]);
+      throw error;
+    }
+
+    const existingDelegue = membre.delegues[0];
+    await this.deletePhotoAssets([
+      ...(memberPhoto || updateDto.photoProfil === null || updateDto.photoProfil === ''
+        ? [
+            {
+              url: membre.photoProfil,
+              publicId: membre.photoProfilPublicId,
+            },
+          ]
+        : []),
+      ...(delegatePhoto && existingDelegue
+        ? [
+            {
+              url: existingDelegue.photoProfil,
+              publicId: existingDelegue.photoProfilPublicId,
+            },
+          ]
+        : []),
+    ]);
+    return updatedMembre;
   }
 
   async remove(id: number) {
@@ -654,6 +701,7 @@ export class MembersService {
         epargnes: { take: 1 },
         retraits: { take: 1 },
         credits: { take: 1 },
+        delegues: true,
       },
     });
 
@@ -682,16 +730,21 @@ export class MembersService {
       );
     }
 
-    // Supprimer la photo
-    if (membre.photoProfil) {
-      const photoPath = path.join(this.uploadsDir, membre.photoProfil);
-      if (fs.existsSync(photoPath)) fs.unlinkSync(photoPath);
-    }
-
     // Supprimer les délégués associés (pris en charge par cascade si configuré, mais on le fait pour être sûr)
     await this.prisma.delegue.deleteMany({ where: { membreId: id } });
 
-    return this.prisma.membre.delete({ where: { id } });
+    const deletedMembre = await this.prisma.membre.delete({ where: { id } });
+    await this.deletePhotoAssets([
+      {
+        url: membre.photoProfil,
+        publicId: membre.photoProfilPublicId,
+      },
+      ...membre.delegues.map((delegue) => ({
+        url: delegue.photoProfil,
+        publicId: delegue.photoProfilPublicId,
+      })),
+    ]);
+    return deletedMembre;
   }
 
   async getStats() {

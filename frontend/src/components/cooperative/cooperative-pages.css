@@ -1,6 +1,508 @@
 .coop-page-content {
   flex: 1;
 }
+.coop-agents-page .coop-agents-panel {
+  overflow: hidden;
+}
+.coop-agents-table {
+  min-width: 780px;
+}
+.coop-agents-table td small {
+  display: block;
+  margin-top: 3px;
+  color: var(--mw-muted);
+  font-size: 10px;
+}
+.coop-agents-table td strong {
+  color: var(--mw-ink);
+}
+.coop-agents-empty {
+  padding: 34px !important;
+  color: var(--mw-muted);
+  text-align: center;
+}
+.coop-agent-actions {
+  display: flex;
+  gap: 6px;
+}
+.coop-agent-actions .mw-icon-button {
+  width: 30px;
+  height: 30px;
+}
+.coop-agent-delete {
+  color: #b42318;
+}
+.coop-agent-status-button {
+  border: 0;
+  cursor: pointer;
+}
+.coop-agents-notice,
+.coop-agents-form-error {
+  margin: 0 0 14px;
+  border-radius: 7px;
+  padding: 10px 12px;
+  font-size: 12px;
+}
+.coop-agents-notice {
+  background: #f0fdf4;
+  color: #15803d;
+}
+.coop-agents-form-error {
+  background: #fef2f2;
+  color: #b42318;
+}
+.coop-agent-dialog {
+  width: min(700px, calc(100vw - 32px));
+  max-height: min(90dvh, 820px);
+  overflow-y: auto;
+  border: 1px solid var(--mw-line) !important;
+  border-radius: 8px !important;
+  background: var(--mw-paper) !important;
+  color: var(--mw-ink) !important;
+  padding: 0 !important;
+  box-shadow: 0 24px 70px rgb(15 23 42 / 22%);
+}
+.coop-agent-dialog-header {
+  display: flex;
+  min-height: 100px;
+  flex-direction: row;
+  align-items: center;
+  gap: 14px;
+  border-bottom: 1px solid var(--mw-line);
+  background: color-mix(in srgb, var(--mw-primary-soft) 35%, var(--mw-paper));
+  padding: 20px 26px;
+}
+.coop-agent-dialog-icon {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  flex: none;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--mw-primary) 18%, var(--mw-line));
+  border-radius: 8px;
+  background: var(--mw-paper);
+  color: var(--mw-primary);
+}
+.coop-agent-dialog-title-wrap {
+  display: grid;
+  gap: 3px;
+}
+.coop-agent-eyebrow {
+  color: var(--mw-primary);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .08em;
+}
+.coop-agent-dialog .coop-agent-dialog-title-wrap h2 {
+  margin: 0;
+  color: var(--mw-ink);
+  font-size: 19px;
+  font-weight: 680;
+  letter-spacing: -.35px;
+}
+.coop-agent-dialog-title-wrap p {
+  margin: 1px 0 0;
+  color: var(--mw-muted);
+  font-size: 11px;
+}
+.coop-agent-form {
+  display: grid;
+  gap: 0;
+  padding: 4px 26px 0;
+}
+.coop-agent-form-section {
+  display: grid;
+  gap: 14px;
+  padding: 18px 0;
+  border-bottom: 1px solid var(--mw-line);
+}
+.coop-agent-section-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.coop-agent-section-title > span {
+  display: grid;
+  width: 27px;
+  height: 27px;
+  flex: none;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--mw-primary) 25%, var(--mw-line));
+  border-radius: 6px;
+  background: var(--mw-primary-soft);
+  color: var(--mw-primary);
+  font-size: 9px;
+  font-weight: 700;
+}
+.coop-agent-section-title > div {
+  display: grid;
+  gap: 2px;
+}
+.coop-agent-section-title strong {
+  color: var(--mw-ink);
+  font-size: 12px;
+  font-weight: 650;
+}
+.coop-agent-section-title small,
+.coop-agent-checkbox small {
+  color: var(--mw-muted);
+  font-size: 10px;
+  font-weight: 400;
+}
+.coop-agent-field-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 16px;
+}
+.coop-agent-form-section label {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  color: var(--mw-ink);
+  font-size: 11px;
+  font-weight: 600;
+}
+.coop-agent-form-section label b,
+.coop-agent-required-note b {
+  color: #dc2626;
+}
+.coop-agent-form input:not([type="checkbox"]),
+.coop-agent-form select {
+  width: 100%;
+  min-height: 41px;
+  border: 1px solid var(--mw-line);
+  border-radius: 6px;
+  background: var(--mw-paper);
+  color: var(--mw-ink);
+  padding: 0 11px;
+  font: inherit;
+  font-weight: 400;
+  transition: border-color 140ms ease, box-shadow 140ms ease;
+}
+.coop-agent-form input:not([type="checkbox"]):focus,
+.coop-agent-form select:focus {
+  border-color: var(--mw-primary);
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--mw-primary) 12%, transparent);
+}
+.coop-agent-field-grid--funds {
+  grid-template-columns: .8fr 1.2fr;
+}
+.coop-agent-card-upload {
+  grid-column: 1 / -1;
+  padding: 12px;
+  border: 1px dashed var(--mw-line);
+  border-radius: 7px;
+  background: var(--mw-subtle, #f8fafc);
+}
+.coop-agent-card-upload input[type="file"] {
+  min-height: 36px;
+  padding: 6px;
+  background: var(--mw-paper);
+}
+.coop-agent-card-upload > small {
+  color: var(--mw-muted);
+  font-size: 10px;
+  font-weight: 400;
+}
+.coop-agent-card-preview {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.coop-agent-card-preview img {
+  width: 140px;
+  max-height: 100px;
+  border: 1px solid var(--mw-line);
+  border-radius: 5px;
+  object-fit: contain;
+  background: white;
+}
+.coop-agent-card-preview button {
+  border: 0;
+  background: transparent;
+  color: #b42318;
+  font: inherit;
+  cursor: pointer;
+}
+.coop-agent-access-section {
+  border-bottom: 0;
+}
+.coop-agent-form-section .coop-agent-password-field {
+  max-width: 420px;
+}
+.coop-agent-fingerprint-field {
+  display: grid;
+  justify-items: start;
+  gap: 6px;
+  color: var(--mw-ink);
+  font-size: 11px;
+  font-weight: 600;
+}
+.coop-agent-fingerprint-field > span small {
+  color: var(--mw-muted);
+  font-size: 10px;
+  font-weight: 400;
+}
+.coop-agent-capture-button {
+  display: inline-flex;
+  min-height: 38px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid var(--mw-line);
+  border-radius: 6px;
+  background: var(--mw-paper);
+  color: var(--mw-ink);
+  padding: 0 12px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.coop-agent-capture-button svg {
+  color: var(--mw-primary);
+}
+.coop-agent-capture-button:disabled {
+  cursor: wait;
+  opacity: .65;
+}
+.coop-agent-capture-button.is-captured {
+  border-color: #16a34a;
+  background: #f0fdf4;
+  color: #15803d;
+}
+.coop-agent-capture-button.is-captured svg {
+  color: #15803d;
+}
+.coop-agent-fingerprint-field > p {
+  margin: 0;
+  color: var(--mw-muted);
+  font-size: 10px;
+  line-height: 1.4;
+  font-weight: 400;
+}
+.coop-agent-fingerprint-field > .coop-agent-fingerprint-success {
+  color: #15803d;
+  font-weight: 600;
+}
+.coop-agent-fingerprint-field > .coop-agent-fingerprint-error {
+  color: #b42318;
+  font-weight: 600;
+}
+.coop-agent-form .coop-agent-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 2px;
+}
+.coop-agent-checkbox input {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--mw-primary);
+}
+.coop-agent-checkbox > span {
+  display: grid;
+  gap: 3px;
+}
+.coop-agent-required-note {
+  margin-right: auto;
+  color: var(--mw-muted);
+  font-size: 10px;
+}
+.coop-agent-dialog-actions {
+  display: flex;
+  position: sticky;
+  bottom: 0;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+  margin: 0 -26px;
+  border-top: 1px solid var(--mw-line);
+  background: var(--mw-paper);
+  padding: 13px 26px max(13px, env(safe-area-inset-bottom));
+}
+.coop-agent-dialog-actions button {
+  min-height: 38px;
+}
+.coop-agent-credentials-dialog {
+  width: min(480px, calc(100vw - 30px));
+  border: 1px solid var(--mw-line) !important;
+  border-radius: 9px !important;
+  background: var(--mw-paper) !important;
+  color: var(--mw-ink) !important;
+  padding: 24px !important;
+  box-shadow: 0 24px 70px rgb(15 23 42 / 22%);
+}
+.coop-agent-credentials-dialog [data-slot="dialog-header"] {
+  display: grid;
+  justify-items: start;
+  gap: 8px;
+  padding-right: 24px;
+}
+.coop-agent-credentials-icon {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border-radius: 8px;
+  background: #f0fdf4;
+  color: #15803d;
+}
+.coop-agent-credentials-dialog h2 {
+  color: var(--mw-ink);
+  font-size: 18px;
+  font-weight: 680;
+}
+.coop-agent-credentials-dialog [data-slot="dialog-description"] {
+  color: var(--mw-muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+.coop-agent-credentials-box {
+  display: grid;
+  gap: 5px;
+  margin-top: 17px;
+  border: 1px solid var(--mw-line);
+  border-radius: 7px;
+  background: var(--mw-canvas);
+  padding: 13px;
+}
+.coop-agent-credentials-box span {
+  margin-top: 5px;
+  color: var(--mw-muted);
+  font-size: 10px;
+}
+.coop-agent-credentials-box strong,
+.coop-agent-credentials-box code {
+  color: var(--mw-ink);
+  font-size: 12px;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+.coop-agent-credentials-box code {
+  border-radius: 5px;
+  background: var(--mw-paper);
+  padding: 9px 10px;
+  color: var(--mw-primary);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  user-select: all;
+}
+.coop-agent-credentials-warning {
+  margin: 10px 0 0;
+  color: #956b1d;
+  font-size: 10px;
+  line-height: 1.45;
+}
+.coop-agent-password-panel {
+  max-width: 680px;
+  border: 1px solid var(--mw-line);
+  border-radius: 9px;
+  background: var(--mw-paper);
+  padding: 22px;
+  box-shadow: 0 2px 6px rgb(20 36 28 / 4%);
+}
+.coop-agent-password-panel-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-bottom: 1px solid var(--mw-line);
+  padding-bottom: 16px;
+}
+.coop-agent-password-panel-header > span {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  border-radius: 8px;
+  background: var(--mw-primary-soft);
+  color: var(--mw-primary);
+}
+.coop-agent-password-panel-header h2 {
+  margin: 0;
+  color: var(--mw-ink);
+  font-size: 15px;
+  font-weight: 670;
+}
+.coop-agent-password-panel-header p {
+  margin: 4px 0 0;
+  color: var(--mw-muted);
+  font-size: 11px;
+}
+.coop-agent-password-form {
+  display: grid;
+  max-width: 430px;
+  gap: 14px;
+  padding-top: 17px;
+}
+.coop-agent-password-form label {
+  display: grid;
+  gap: 6px;
+  color: var(--mw-ink);
+  font-size: 11px;
+  font-weight: 600;
+}
+.coop-agent-password-form input {
+  min-height: 41px;
+  border: 1px solid var(--mw-line);
+  border-radius: 6px;
+  background: var(--mw-paper);
+  color: var(--mw-ink);
+  padding: 0 11px;
+  font-size: 12px;
+}
+.coop-agent-password-form input:focus {
+  border-color: var(--mw-primary);
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--mw-primary) 12%, transparent);
+}
+.coop-agent-password-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 3px;
+}
+.coop-agent-password-actions button {
+  min-height: 39px;
+}
+.coop-agent-password-success,
+.coop-agent-password-error {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 14px 0 0;
+  border-radius: 6px;
+  padding: 10px 12px;
+  font-size: 11px;
+}
+.coop-agent-password-success {
+  background: #f0fdf4;
+  color: #15803d;
+}
+.coop-agent-password-error {
+  background: #fef2f2;
+  color: #b42318;
+}
+@media (max-width: 620px) {
+  .coop-agent-dialog-header {
+    padding: 17px 18px;
+  }
+  .coop-agent-form {
+    padding-right: 18px;
+    padding-left: 18px;
+  }
+  .coop-agent-field-grid,
+  .coop-agent-field-grid--funds {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .coop-agent-dialog-actions {
+    margin-right: -18px;
+    margin-left: -18px;
+    padding-right: 18px;
+    padding-left: 18px;
+  }
+  .coop-agent-required-note {
+    display: none;
+  }
+}
 .coop-page-heading {
   display: flex;
   align-items: flex-end;

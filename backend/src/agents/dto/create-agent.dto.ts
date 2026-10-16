@@ -1,5 +1,6 @@
 import {
   IsBoolean,
+  IsDateString,
   IsEmail,
   IsEnum,
   IsNotEmpty,
@@ -7,7 +8,6 @@ import {
   IsOptional,
   IsString,
   Min,
-  MinLength,
 } from 'class-validator';
 import { Devise } from '@prisma/client';
 
@@ -15,6 +15,18 @@ export class CreateAgentDto {
   @IsString()
   @IsNotEmpty()
   nom: string;
+
+  @IsDateString()
+  @IsOptional()
+  dateNaissance?: string;
+
+  @IsString()
+  @IsOptional()
+  numeroCarteElecteur?: string;
+
+  @IsString()
+  @IsOptional()
+  imageCarteElecteur?: string;
 
   @IsEmail()
   @IsNotEmpty()
@@ -40,11 +52,6 @@ export class CreateAgentDto {
   @IsString()
   @IsOptional()
   userId?: string;
-
-  @IsString()
-  @IsOptional()
-  @MinLength(6)
-  motDePasse?: string;
 
   @IsBoolean()
   @IsOptional()

@@ -16,35 +16,37 @@ model Attendance {
 }
 
 model Membre {
-  id                Int             @id @default(autoincrement())
-  numeroCompte      String          @unique @map("numero_compte")
-  nomComplet        String          @map("nom_complet")
-  dateAdhesion      DateTime        @map("date_adhesion")
-  telephone         String          @unique
-  email             String?         @unique
-  adresse           String?
-  sexe              Sexe?
-  typeCompte        String          @map("type_compte")
-  activite          String?
-  statut            StatutMembre    @default(actif)
-  photoProfil       String?         @map("photo_profil")
-  userId            String?         @map("userId")
-  motDePasse        String?         @map("mot_de_passe")
-  dateNaissance     DateTime?       @map("date_naissance")
-  idNationale       String?         @map("id_nationale")
-  createdAt         DateTime        @default(now()) @map("created_at")
-  updatedAt         DateTime        @updatedAt @map("updated_at")
-  first_acces       Boolean         @default(true)
-  activationToken   String?         @map("activation_token")
-  activationExpires DateTime?       @map("activation_expires")
-  isActivated       Boolean         @default(false) @map("is_activated")
-  attendances       Attendance[]
-  comptesEpargne    CompteEpargne[]
-  credits           Credit[]
-  delegues          Delegue[]
-  epargnes          Epargne[]
-  notifications     notifications[]
-  retraits          Retrait[]
+  id                  Int             @id @default(autoincrement())
+  numeroCompte        String          @unique @map("numero_compte")
+  nomComplet          String          @map("nom_complet")
+  dateAdhesion        DateTime        @map("date_adhesion")
+  telephone           String          @unique
+  email               String?         @unique
+  adresse             String?
+  sexe                Sexe?
+  typeCompte          String          @map("type_compte")
+  activite            String?
+  statut              StatutMembre    @default(actif)
+  photoProfil         String?         @map("photo_profil")
+  photoProfilPublicId String?         @map("photo_profil_public_id")
+  userId              String?         @map("userId")
+  motDePasse          String?         @map("mot_de_passe")
+  dateNaissance       DateTime?       @map("date_naissance")
+  idNationale         String?         @map("id_nationale")
+  createdAt           DateTime        @default(now()) @map("created_at")
+  updatedAt           DateTime        @updatedAt @map("updated_at")
+  first_acces         Boolean         @default(true)
+  activationToken     String?         @map("activation_token")
+  activationExpires   DateTime?       @map("activation_expires")
+  isActivated         Boolean         @default(false) @map("is_activated")
+  attendances         Attendance[]
+  comptesEpargne      CompteEpargne[]
+  credits             Credit[]
+  dats                Dat[]
+  delegues            Delegue[]
+  epargnes            Epargne[]
+  notifications       notifications[]
+  retraits            Retrait[]
 
   @@map("membres")
 }
@@ -68,16 +70,17 @@ model Administrateur {
 }
 
 model Delegue {
-  id            Int      @id @default(autoincrement())
-  membreId      Int      @map("membre_id")
-  nom           String
-  telephone     String
-  relation      String
-  pieceIdentite String?  @map("piece_identite")
-  userId        String?  @map("userId")
-  photoProfil   String?  @map("photo_profil")
-  createdAt     DateTime @default(now()) @map("created_at")
-  membre        Membre   @relation(fields: [membreId], references: [id], onDelete: Cascade)
+  id                  Int      @id @default(autoincrement())
+  membreId            Int      @map("membre_id")
+  nom                 String
+  telephone           String
+  relation            String
+  pieceIdentite       String?  @map("piece_identite")
+  userId              String?  @map("userId")
+  photoProfil         String?  @map("photo_profil")
+  photoProfilPublicId String?  @map("photo_profil_public_id")
+  createdAt           DateTime @default(now()) @map("created_at")
+  membre              Membre   @relation(fields: [membreId], references: [id], onDelete: Cascade)
 
   @@map("delegues")
 }
@@ -112,6 +115,9 @@ model Epargne {
   id              Int                  @id @default(autoincrement())
   compte          String
   typeOperation   TypeOperationEpargne @map("type_operation")
+  // Sous-compte porteur de l'opération : PRINCIPAL (défaut) ou DAT.
+  // Permet de séparer strictement le solde libre du solde bloqué.
+  typeCompte      String               @default("PRINCIPAL") @map("type_compte")
   devise          Devise
   montant         Decimal              @db.Decimal(18, 2)
   dateOperation   DateTime             @map("date_operation")
@@ -123,7 +129,41 @@ model Epargne {
 
   @@index([remboursementId])
   @@index([dateOperation])
+  @@index([compte, typeCompte])
   @@map("epargnes")
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// DÉPÔT À TERME (DAT) — dossier fonctionnel §3.2
+// 1 seul DAT actif par membre ; retrait anticipé INTERDIT (décision E1)
+// ─────────────────────────────────────────────────────────────────────
+model Dat {
+  id            Int       @id @default(autoincrement())
+  numeroCompte  String    @map("numero_compte")
+  devise        Devise
+  // Capital bloqué à l'ouverture
+  capital       Decimal   @db.Decimal(18, 2)
+  // Taux de période FIGÉ à l'ouverture (15 % ou 30 %) — modifiable
+  // uniquement via les paramètres pour les futurs DAT, jamais rétroactif
+  tauxPeriode   Decimal   @map("taux_periode") @db.Decimal(8, 4)
+  // Durée choisie : 1 / 3 / 6 / 12 mois
+  dureeMois     Int       @map("duree_mois")
+  // Base de jours du dossier : 31 / 93 / 186 / 365
+  baseJours     Int       @map("base_jours")
+  // Gain calculé à l'ouverture = capital × taux de période
+  gain          Decimal   @default(0) @db.Decimal(18, 2)
+  dateOuverture DateTime  @map("date_ouverture")
+  dateEcheance  DateTime  @map("date_echeance")
+  statut        StatutDat @default(OUVERT)
+  // Motif en cas d'annulation (contrepassation tracée — §8.3)
+  motif         String?
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+  membre        Membre    @relation(fields: [numeroCompte], references: [numeroCompte])
+
+  @@index([numeroCompte, statut])
+  @@index([dateEcheance])
+  @@map("dats")
 }
 
 model Retrait {
@@ -286,17 +326,21 @@ model notifications {
 }
 
 model Agent {
-  id             Int      @id @default(autoincrement())
-  nom            String
-  email          String   @unique
-  telephone      String
-  guichetAssigne String   @map("guichet_assigne")
-  soldeInitial   Decimal  @default(0) @map("solde_initial") @db.Decimal(18, 2)
-  devise         Devise   @default(USD)
-  actif          Boolean  @default(true)
-  motDePasse     String?  @map("mot_de_passe")
-  userId         String?  @unique @map("userId")
-  createdAt      DateTime @default(now()) @map("created_at")
+  id                         Int       @id @default(autoincrement())
+  nom                        String
+  dateNaissance              DateTime? @map("date_naissance") @db.Date
+  numeroCarteElecteur        String?   @unique @map("numero_carte_electeur")
+  imageCarteElecteur         String?   @map("image_carte_electeur")
+  imageCarteElecteurPublicId String?   @map("image_carte_electeur_public_id")
+  email                      String    @unique
+  telephone                  String
+  guichetAssigne             String    @map("guichet_assigne")
+  soldeInitial               Decimal   @default(0) @map("solde_initial") @db.Decimal(18, 2)
+  devise                     Devise    @default(USD)
+  actif                      Boolean   @default(true)
+  motDePasse                 String?   @map("mot_de_passe")
+  userId                     String?   @unique @map("userId")
+  createdAt                  DateTime  @default(now()) @map("created_at")
 
   @@map("agents")
 }
@@ -338,6 +382,14 @@ enum StatutRetrait {
   PENDING
   COMPLETED
   FAILED
+}
+
+// Cycle de vie du DAT (§3.2 du dossier fonctionnel)
+enum StatutDat {
+  OUVERT // capital bloqué jusqu'à l'échéance
+  ECHEANCE // échéance atteinte — membre peut venir au guichet
+  CLOTURE // capital + gain versés sur le Principal
+  ANNULE // contrepassation tracée (motif obligatoire)
 }
 
 enum StatutProjet {

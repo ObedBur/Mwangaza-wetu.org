@@ -1,5 +1,6 @@
 import {
   IsBoolean,
+  IsDateString,
   IsEmail,
   IsEnum,
   IsNumber,
@@ -14,6 +15,18 @@ export class UpdateAgentDto {
   @IsString()
   @IsOptional()
   nom?: string;
+
+  @IsDateString()
+  @IsOptional()
+  dateNaissance?: string;
+
+  @IsString()
+  @IsOptional()
+  numeroCarteElecteur?: string;
+
+  @IsString()
+  @IsOptional()
+  imageCarteElecteur?: string;
 
   @IsEmail()
   @IsOptional()

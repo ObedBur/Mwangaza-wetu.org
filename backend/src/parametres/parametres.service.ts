@@ -25,6 +25,33 @@ export interface GeneralParameters {
   };
 }
 
+/** Barème d'un DAT (§3.2 du dossier fonctionnel). */
+export interface DatDuree {
+  dureeMois: number; // 1 | 3 | 6 | 12
+  baseJours: number; // 31 | 93 | 186 | 365
+  tauxPeriode: number; // % appliqué à LA PÉRIODE (jamais ramené à un an)
+  minFc: number; // minimum d'ouverture en FC
+  minUsd: number; // minimum d'ouverture en USD
+}
+
+export interface DatParameters {
+  durees: DatDuree[];
+  /** Retrait anticipé interdit — décision E1 (true) */
+  retraitAnticipéInterdit: boolean;
+}
+
+/** Valeurs arrêtées par la direction le 16/10/2026 — modifiables en base. */
+export const DAT_DEFAULTS: DatParameters = {
+  durees: [
+    { dureeMois: 1, baseJours: 31, tauxPeriode: 15, minFc: 2000, minUsd: 1 },
+    { dureeMois: 3, baseJours: 93, tauxPeriode: 15, minFc: 3000, minUsd: 2 },
+    { dureeMois: 6, baseJours: 186, tauxPeriode: 15, minFc: 5000, minUsd: 3 },
+    { dureeMois: 12, baseJours: 365, tauxPeriode: 30, minFc: 12000, minUsd: 5 },
+  ],
+  retraitAnticipéInterdit: true,
+};
+
+
 @Injectable()
 export class ParametresService {
   constructor(private prisma: PrismaService) {}
@@ -121,6 +148,31 @@ export class ParametresService {
       );
       return 0;
     }
+  }
+
+  /**
+   * Barème DAT (taux de période + minimums d'ouverture).
+   * Tout vit en base : la direction modifie sans redéploiement.
+   * Le taux est figé sur le DAT au moment de son ouverture.
+   */
+  async getDatParameters(): Promise<DatParameters> {
+    const val = await this.getValeur('parametres_dat');
+    if (!val) return DAT_DEFAULTS;
+    try {
+      const parsed = JSON.parse(val) as DatParameters;
+      if (!Array.isArray(parsed.durees) || parsed.durees.length === 0) {
+        return DAT_DEFAULTS;
+      }
+      return parsed;
+    } catch {
+      return DAT_DEFAULTS;
+    }
+  }
+
+  /** Barème DAT pour une durée donnée (1 | 3 | 6 | 12), sinon null. */
+  async getDatDuree(dureeMois: number): Promise<DatDuree | null> {
+    const params = await this.getDatParameters();
+    return params.durees.find((d) => d.dureeMois === dureeMois) ?? null;
   }
 
   async getGeneralParameters(): Promise<GeneralParameters> {

@@ -87,17 +87,21 @@ export class SavingsService {
       return { soldeFC: 0, soldeUSD: 0 };
     }
 
+    // Filtre typeCompte = 'PRINCIPAL' : le solde retirable n'inclut jamais
+    // le capital d'un DAT bloqué jusqu'à échéance (décision E1).
+    const principal = { compte: numeroCompte, typeCompte: 'PRINCIPAL' };
+
     // Calculer les dépôts
     const sumDepots = await this.prisma.epargne.groupBy({
       by: ['devise'],
-      where: { compte: numeroCompte, typeOperation: 'depot' },
+      where: { ...principal, typeOperation: 'depot' },
       _sum: { montant: true },
     });
 
     // Calculer les retraits
     const sumRetraits = await this.prisma.epargne.groupBy({
       by: ['devise'],
-      where: { compte: numeroCompte, typeOperation: 'retrait' },
+      where: { ...principal, typeOperation: 'retrait' },
       _sum: { montant: true },
     });
 

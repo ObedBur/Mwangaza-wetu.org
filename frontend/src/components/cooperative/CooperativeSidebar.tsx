@@ -111,6 +111,14 @@ const navigationGroups: NavigationGroup[] = [
       { label: "Paramètres", href: "/parametres", icon: IconSettings },
     ],
   },
+  {
+    title: "Administration",
+    items: [{ label: "Agents", href: "/agents", icon: IconUsers }],
+  },
+  {
+    title: "Mon compte",
+    items: [{ label: "Sécurité du compte", href: "/compte-agent", icon: IconSettings }],
+  },
 ];
 
 export function CooperativeSidebar({
@@ -216,7 +224,13 @@ export function CooperativeSidebar({
         )}
       </div>
       <nav className="mw-nav" aria-label={t.adminTools}>
-        {navigationGroups.map((group) => (
+        {navigationGroups
+          .filter((group) => {
+            if (group.title === "Administration") return authUser?.role === "admin" || authUser?.role === "superadmin";
+            if (group.title === "Mon compte") return authUser?.role === "agent";
+            return true;
+          })
+          .map((group) => (
           <section className="mw-nav-group" key={group.title}>
             {group.collapsible ? (
               <button

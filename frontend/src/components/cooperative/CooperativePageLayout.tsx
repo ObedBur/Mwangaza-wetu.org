@@ -4,7 +4,6 @@ import React, { useState } from "react";
 import { usePathname } from "next/navigation";
 import {
   IconBell,
-  IconMenu2,
   IconMoon,
   IconPanelLeftClose,
   IconPanelLeftOpen,
@@ -59,6 +58,10 @@ export function CooperativePageLayout({
                 ? "Remboursements"
                 : pathname === "/dashboard"
                   ? "Dashboard"
+                  : pathname === "/agents"
+                    ? "Agents"
+                    : pathname === "/compte-agent"
+                      ? "Sécurité du compte"
                   : activeOverride;
 
   return (
@@ -81,7 +84,7 @@ export function CooperativePageLayout({
                 aria-label={t.openNavigation}
                 onClick={() => setMobileOpen(true)}
               >
-                <IconMenu2 />
+                <IconPanelLeftOpen size={19} />
               </button>
               {isSidebarCollapsed && (
                 <button

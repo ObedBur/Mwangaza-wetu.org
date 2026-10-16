@@ -159,14 +159,6 @@ export class WithdrawalsService {
     const { compte, montant, devise, dateOperation, description } = dto;
 
     try {
-      console.log('🔍 Création retrait - Données reçues:', {
-        compte,
-        montant,
-        devise,
-        dateOperation,
-        description,
-      });
-
       const dateO = new Date(dateOperation);
 
       // 0. Récupérer les informations du membre pour son type de compte
@@ -181,19 +173,14 @@ export class WithdrawalsService {
         );
       }
 
-      console.log('✅ Membre trouvé:', compte, 'Type:', membre.typeCompte);
-
       const { soldeActuel } = await this.verifyLimites(compte, montant, devise);
-      console.log('✅ Limites vérifiées - Solde actuel:', soldeActuel);
 
       const frais = await this.calculateFees(montant, devise);
-      console.log('✅ Frais calculés:', frais);
 
       const soldeApres = soldeActuel - (montant + frais);
 
       const retrait = await this.prisma.$transaction(async (tx) => {
         // 1. Enregistrer le retrait du membre
-        console.log('📝 Création enregistrement Epargne (retrait)...');
         await tx.epargne.create({
           data: {
             compte,
@@ -205,7 +192,6 @@ export class WithdrawalsService {
           },
         });
 
-        console.log('📝 Création enregistrement Retrait...');
         const retraitRecord = await tx.retrait.create({
           data: {
             compte,
@@ -226,7 +212,6 @@ export class WithdrawalsService {
           });
 
           if (revType) {
-            console.log('📝 EnregistrementRevenu (frais retrait)...');
             // 2.1 Enregistrement dans la table Revenu (Nouvelle architecture)
             await tx.revenu.create({
               data: {
@@ -243,7 +228,6 @@ export class WithdrawalsService {
             const sectionTrigram = getSectionTrigram(membre.typeCompte);
             const revenueAccount = `MW-${sectionTrigram}-REVENUS`;
 
-            console.log('📝 Création Epargne (frais section):', revenueAccount);
             await tx.epargne.create({
               data: {
                 compte: revenueAccount,
@@ -256,7 +240,6 @@ export class WithdrawalsService {
             });
 
             // 2.3 Enregistrement sur le compte REVENUS GLOBAL
-            console.log('📝 Création Epargne (frais global)');
             await tx.epargne.create({
               data: {
                 compte: 'MW-REVENUS-GLOBAL',
@@ -267,21 +250,14 @@ export class WithdrawalsService {
                 description: `Frais retrait membre ${compte} (via ${membre.typeCompte})`,
               },
             });
-          } else {
-            console.warn('⚠️  RevenuType "Système Retrait" non trouvé');
           }
         }
 
         return retraitRecord;
       });
 
-      console.log('✅ Retrait créé avec succès:', retrait);
       return retrait;
-    } catch (error: any) {
-      console.error(
-        '❌ Erreur lors de la création du retrait:',
-        error.message || error,
-      );
+    } catch (error: unknown) {
       throw error;
     }
   }

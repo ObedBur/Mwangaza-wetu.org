@@ -294,10 +294,13 @@ export class BalancesService {
   // en guise de garantie (= montant du crédit non encore remboursé * tauxGarantie)
   // ────────────────────────────────────────────────────────────────────
   async getSoldeDisponibleMembre(numeroCompte: string, tauxGarantie = 0.3) {
-    // 1. Calculer le solde brut d'épargne du membre
+    // 1. Calculer le solde brut d'épargne du membre.
+    //    FILTRE typeCompte = 'PRINCIPAL' : le capital d'un DAT est bloqué
+    //    jusqu'à échéance (décision E1 — retrait anticipé interdit) et ne
+    //    doit JAMAIS entrer dans le calcul du solde retirable.
     const epargneStats = await this.prisma.epargne.groupBy({
       by: ['typeOperation', 'devise'],
-      where: { compte: numeroCompte },
+      where: { compte: numeroCompte, typeCompte: 'PRINCIPAL' },
       _sum: { montant: true },
     });
 

@@ -6,29 +6,39 @@ services:
     plan: free
     region: frankfurt
     rootDir: backend
-    buildCommand: npm install -g bun && bun install && bunx prisma generate && bun run build
+    buildCommand: npm install -g bun && bun install && bunx prisma generate && bun run build && test -f dist/main.js
     startCommand: bun run start:prod
     envVars:
       - key: NODE_ENV
         value: production
       - key: DATABASE_URL
         sync: false
+      - key: DIRECT_URL
+        sync: false
       - key: JWT_SECRET
         generateValue: true
       - key: FRONTEND_URL
         sync: false # Mettre l'URL du frontend après déploiement
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false # Renseigner le secret dans le tableau de bord Render.
+      - key: MAIL_HOST
+        sync: false
+      - key: MAIL_PORT
+        sync: false
+      - key: MAIL_SECURE
+        sync: false
+      - key: MAIL_USER
+        sync: false
+      - key: MAIL_PASSWORD
+        sync: false
+      - key: MAIL_FROM
+        sync: false
+      - key: MEMBER_LOGIN_URL
+        sync: false
 
-  # ─── Frontend Next.js ─────────────────────────────────────────────────────────
-  - type: web
-    name: mwangaza-frontend
-    env: node
-    plan: free
-    region: frankfurt
-    rootDir: frontend
-    buildCommand: npm install -g bun && bun install && bun run build
-    startCommand: bun run start
-    envVars:
-      - key: NODE_ENV
-        value: production
-      - key: NEXT_PUBLIC_API_URL
-        sync: false # Mettre l'URL du backend après déploiement
+  # Render Free bloque les ports SMTP sortants 25, 465 et 587.
+

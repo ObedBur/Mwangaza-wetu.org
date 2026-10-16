@@ -6,7 +6,10 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateAgentDto } from './dto/create-agent.dto';
 import { UpdateAgentDto } from './dto/update-agent.dto';
+import { ChangeAgentPasswordDto } from './dto/change-agent-password.dto';
 import * as bcrypt from 'bcrypt';
+import * as crypto from 'crypto';
+import { CloudinaryService } from '../members/cloudinary.service';
 
 const AGENT_SELECT = {
   id: true,
@@ -18,12 +21,18 @@ const AGENT_SELECT = {
   devise: true,
   actif: true,
   userId: true,
+  dateNaissance: true,
+  numeroCarteElecteur: true,
+  imageCarteElecteur: true,
   createdAt: true,
 } as const;
 
 @Injectable()
 export class AgentsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private cloudinary: CloudinaryService,
+  ) {}
 
   async create(dto: CreateAgentDto) {
     const emailExists = await this.prisma.agent.findUnique({
@@ -34,23 +43,39 @@ export class AgentsService {
     }
 
     if (dto.userId) {
-      const userIdTaken = await this.prisma.agent.findUnique({
-        where: { userId: dto.userId },
-      });
-      if (userIdTaken) {
+      const userIdTaken = await this.checkUserId(dto.userId);
+      if (userIdTaken.exists) {
         throw new BadRequestException(
-          'Cette empreinte est déjà enregistrée pour un autre agent',
+          `Cette empreinte est déjà enregistrée pour un autre ${userIdTaken.where || 'compte'}`,
         );
       }
     }
 
-    const hashedPassword = dto.motDePasse
-      ? await bcrypt.hash(dto.motDePasse, 10)
-      : null;
+    if (dto.numeroCarteElecteur) {
+      const cardExists = await this.prisma.agent.findUnique({
+        where: { numeroCarteElecteur: dto.numeroCarteElecteur },
+        select: { id: true },
+      });
+      if (cardExists) throw new BadRequestException('Ce numéro de carte d’électeur est déjà attribué à un agent.');
+    }
 
-    return this.prisma.agent.create({
+    const cardImage = dto.imageCarteElecteur
+      ? await this.cloudinary.uploadBase64Image(dto.imageCarteElecteur, 'mwangaza/agents/cartes-electeur')
+      : null;
+    if (dto.imageCarteElecteur && !cardImage) {
+      throw new BadRequestException('L’image de la carte d’électeur doit être au format JPG, PNG ou WebP.');
+    }
+
+    const temporaryPassword = crypto.randomBytes(12).toString('base64url');
+    const hashedPassword = await bcrypt.hash(temporaryPassword, 10);
+
+    const agent = await this.prisma.agent.create({
       data: {
         nom: dto.nom,
+        dateNaissance: dto.dateNaissance ? new Date(`${dto.dateNaissance}T00:00:00.000Z`) : null,
+        numeroCarteElecteur: dto.numeroCarteElecteur?.trim() || null,
+        imageCarteElecteur: cardImage?.url ?? null,
+        imageCarteElecteurPublicId: cardImage?.publicId ?? null,
         email: dto.email,
         telephone: dto.telephone,
         guichetAssigne: dto.guichetAssigne,
@@ -61,6 +86,8 @@ export class AgentsService {
       },
       select: AGENT_SELECT,
     });
+    // Renvoyé uniquement sur la réponse de création protégée admin, jamais stocké en clair.
+    return { ...agent, motDePasseTemporaire: temporaryPassword };
   }
 
   async findAll(page = 1, pageSize = 10, search?: string) {
@@ -114,6 +141,35 @@ export class AgentsService {
     return agent;
   }
 
+  async checkUserId(userId: string) {
+    const [agent, member, delegate] = await Promise.all([
+      this.prisma.agent.findFirst({ where: { userId }, select: { id: true } }),
+      this.prisma.membre.findFirst({ where: { userId }, select: { id: true } }),
+      this.prisma.delegue.findFirst({ where: { userId }, select: { id: true } }),
+    ]);
+    if (agent) return { exists: true, where: 'agent' };
+    if (member) return { exists: true, where: 'membre' };
+    if (delegate) return { exists: true, where: 'délégué' };
+    return { exists: false, where: null };
+  }
+
+  async changeOwnPassword(agentId: number, dto: ChangeAgentPasswordDto) {
+    const agent = await this.prisma.agent.findUnique({ where: { id: agentId } });
+    if (!agent?.actif || !agent.motDePasse) {
+      throw new NotFoundException('Compte agent non disponible');
+    }
+    const matches = await bcrypt.compare(dto.currentPassword, agent.motDePasse);
+    if (!matches) throw new BadRequestException('Mot de passe actuel incorrect');
+    if (dto.currentPassword === dto.newPassword) {
+      throw new BadRequestException('Le nouveau mot de passe doit être différent');
+    }
+    await this.prisma.agent.update({
+      where: { id: agentId },
+      data: { motDePasse: await bcrypt.hash(dto.newPassword, 10) },
+    });
+    return { success: true, message: 'Mot de passe modifié avec succès' };
+  }
+
   async update(id: number, dto: UpdateAgentDto) {
     const existing = await this.prisma.agent.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException(`Agent #${id} non trouvé`);
@@ -128,21 +184,40 @@ export class AgentsService {
     }
 
     if (dto.userId && dto.userId !== existing.userId) {
-      const userIdTaken = await this.prisma.agent.findUnique({
-        where: { userId: dto.userId },
-      });
-      if (userIdTaken) {
+      const userIdTaken = await this.checkUserId(dto.userId);
+      if (userIdTaken.exists) {
         throw new BadRequestException(
-          'Cette empreinte est déjà enregistrée pour un autre agent',
+          `Cette empreinte est déjà enregistrée pour un autre ${userIdTaken.where || 'compte'}`,
         );
       }
     }
 
-    return this.prisma.agent.update({
+    const numeroCarteElecteur = dto.numeroCarteElecteur?.trim();
+    if (numeroCarteElecteur && numeroCarteElecteur !== existing.numeroCarteElecteur) {
+      const cardExists = await this.prisma.agent.findUnique({
+        where: { numeroCarteElecteur },
+        select: { id: true },
+      });
+      if (cardExists) throw new BadRequestException('Ce numéro de carte d’électeur est déjà attribué à un agent.');
+    }
+
+    const newCardImage = dto.imageCarteElecteur && dto.imageCarteElecteur.startsWith('data:image/')
+      ? await this.cloudinary.uploadBase64Image(dto.imageCarteElecteur, 'mwangaza/agents/cartes-electeur')
+      : null;
+    if (dto.imageCarteElecteur?.startsWith('data:') && !newCardImage) {
+      throw new BadRequestException('L’image de la carte d’électeur doit être au format JPG, PNG ou WebP.');
+    }
+    const clearCardImage = dto.imageCarteElecteur === '';
+
+    const updated = await this.prisma.agent.update({
       where: { id },
       select: AGENT_SELECT,
       data: {
         ...(dto.nom !== undefined && { nom: dto.nom }),
+        ...(dto.dateNaissance !== undefined && { dateNaissance: dto.dateNaissance ? new Date(`${dto.dateNaissance}T00:00:00.000Z`) : null }),
+        ...(dto.numeroCarteElecteur !== undefined && { numeroCarteElecteur: numeroCarteElecteur || null }),
+        ...(newCardImage && { imageCarteElecteur: newCardImage.url, imageCarteElecteurPublicId: newCardImage.publicId }),
+        ...(clearCardImage && { imageCarteElecteur: null, imageCarteElecteurPublicId: null }),
         ...(dto.email !== undefined && { email: dto.email }),
         ...(dto.telephone !== undefined && { telephone: dto.telephone }),
         ...(dto.guichetAssigne !== undefined && {
@@ -159,6 +234,10 @@ export class AgentsService {
         }),
       },
     });
+    if ((newCardImage || clearCardImage) && existing.imageCarteElecteurPublicId) {
+      await this.cloudinary.deleteImage(existing.imageCarteElecteurPublicId);
+    }
+    return updated;
   }
 
   async remove(id: number) {

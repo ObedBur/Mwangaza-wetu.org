@@ -8,6 +8,7 @@ import {
   Patch,
   Post,
   Query,
+  Req,
 } from '@nestjs/common';
 import {
   ADMIN_ROLES,
@@ -17,6 +18,8 @@ import {
 import { AgentsService } from './agents.service';
 import { CreateAgentDto } from './dto/create-agent.dto';
 import { UpdateAgentDto } from './dto/update-agent.dto';
+import { ChangeAgentPasswordDto } from './dto/change-agent-password.dto';
+import type { AuthenticatedRequest } from '../common/types/auth-request';
 
 @Roles(...ADMIN_ROLES)
 @Controller('api/agents')
@@ -32,6 +35,20 @@ export class AgentsController {
     const p = Math.max(1, parseInt(page, 10) || 1);
     const ps = Math.min(100, Math.max(1, parseInt(pageSize, 10) || 10));
     return this.agentsService.findAll(p, ps, search || undefined);
+  }
+
+  @Get('check-userid/:userId')
+  checkUserId(@Param('userId') userId: string) {
+    return this.agentsService.checkUserId(userId);
+  }
+
+  @Roles('agent')
+  @Post('me/change-password')
+  changeOwnPassword(
+    @Req() req: AuthenticatedRequest,
+    @Body() dto: ChangeAgentPasswordDto,
+  ) {
+    return this.agentsService.changeOwnPassword(req.user!.userId!, dto);
   }
 
   @Get(':id')

@@ -26,6 +26,8 @@ export default defineConfig({
     seed: "ts-node prisma/seed.ts",
   },
   datasource: {
-    url: process.env["DATABASE_URL"],
+    // Les commandes migrate nécessitent la connexion PostgreSQL directe ;
+    // l’application peut continuer à utiliser DATABASE_URL (pool/accelerate).
+    url: process.env["DIRECT_URL"] ?? process.env["DATABASE_URL"],
   },
 });
