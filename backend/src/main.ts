@@ -23,7 +23,10 @@ async function bootstrap() {
 
   // Activer CORS pour permettre les requêtes depuis le frontend Next.js
   app.enableCors({
-    origin: [process.env.FRONTEND_URL || 'http://localhost:4000'],
+    origin: (process.env.FRONTEND_URL || 'http://localhost:5000')
+      .split(',')
+      .map((origin) => origin.trim())
+      .filter(Boolean),
     credentials: true, // Nécessaire pour envoyer les cookies d'authentification
   });
 
@@ -36,7 +39,7 @@ async function bootstrap() {
     }),
   );
 
-  const port = process.env.PORT ?? 3000;
+  const port = process.env.PORT ?? 4000;
   await app.listen(port);
 
   const files = fs.readdirSync(uploadsPath);

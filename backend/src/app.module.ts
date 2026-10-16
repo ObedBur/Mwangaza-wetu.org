@@ -24,7 +24,16 @@ import { RolesGuard } from './common/guards/roles.guard';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true }),
+    ConfigModule.forRoot({
+      isGlobal: true,
+      // Le monorepo peut démarrer Nest depuis la racine du dépôt.
+      // Chercher aussi le fichier backend/.env, quelle que soit la cwd.
+      envFilePath: [
+        join(__dirname, '..', '.env'),
+        join(process.cwd(), 'backend', '.env'),
+        join(process.cwd(), '.env'),
+      ],
+    }),
     PrismaModule,
     MembersModule,
     SavingsModule,
