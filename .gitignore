@@ -1,0 +1,59 @@
+# ─── Dependencies ─────────────────────────────────────────────────────────────
+node_modules/
+
+# ─── Lock files (Bun est le gestionnaire officiel) ────────────────────────────
+# Conserver : bun.lock (à la racine uniquement)
+pnpm-lock.yaml
+package-lock.json
+yarn.lock
+# Fichiers pnpm temporaires
+*.1979914566
+
+# ─── Build outputs ────────────────────────────────────────────────────────────
+dist/
+.next/
+out/
+build/
+
+# ─── Bun ──────────────────────────────────────────────────────────────────────
+.bun/
+bun-error.log
+
+# ─── Environment files ────────────────────────────────────────────────────────
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# ─── Logs ─────────────────────────────────────────────────────────────────────
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+bun-debug.log*
+
+# ─── OS files ─────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ─── IDE ──────────────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ─── Testing ──────────────────────────────────────────────────────────────────
+coverage/
+.nyc_output/
+
+# ─── Misc ─────────────────────────────────────────────────────────────────────
+*.tsbuildinfo
+.cache/
+temp/
+tmp/
+uploads/
+dev_log.txt

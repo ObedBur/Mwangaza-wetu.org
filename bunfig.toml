@@ -1,0 +1,10 @@
+# Bun Workspace Configuration
+# https://bun.sh/docs/install/workspaces
+
+[install]
+# Pas de hoisting forcé : Bun gère les symlinks par défaut
+# Chaque workspace garde ses dépendances accessibles localement
+
+[install.scopes]
+# All @mwangaza/* packages are resolved from the workspace
+"@mwangaza" = { workspace = true }

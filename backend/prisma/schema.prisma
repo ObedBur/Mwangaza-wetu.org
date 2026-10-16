@@ -1,0 +1,348 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Attendance {
+  id        Int      @id @default(autoincrement())
+  timestamp DateTime
+  createdAt DateTime @default(now())
+  uid       String
+  membreId  Int?
+  membre    Membre?  @relation(fields: [membreId], references: [id])
+}
+
+model Membre {
+  id                Int             @id @default(autoincrement())
+  numeroCompte      String          @unique @map("numero_compte")
+  nomComplet        String          @map("nom_complet")
+  dateAdhesion      DateTime        @map("date_adhesion")
+  telephone         String          @unique
+  email             String?         @unique
+  adresse           String?
+  sexe              Sexe?
+  typeCompte        String          @map("type_compte")
+  activite          String?
+  statut            StatutMembre    @default(actif)
+  photoProfil       String?         @map("photo_profil")
+  userId            String?         @map("userId")
+  motDePasse        String?         @map("mot_de_passe")
+  dateNaissance     DateTime?       @map("date_naissance")
+  idNationale       String?         @map("id_nationale")
+  createdAt         DateTime        @default(now()) @map("created_at")
+  updatedAt         DateTime        @updatedAt @map("updated_at")
+  first_acces       Boolean         @default(true)
+  activationToken   String?         @map("activation_token")
+  activationExpires DateTime?       @map("activation_expires")
+  isActivated       Boolean         @default(false) @map("is_activated")
+  attendances       Attendance[]
+  comptesEpargne    CompteEpargne[]
+  credits           Credit[]
+  delegues          Delegue[]
+  epargnes          Epargne[]
+  notifications     notifications[]
+  retraits          Retrait[]
+
+  @@map("membres")
+}
+
+model Administrateur {
+  id            Int             @id @default(autoincrement())
+  nom           String
+  prenom        String
+  email         String          @unique
+  telephone     String
+  motDePasse    String          @map("mot_de_passe")
+  role          Role            @default(admin)
+  actif         Boolean         @default(true)
+  numeroCompte  String?         @unique @map("numero_compte")
+  userId        String?         @unique @map("userId")
+  dateCreation  DateTime        @default(now()) @map("date_creation")
+  photoProfil   String?         @map("photo_profil")
+  notifications notifications[]
+
+  @@map("administrateurs")
+}
+
+model Delegue {
+  id            Int      @id @default(autoincrement())
+  membreId      Int      @map("membre_id")
+  nom           String
+  telephone     String
+  relation      String
+  pieceIdentite String?  @map("piece_identite")
+  userId        String?  @map("userId")
+  photoProfil   String?  @map("photo_profil")
+  createdAt     DateTime @default(now()) @map("created_at")
+  membre        Membre   @relation(fields: [membreId], references: [id], onDelete: Cascade)
+
+  @@map("delegues")
+}
+
+model Section {
+  id           Int      @id @default(autoincrement())
+  nom          String   @unique
+  numeroCompte String   @unique @map("numero_compte")
+  solde        Decimal  @default(0) @db.Decimal(18, 2)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@map("sections")
+}
+
+model CompteEpargne {
+  id            Int       @id @default(autoincrement())
+  numeroCompte  String    @map("numero_compte")
+  typeCompte    String    @map("type_compte")
+  solde         Decimal   @default(0) @db.Decimal(18, 2)
+  dateOuverture DateTime? @default(now()) @map("date_ouverture")
+  statut        String?   @default("actif")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+  membre        Membre    @relation(fields: [numeroCompte], references: [numeroCompte])
+
+  @@unique([numeroCompte, typeCompte])
+  @@map("comptes_epargne")
+}
+
+model Epargne {
+  id              Int                  @id @default(autoincrement())
+  compte          String
+  typeOperation   TypeOperationEpargne @map("type_operation")
+  devise          Devise
+  montant         Decimal              @db.Decimal(18, 2)
+  dateOperation   DateTime             @map("date_operation")
+  description     String?
+  createdAt       DateTime             @default(now()) @map("created_at")
+  remboursementId Int?                 @map("remboursement_id")
+  membre          Membre               @relation(fields: [compte], references: [numeroCompte])
+  remboursement   Remboursement?       @relation("remboursement_epargnes", fields: [remboursementId], references: [id])
+
+  @@index([remboursementId])
+  @@index([dateOperation])
+  @@map("epargnes")
+}
+
+model Retrait {
+  id            Int           @id @default(autoincrement())
+  compte        String
+  devise        Devise
+  montant       Decimal       @db.Decimal(18, 2)
+  dateOperation DateTime      @map("date_operation")
+  description   String?
+  soldeAvant    Decimal       @map("solde_avant") @db.Decimal(18, 2)
+  soldeApres    Decimal       @map("solde_apres") @db.Decimal(18, 2)
+  frais         Decimal       @default(0) @db.Decimal(18, 2)
+  createdAt     DateTime      @default(now()) @map("created_at")
+  reference     String        @unique @default(cuid())
+  statut        StatutRetrait @default(COMPLETED)
+  membre        Membre        @relation(fields: [compte], references: [numeroCompte])
+
+  @@map("retraits")
+}
+
+model Credit {
+  id                Int             @id @default(autoincrement())
+  numeroCompte      String          @map("numero_compte")
+  montant           Decimal         @db.Decimal(18, 2)
+  montantRembourse  Decimal         @default(0) @map("montant_rembourse") @db.Decimal(18, 2)
+  devise            String
+  tauxInteret       Decimal         @map("taux_interet") @db.Decimal(18, 2)
+  duree             Int
+  dateDebut         DateTime        @map("date_debut")
+  dateEcheance      DateTime?       @map("date_echeance")
+  statut            StatutCredit    @default(actif)
+  description       String?
+  createdAt         DateTime        @default(now()) @map("created_at")
+  updatedAt         DateTime        @updatedAt @map("updated_at")
+  derniereOperation DateTime?       @map("derniere_operation")
+  membre            Membre          @relation(fields: [numeroCompte], references: [numeroCompte])
+  remboursements    Remboursement[]
+
+  @@map("credits")
+}
+
+model Remboursement {
+  id                Int       @id @default(autoincrement())
+  creditId          Int       @map("credit_id")
+  montant           Decimal   @db.Decimal(18, 2)
+  devise            String
+  dateRemboursement DateTime  @map("date_remboursement")
+  description       String?
+  createdAt         DateTime  @default(now()) @map("created_at")
+  deleteReason      String?   @map("delete_reason")
+  deletedAt         DateTime? @map("deleted_at")
+  idempotencyKey    String?   @unique @map("idempotency_key")
+  partInteret       Decimal   @default(0) @map("part_interet") @db.Decimal(18, 2)
+  partPrincipal     Decimal   @default(0) @map("part_principal") @db.Decimal(18, 2)
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+  epargnes          Epargne[] @relation("remboursement_epargnes")
+  credit            Credit    @relation(fields: [creditId], references: [id], onDelete: Cascade)
+  revenus           Revenu[]  @relation("remboursement_revenus")
+
+  @@index([creditId])
+  @@index([dateRemboursement])
+  @@index([deletedAt])
+  @@index([idempotencyKey])
+  @@map("remboursements")
+}
+
+model ParametreEpargne {
+  id           Int      @id @default(autoincrement())
+  nomParametre String   @unique @map("nom_parametre")
+  valeur       String
+  description  String?
+  updatedAt    DateTime @default(now()) @map("updated_at")
+
+  @@map("parametres_epargne")
+}
+
+model AdminConfirmation {
+  id               Int       @id @default(autoincrement())
+  adminId          Int       @map("admin_id")
+  confirmationCode String    @map("confirmation_code")
+  confirmedAt      DateTime? @map("confirmed_at")
+  createdAt        DateTime  @default(now()) @map("created_at")
+
+  @@map("admin_confirmations")
+}
+
+model AdminLog {
+  id        Int      @id @default(autoincrement())
+  action    String
+  details   String?
+  success   Boolean
+  userId    Int?     @map("user_id")
+  ipAddress String?  @map("ip_address")
+  timestamp DateTime @default(now())
+
+  @@map("admin_logs")
+}
+
+model RevenuType {
+  id          Int      @id @default(autoincrement())
+  nom         String   @unique
+  description String?
+  revenus     Revenu[]
+
+  @@map("revenu_types")
+}
+
+model Revenu {
+  id              Int            @id @default(autoincrement())
+  typeCompte      String         @map("type_compte")
+  typeRevenuId    Int            @map("type_revenu_id")
+  montant         Decimal        @db.Decimal(18, 2)
+  devise          Devise
+  dateOperation   DateTime       @map("date_operation")
+  sourceCompte    String?        @map("source_compte")
+  remboursementId Int?           @map("remboursement_id")
+  createdAt       DateTime       @default(now()) @map("created_at")
+  remboursement   Remboursement? @relation("remboursement_revenus", fields: [remboursementId], references: [id])
+  typeRevenu      RevenuType     @relation(fields: [typeRevenuId], references: [id])
+
+  @@index([remboursementId])
+  @@index([dateOperation])
+  @@map("revenus")
+}
+
+model Projet {
+  id          Int          @id @default(autoincrement())
+  nom         String
+  description String?
+  categorie   String
+  dateDebut   DateTime     @map("date_debut")
+  dateFin     DateTime?    @map("date_fin")
+  budget      Decimal?     @db.Decimal(18, 2)
+  devise      Devise?
+  statut      StatutProjet @default(PLANIFIE)
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
+
+  @@index([statut])
+  @@index([categorie])
+  @@index([dateDebut])
+  @@map("projets")
+}
+
+model notifications {
+  id              Int             @id @default(autoincrement())
+  membre_id       Int?
+  admin_id        Int?
+  titre           String
+  message         String
+  type            String          @default("info")
+  is_read         Boolean         @default(false)
+  created_at      DateTime        @default(now())
+  administrateurs Administrateur? @relation(fields: [admin_id], references: [id], onDelete: Cascade)
+  membres         Membre?         @relation(fields: [membre_id], references: [id], onDelete: Cascade)
+
+  @@index([admin_id])
+  @@index([created_at])
+  @@index([membre_id])
+}
+
+model Agent {
+  id             Int      @id @default(autoincrement())
+  nom            String
+  email          String   @unique
+  telephone      String
+  guichetAssigne String   @map("guichet_assigne")
+  soldeInitial   Decimal  @default(0) @map("solde_initial") @db.Decimal(18, 2)
+  devise         Devise   @default(USD)
+  actif          Boolean  @default(true)
+  motDePasse     String?  @map("mot_de_passe")
+  userId         String?  @unique @map("userId")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@map("agents")
+}
+
+enum Role {
+  admin
+  superadmin
+  agent
+}
+
+enum Sexe {
+  M
+  F
+  AUTRE
+}
+
+enum StatutMembre {
+  actif
+  inactif
+}
+
+enum TypeOperationEpargne {
+  depot
+  retrait
+}
+
+enum Devise {
+  FC
+  USD
+}
+
+enum StatutCredit {
+  actif
+  rembourse
+  en_retard
+}
+
+enum StatutRetrait {
+  PENDING
+  COMPLETED
+  FAILED
+}
+
+enum StatutProjet {
+  PLANIFIE
+  EN_COURS
+  TERMINE
+  ANNULE
+}

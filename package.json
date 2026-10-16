@@ -1,0 +1,40 @@
+{
+  "name": "mwangaza-wetu",
+  "version": "1.0.0",
+  "private": true,
+  "packageManager": "bun@1.4.2",
+  "description": "Mwangaza Wetu - Monorepo pour backend et frontend",
+  "workspaces": [
+    "backend",
+    "frontend"
+  ],
+  "scripts": {
+    "dev": "bun run --filter '@mwangaza/*' dev",
+    "dev:backend": "bun run --filter '@mwangaza/backend' dev",
+    "dev:frontend": "bun run --filter '@mwangaza/frontend' dev",
+    "build": "bun run --filter '@mwangaza/backend' build && bun run --filter '@mwangaza/frontend' build",
+    "build:backend": "bun run --filter '@mwangaza/backend' build",
+    "build:frontend": "bun run --filter '@mwangaza/frontend' build",
+    "start:backend": "bun run --filter '@mwangaza/backend' start:prod",
+    "start:frontend": "bun run --filter '@mwangaza/frontend' start",
+    "lint": "bun run --filter '@mwangaza/backend' lint && bun run --filter '@mwangaza/frontend' lint",
+    "lint:fix": "bun run --filter '@mwangaza/backend' lint:fix && bun run --filter '@mwangaza/frontend' lint:fix",
+    "test": "bun run --filter '@mwangaza/backend' test",
+    "test:e2e": "bun run --filter '@mwangaza/backend' test:e2e",
+    "clean": "Remove-Item -Recurse -Force backend/node_modules, backend/dist, frontend/node_modules, frontend/.next, node_modules -ErrorAction SilentlyContinue",
+    "prisma:generate": "cd backend && bun run prisma generate",
+    "prisma:migrate": "cd backend && bun run prisma migrate dev",
+    "prisma:studio": "cd backend && bun run prisma studio"
+  },
+  "keywords": [
+    "monorepo",
+    "nestjs",
+    "nextjs",
+    "bun-workspace"
+  ],
+  "engines": {
+    "node": ">=18.0.0",
+    "bun": ">=1.0.0"
+  }
+}
+
