@@ -118,11 +118,15 @@ export function AccountPills({ accounts }: { accounts: AccountSlug[] }) {
 }
 
 export function formatDate(date: string) {
+  const parsed = /^\d{4}-\d{2}-\d{2}$/.test(date)
+    ? new Date(`${date}T12:00:00`)
+    : new Date(date);
+  if (Number.isNaN(parsed.getTime())) return "—";
   return new Intl.DateTimeFormat("fr-FR", {
     day: "2-digit",
     month: "short",
     year: "numeric",
-  }).format(new Date(`${date}T12:00:00`));
+  }).format(parsed);
 }
 
 export { formatCurrency };

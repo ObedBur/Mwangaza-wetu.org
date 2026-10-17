@@ -1059,6 +1059,79 @@
   outline: 2px solid var(--mw-green);
   outline-offset: 1px;
 }
+.coop-deposit-biometric {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  gap: 10px;
+  border: 1px solid color-mix(in srgb, var(--mw-green) 24%, var(--mw-line));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--mw-green) 7%, var(--mw-paper));
+  padding: 11px 12px;
+}
+.coop-deposit-biometric-icon {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--mw-green) 13%, var(--mw-paper));
+  color: var(--mw-green);
+}
+.coop-deposit-biometric > div {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+.coop-deposit-biometric strong {
+  color: var(--mw-ink);
+  font-size: 11px;
+  line-height: 1.4;
+}
+.coop-deposit-biometric p {
+  margin: 0;
+  color: var(--mw-muted);
+  font-size: 10px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.coop-deposit-capture-button {
+  display: inline-flex;
+  min-height: 36px;
+  width: fit-content;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  margin-top: 5px;
+  border: 1px solid color-mix(in srgb, var(--mw-green) 45%, var(--mw-line));
+  border-radius: 8px;
+  background: var(--mw-paper);
+  padding: 7px 11px;
+  color: var(--mw-green);
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 650;
+}
+.coop-deposit-capture-button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--mw-green) 8%, var(--mw-paper));
+}
+.coop-deposit-capture-button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+.coop-deposit-biometric .coop-deposit-biometric-success {
+  margin-top: 3px;
+  color: #087443;
+}
+.coop-deposit-biometric .coop-deposit-biometric-error {
+  margin-top: 3px;
+  color: #b42318;
+}
+.coop-deposit-biometric-success strong {
+  color: inherit;
+}
 .coop-account-page {
   --coop-accent: var(--mw-green);
 }

@@ -40,4 +40,8 @@ export class CreateSavingsDto {
   @IsUUID()
   @IsOptional()
   idempotencyKey?: string;
+
+  @IsString()
+  @IsOptional()
+  biometricUserId?: string;
 }

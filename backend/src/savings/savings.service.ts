@@ -4,6 +4,7 @@ import {
   ConflictException,
   ForbiddenException,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateSavingsDto, TypeOperation } from './dto/create-savings.dto';
@@ -12,6 +13,7 @@ import {
   TypeOperationEpargne as PrismaTypeOperation,
 } from '@prisma/client';
 import { ParametresService } from '../parametres/parametres.service';
+import { ZktecoService } from '../zkteco/zkteco.service';
 import type { AuthUser } from '../common/types/auth-request';
 
 @Injectable()
@@ -19,7 +21,34 @@ export class SavingsService {
   constructor(
     private prisma: PrismaService,
     private parametresService: ParametresService,
+    private zktecoService: ZktecoService,
   ) {}
+
+  private async captureAndVerifyMemberFingerprint(
+    memberUserId: string | null,
+    delegateUserIds: (string | null)[],
+  ) {
+    let scannedUserId: string;
+    try {
+      scannedUserId = await this.zktecoService.captureFingerprint();
+    } catch (error) {
+      if (error instanceof Error && error.message === 'CAPTURE_IN_FLIGHT') {
+        throw new ConflictException(
+          'Une lecture biométrique est déjà en cours; réessayez dans un instant.',
+        );
+      }
+      throw new ServiceUnavailableException(
+        'Le lecteur biométrique est indisponible. Le dépôt n’a pas été enregistré.',
+      );
+    }
+
+    if (memberUserId !== scannedUserId && !delegateUserIds.includes(scannedUserId)) {
+      throw new ForbiddenException(
+        'Le scan ZKTeco ne correspond ni au membre ni à un délégué autorisé pour ce compte.',
+      );
+    }
+    return scannedUserId;
+  }
 
   async findAll(params: {
     page?: number;
@@ -147,24 +176,22 @@ export class SavingsService {
       monthTotals[key][row.devise] = Number(row._sum.montant || 0);
     }
 
-    const membersByAccount = new Map(members.map((member) => [member.numeroCompte, member]));
     const lastDepositByAccount = new Map(lastDeposits.map((item) => [item.compte, item.dateOperation]));
-    const holders = [...balanceByAccount.entries()]
-      .map(([accountNumber, balance]) => {
-        const member = membersByAccount.get(accountNumber);
-        return member ? {
+    const holders = members
+      .map((member) => {
+        const balance = balanceByAccount.get(member.numeroCompte) ?? { USD: 0, FC: 0 };
+        return {
           memberId: member.id,
-          accountNumber,
+          accountNumber: member.numeroCompte,
           name: member.nomComplet,
           phone: member.telephone,
           joinedAt: member.dateAdhesion,
           status: member.statut,
-          lastDeposit: lastDepositByAccount.get(accountNumber) ?? null,
+          lastDeposit: lastDepositByAccount.get(member.numeroCompte) ?? null,
           balanceUSD: Math.round(balance.USD * 100) / 100,
           balanceFC: Math.round(balance.FC * 100) / 100,
-        } : null;
+        };
       })
-      .filter((holder): holder is NonNullable<typeof holder> => !!holder && (holder.balanceUSD > 0 || holder.balanceFC > 0))
       .sort((a, b) => a.name.localeCompare(b.name));
 
     const netAfter = (cutoff: Date, currency: Devise) => {
@@ -370,22 +397,100 @@ export class SavingsService {
     }
 
     if (actor.role !== 'agent') {
-      return this.prisma.epargne.create({
-        data: {
-          compte: createDto.compte,
-          typeOperation: createDto.typeOperation,
-          devise: createDto.devise,
-          montant: createDto.montant,
-          dateOperation: new Date(createDto.dateOperation),
-          description: createDto.description,
+      if (typeOperation !== TypeOperation.depot) {
+        return this.prisma.epargne.create({
+          data: {
+            compte: createDto.compte,
+            typeOperation: createDto.typeOperation,
+            devise: createDto.devise,
+            montant: createDto.montant,
+            dateOperation: new Date(createDto.dateOperation),
+            description: createDto.description,
+          },
+        });
+      }
+
+      const member = await this.prisma.membre.findUnique({
+        where: { numeroCompte: createDto.compte },
+        select: {
+          id: true,
+          numeroCompte: true,
+          statut: true,
+          userId: true,
+          delegues: { select: { userId: true } },
         },
+      });
+      if (!member || member.statut !== 'actif' || createDto.compte.includes('REVENUS') || createDto.compte.includes('CREDITS') || createDto.compte.includes('TRESORERIE')) {
+        throw new NotFoundException('Compte membre actif introuvable.');
+      }
+
+      const scannedUserId = createDto.biometricUserId?.trim();
+      if (!scannedUserId) {
+        throw new BadRequestException(
+          'Capturez et vérifiez l’empreinte du membre ou de son délégué avant de valider le dépôt.',
+        );
+      }
+      if (
+        member.userId !== scannedUserId &&
+        !member.delegues.some((delegate) => delegate.userId === scannedUserId)
+      ) {
+        throw new ForbiddenException(
+          'L’empreinte reconnue ne correspond ni au membre ni à un délégué autorisé pour ce compte.',
+        );
+      }
+
+      return this.prisma.$transaction(async (tx) => {
+        await tx.$queryRaw<Array<{ id: number }>>`
+          SELECT "id" FROM "membres" WHERE "id" = ${member.id} FOR UPDATE
+        `;
+        await tx.$queryRaw<Array<{ id: number }>>`
+          SELECT "id" FROM "delegues" WHERE "membre_id" = ${member.id} FOR UPDATE
+        `;
+        const currentMember = await tx.membre.findUnique({
+          where: { id: member.id },
+          select: { numeroCompte: true, statut: true, userId: true, delegues: { select: { userId: true } } },
+        });
+        if (!currentMember || currentMember.statut !== 'actif') {
+          throw new NotFoundException('Compte membre introuvable ou inactif.');
+        }
+        if (currentMember.userId !== scannedUserId && !currentMember.delegues.some((delegate) => delegate.userId === scannedUserId)) {
+          throw new ForbiddenException('L’autorisation biométrique du membre ou de son délégué a changé pendant la capture.');
+        }
+
+        const operation = await tx.epargne.create({
+          data: {
+            compte: currentMember.numeroCompte,
+            typeOperation: TypeOperation.depot,
+            devise,
+            montant,
+            dateOperation: new Date(createDto.dateOperation),
+            description: createDto.description?.trim() || `Dépôt au guichet — ${currentMember.numeroCompte}`,
+            executeParId: actor.userId ?? null,
+            executeParRole: actor.role ?? null,
+          },
+        });
+        await tx.adminLog.create({
+          data: {
+            action: 'DEPOT_GUICHET',
+            details: `Dépôt ${operation.id}, compte ${currentMember.numeroCompte}, ${montant} ${devise}; acteur ${actor.role} #${actor.userId ?? 'inconnu'}; vérification biométrique membre/délégué validée.`,
+            success: true,
+            userId: actor.userId ?? null,
+          },
+        });
+        return operation;
       });
     }
 
     const agentId = actor.userId!;
     const member = await this.prisma.membre.findUnique({
       where: { numeroCompte: createDto.compte },
-      select: { id: true, numeroCompte: true, statut: true },
+      select: {
+        id: true,
+        numeroCompte: true,
+        statut: true,
+        userId: true,
+        delegues: { select: { userId: true } },
+      },
     });
     if (!member || member.statut !== 'actif' || createDto.compte.includes('REVENUS') || createDto.compte.includes('CREDITS') || createDto.compte.includes('TRESORERIE')) {
       throw new NotFoundException('Compte membre actif introuvable.');
@@ -408,6 +513,11 @@ export class SavingsService {
       }
       return operation;
     }
+
+    const scannedUserId = await this.captureAndVerifyMemberFingerprint(
+      member.userId,
+      member.delegues.map((delegate) => delegate.userId),
+    );
 
     return this.prisma.$transaction(async (tx) => {
       await tx.$queryRaw<Array<{ id: number }>>`
@@ -434,11 +544,18 @@ export class SavingsService {
       await tx.$queryRaw<Array<{ id: number }>>`
         SELECT "id" FROM "membres" WHERE "id" = ${member.id} FOR UPDATE
       `;
+      await tx.$queryRaw<Array<{ id: number }>>`
+        SELECT "id" FROM "delegues" WHERE "membre_id" = ${member.id} FOR UPDATE
+      `;
       const currentMember = await tx.membre.findUnique({
-        where: { id: member.id }, select: { statut: true },
+        where: { id: member.id },
+        select: { statut: true, userId: true, delegues: { select: { userId: true } } },
       });
       if (!currentMember || currentMember.statut !== 'actif') {
         throw new BadRequestException('Le compte membre est inactif.');
+      }
+      if (currentMember.userId !== scannedUserId && !currentMember.delegues.some((delegate) => delegate.userId === scannedUserId)) {
+        throw new ForbiddenException('L’autorisation biométrique du membre ou de son délégué a changé pendant la capture.');
       }
       const caisse = await tx.caisseAgent.findUnique({
         where: { agentId_devise: { agentId, devise } },

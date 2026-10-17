@@ -5,13 +5,60 @@ import { AccountAmount, DataRegion, Panel, StatusBadge } from '@/components/memb
 import { formatCurrency, formatSignedCurrency } from '@/lib/format-currency';
 
 function dateLabel(value: string) {
-  return new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(value));
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'Date indisponible';
+  return new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(date);
+}
+
+function dateTimeLabel(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return new Intl.DateTimeFormat('fr-FR', { hour: '2-digit', minute: '2-digit' }).format(date);
+}
+
+function repaymentStatus(value: string) {
+  if (value === 'CANCELLED' || value === 'FAILED') return 'Rejeté' as const;
+  if (value === 'PENDING') return 'En attente' as const;
+  return 'Validé' as const;
 }
 
 export function MemberRepaymentsPage() {
-  const { transactions, state, error, reload } = useMemberPortalData();
+  const { transactions, state, error, reload, transactionMeta, loadMoreTransactions, loadingMore } = useMemberPortalData();
   const repayments = transactions.filter((row) => row.type === 'remboursement');
-  return <div className="member-detail-page credits-page"><Panel title="Historique des remboursements" className="credit-history-panel"><DataRegion state={state === 'ready' && repayments.length === 0 ? 'empty' : state} emptyLabel="Aucun remboursement enregistré." onRetry={reload}>{state === 'error' ? <p>{error}</p> : <div className="credit-history-list">{repayments.map((row) => <div className="credit-history-row" key={row.id}><span>{dateLabel(row.date)}</span><span className="credit-history-description">{row.description}</span><span className="amount-negative">{formatSignedCurrency(row.montant, '−', row.devise)}</span><StatusBadge status={row.statut === 'CANCELLED' ? 'Rejeté' : 'Validé'} /></div>)}</div>}</DataRegion></Panel></div>;
+  return <div className="member-detail-page credits-page">
+    <Panel title="Historique des remboursements" className="credit-history-panel">
+      <DataRegion state={state} onRetry={reload}>
+        {state === 'error' ? <p className="portal-error-state" role="alert">{error}</p> : <>
+          {repayments.length > 0 ? <p className="repayment-count">{repayments.length} remboursement{repayments.length > 1 ? 's' : ''} affiché{repayments.length > 1 ? 's' : ''}</p> : null}
+          <div className="repayment-table-wrap">
+            <table className="repayment-table">
+              <caption className="sr-only">Historique des remboursements enregistrés par la coopérative</caption>
+              <thead><tr><th scope="col">Date et heure</th><th scope="col">Détail de l’opération</th><th scope="col">Montant remboursé</th><th scope="col">Statut</th></tr></thead>
+              <tbody>{repayments.length === 0 ? <tr><td className="repayment-empty-cell" colSpan={4}>Aucun remboursement enregistré pour le moment.</td></tr> : repayments.map((row) => {
+                const time = dateTimeLabel(row.date);
+                return <tr key={row.id}>
+                  <td><time className="repayment-date" dateTime={row.date}>{dateLabel(row.date)}</time>{time ? <span className="repayment-time">{time}</span> : null}</td>
+                  <td className="repayment-description">{row.description}</td>
+                  <td className="repayment-amount">{formatSignedCurrency(row.montant, '−', row.devise)}</td>
+                  <td><StatusBadge status={repaymentStatus(row.statut)} /></td>
+                </tr>;
+              })}</tbody>
+            </table>
+          </div>
+          <div className="repayment-mobile-list" aria-label="Historique des remboursements">
+            {repayments.length === 0 ? <p className="repayment-mobile-empty">Aucun remboursement enregistré pour le moment.</p> : repayments.map((row) => {
+              const time = dateTimeLabel(row.date);
+              return <article className="repayment-mobile-card" key={row.id}>
+                <div className="repayment-mobile-card-heading"><strong>{row.description}</strong><StatusBadge status={repaymentStatus(row.statut)} /></div>
+                <div className="repayment-mobile-card-footer"><span>{dateLabel(row.date)}{time ? ` · ${time}` : ''}</span><strong className="repayment-amount">{formatSignedCurrency(row.montant, '−', row.devise)}</strong></div>
+              </article>;
+            })}
+          </div>
+          {transactionMeta && transactionMeta.page < transactionMeta.totalPages ? <button type="button" className="document-download repayment-load-more" disabled={loadingMore} onClick={() => void loadMoreTransactions()}>{loadingMore ? 'Chargement…' : 'Charger les opérations plus anciennes'}</button> : null}
+        </>}
+      </DataRegion>
+    </Panel>
+  </div>;
 }
 
 export function MemberCreditsPage() {

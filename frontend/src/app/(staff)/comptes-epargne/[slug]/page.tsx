@@ -9,6 +9,7 @@ import {
   IconClock,
   IconCoins,
   IconDownload,
+  IconFingerprint,
   IconTargetArrow,
   IconUsers,
   IconWallet,
@@ -124,6 +125,10 @@ export default function SavingsAccountRoute({
   const [operationDraft, setOperationDraft] = useState({ accountNumber: "", amount: "", currency: "USD" as "USD" | "FC", description: "" });
   const [operationSaving, setOperationSaving] = useState(false);
   const [operationError, setOperationError] = useState("");
+  const [depositFingerprintId, setDepositFingerprintId] = useState("");
+  const [depositFingerprintName, setDepositFingerprintName] = useState("");
+  const [depositFingerprintError, setDepositFingerprintError] = useState("");
+  const [capturingDepositFingerprint, setCapturingDepositFingerprint] = useState(false);
   const [datTarget, setDatTarget] = useState<AccountHolder | null>(null);
   const [datBareme, setDatBareme] = useState<DatBaremeResponse | null>(null);
   const [datDuration, setDatDuration] = useState(1);
@@ -185,6 +190,10 @@ export default function SavingsAccountRoute({
   async function submitOperation(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!action || !operationDraft.accountNumber || Number(operationDraft.amount) <= 0) return;
+    if (action === "deposit" && !depositFingerprintId) {
+      setDepositFingerprintError("Capturez une empreinte liée au membre ou à son délégué avant de valider.");
+      return;
+    }
     setOperationSaving(true);
     setOperationError("");
     const payload = {
@@ -195,16 +204,66 @@ export default function SavingsAccountRoute({
       description: operationDraft.description.trim() || (action === "deposit" ? "Dépôt sur compte principal" : "Retrait du compte principal"),
     };
     try {
-      if (action === "deposit") await apiClient.post("/epargnes", { ...payload, typeOperation: "depot", idempotencyKey: window.crypto.randomUUID() });
+      if (action === "deposit") await apiClient.post("/epargnes", { ...payload, typeOperation: "depot", idempotencyKey: window.crypto.randomUUID(), biometricUserId: depositFingerprintId });
       else await apiClient.post("/withdrawals", payload);
       setAction(null);
       setOperationDraft({ accountNumber: "", amount: "", currency: "USD", description: "" });
+      setDepositFingerprintId("");
+      setDepositFingerprintName("");
+      setDepositFingerprintError("");
       await loadPrincipal();
     } catch (error: any) {
       const message = error?.response?.data?.message;
       setOperationError(Array.isArray(message) ? message.join(" ") : message || "Opération impossible. Vérifiez le compte, le montant et le solde disponible.");
     } finally {
       setOperationSaving(false);
+    }
+  }
+
+  async function captureDepositFingerprint() {
+    if (!operationDraft.accountNumber) {
+      setDepositFingerprintError("Sélectionnez d’abord le membre concerné par le dépôt.");
+      return;
+    }
+    setCapturingDepositFingerprint(true);
+    setDepositFingerprintId("");
+    setDepositFingerprintName("");
+    setDepositFingerprintError("");
+    try {
+      const capture = await apiClient.post<{ userId: string }>("/zkteco/capture-fingerprint");
+      const userId = String(capture.data.userId || "").trim();
+      if (!userId) throw new Error("Le lecteur n’a renvoyé aucun identifiant d’empreinte.");
+
+      const response = await apiClient.get<{
+        exists: boolean;
+        membre?: {
+          nomComplet: string;
+          userId: string | null;
+          delegues: { nom: string; userId: string | null }[];
+        };
+      }>(`/membres/by-numero/${encodeURIComponent(operationDraft.accountNumber)}`);
+      const member = response.data.membre;
+      if (!response.data.exists || !member) {
+        throw new Error("Le membre sélectionné est introuvable.");
+      }
+
+      if (member.userId === userId) {
+        setDepositFingerprintId(userId);
+        setDepositFingerprintName(member.nomComplet);
+        return;
+      }
+      const delegate = member.delegues.find((item) => item.userId === userId);
+      if (delegate) {
+        setDepositFingerprintId(userId);
+        setDepositFingerprintName(`${delegate.nom} (délégué de ${member.nomComplet})`);
+        return;
+      }
+      setDepositFingerprintError("Empreinte non reconnue pour ce dépôt : elle n’est liée ni au membre sélectionné ni à l’un de ses délégués.");
+    } catch (error: any) {
+      const message = error?.response?.data?.message;
+      setDepositFingerprintError(Array.isArray(message) ? message.join(" ") : message || error?.message || "Capture impossible. Vérifiez le lecteur biométrique et réessayez.");
+    } finally {
+      setCapturingDepositFingerprint(false);
     }
   }
 
@@ -275,7 +334,7 @@ export default function SavingsAccountRoute({
           <button
             className="mw-secondary"
             type="button"
-            onClick={() => { setOperationError(""); setOperationDraft({ accountNumber: principal?.members[0]?.accountNumber || "", amount: "", currency: "USD", description: "" }); setAction("withdrawal"); }}
+            onClick={() => { setOperationError(""); setDepositFingerprintId(""); setDepositFingerprintName(""); setDepositFingerprintError(""); setOperationDraft({ accountNumber: principal?.members[0]?.accountNumber || "", amount: "", currency: "USD", description: "" }); setAction("withdrawal"); }}
           >
             <IconArrowUp aria-hidden="true" />
             {t.newWithdrawal}
@@ -283,7 +342,7 @@ export default function SavingsAccountRoute({
           <button
             className="mw-primary"
             type="button"
-            onClick={() => { setOperationError(""); setOperationDraft({ accountNumber: principal?.members[0]?.accountNumber || "", amount: "", currency: "USD", description: "" }); setAction("deposit"); }}
+            onClick={() => { setOperationError(""); setDepositFingerprintId(""); setDepositFingerprintName(""); setDepositFingerprintError(""); setOperationDraft({ accountNumber: principal?.members[0]?.accountNumber || "", amount: "", currency: "USD", description: "" }); setAction("deposit"); }}
           >
             <IconArrowDown aria-hidden="true" />
             {t.newDeposit}
@@ -293,8 +352,7 @@ export default function SavingsAccountRoute({
 
       {isPrincipal && principalError && <p className="coop-page-error" role="alert">{principalError}</p>}
 
-      <CooperativeDataState empty={data.holders.length === 0}>
-        <section className="coop-stat-grid" aria-label={config.shortLabel}>
+      <section className="coop-stat-grid" aria-label={config.shortLabel}>
           <CooperativeStatCard
             label={t.accountBalance}
             value={isPrincipal ? formatDualCurrency(principal?.overview.balanceUSD || 0, principal?.overview.balanceFC || 0) : formatCurrency(summary.totalBalance)}
@@ -319,8 +377,7 @@ export default function SavingsAccountRoute({
             icon={IconArrowUp}
             accent={config.color}
           />
-        </section>
-      </CooperativeDataState>
+      </section>
 
       <div className="coop-account-top-grid">
         <section
@@ -466,7 +523,7 @@ export default function SavingsAccountRoute({
           </div>
           <CooperativeDataState
             loading={isPrincipal && principalLoading}
-            empty={isPrincipal ? !principal || data.holders.length === 0 : data.holders.length === 0}
+            empty={isPrincipal ? Boolean(principal) && data.holders.length === 0 : data.holders.length === 0}
             emptyMessage={t.empty}
             skeletonRows={6}
           >
@@ -507,7 +564,7 @@ export default function SavingsAccountRoute({
           </div>
           <CooperativeDataState
             loading={isPrincipal && principalLoading}
-            empty={isPrincipal ? !principal || data.operations.length === 0 : data.operations.length === 0}
+            empty={isPrincipal ? Boolean(principal) && data.operations.length === 0 : data.operations.length === 0}
             emptyMessage={t.noOperations}
             skeletonRows={5}
           >
@@ -596,12 +653,25 @@ export default function SavingsAccountRoute({
             <DialogDescription>{isPrincipal ? "Enregistrez l’opération sur le compte principal. Le solde sera recalculé à partir du journal." : t.actionPreview}</DialogDescription>
           </DialogHeader>
           {isPrincipal ? <form className="coop-rules-form" onSubmit={submitOperation}>
-            <label className="coop-rule-field">Membre<select required value={operationDraft.accountNumber} onChange={(event) => setOperationDraft({ ...operationDraft, accountNumber: event.target.value })}><option value="">Choisir un membre</option>{(principal?.members || []).map((member) => <option key={member.id} value={member.accountNumber}>{member.name} · {member.accountNumber}</option>)}</select></label>
+            <label className="coop-rule-field">Membre<select required disabled={capturingDepositFingerprint || operationSaving} value={operationDraft.accountNumber} onChange={(event) => { setOperationDraft({ ...operationDraft, accountNumber: event.target.value }); setDepositFingerprintId(""); setDepositFingerprintName(""); setDepositFingerprintError(""); }}><option value="">Choisir un membre</option>{(principal?.members || []).map((member) => <option key={member.id} value={member.accountNumber}>{member.name} · {member.accountNumber}</option>)}</select></label>
             <label className="coop-rule-field">Montant<input required type="number" min="0.01" step="0.01" value={operationDraft.amount} onChange={(event) => setOperationDraft({ ...operationDraft, amount: event.target.value })} /></label>
             <label className="coop-rule-field">Devise<select value={operationDraft.currency} onChange={(event) => setOperationDraft({ ...operationDraft, currency: event.target.value as "USD" | "FC" })}><option value="USD">USD</option><option value="FC">FC</option></select></label>
             <label className="coop-rule-field">Description<input maxLength={250} value={operationDraft.description} onChange={(event) => setOperationDraft({ ...operationDraft, description: event.target.value })} placeholder="Facultatif" /></label>
+            {action === "deposit" && <div className="coop-deposit-biometric" aria-live="polite">
+              <span className="coop-deposit-biometric-icon"><IconFingerprint size={19} aria-hidden="true" /></span>
+              <div className="coop-deposit-biometric-content">
+                <strong>Empreinte du membre ou de son délégué</strong>
+                <p>Cliquez pour lancer la lecture. Une seule empreinte autorisée suffit.</p>
+                <button type="button" className="coop-deposit-capture-button" onClick={() => void captureDepositFingerprint()} disabled={capturingDepositFingerprint || operationSaving || !operationDraft.accountNumber}>
+                  <IconFingerprint size={17} aria-hidden="true" />
+                  {capturingDepositFingerprint ? "Posez le doigt sur le lecteur…" : depositFingerprintId ? "Capturer une autre empreinte" : "Lire l’empreinte"}
+                </button>
+                {depositFingerprintName && <p className="coop-deposit-biometric-success" role="status">✓ Empreinte reconnue : <strong>{depositFingerprintName}</strong></p>}
+                {depositFingerprintError && <p className="coop-deposit-biometric-error" role="alert">✕ {depositFingerprintError}</p>}
+              </div>
+            </div>}
             {operationError && <p className="coop-page-error" role="alert">{operationError}</p>}
-            <div className="mw-dialog-actions"><button type="button" className="mw-dialog-cancel" onClick={() => setAction(null)} disabled={operationSaving}>{t.cancel}</button><button className="mw-primary" type="submit" disabled={operationSaving || !operationDraft.accountNumber}>{operationSaving ? "Enregistrement…" : "Confirmer l’opération"}</button></div>
+            <div className="mw-dialog-actions"><button type="button" className="mw-dialog-cancel" onClick={() => setAction(null)} disabled={operationSaving || capturingDepositFingerprint}>{t.cancel}</button><button className="mw-primary" type="submit" disabled={operationSaving || capturingDepositFingerprint || !operationDraft.accountNumber || (action === "deposit" && !depositFingerprintId)}>{operationSaving ? "Enregistrement…" : action === "deposit" ? "Valider le dépôt" : "Confirmer l’opération"}</button></div>
           </form> : <button className="mw-primary" type="button" onClick={() => setAction(null)}>{t.close}</button>}
         </DialogContent>
       </Dialog>
