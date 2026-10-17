@@ -40,6 +40,29 @@ export function Sheet({
   );
 }
 
+export function SheetTrigger({
+  children,
+  asChild,
+}: {
+  children: React.ReactNode;
+  asChild?: boolean;
+}) {
+  const { onOpenChange } = React.useContext(SheetContext);
+  if (asChild && React.isValidElement(children)) {
+    return React.cloneElement(children as React.ReactElement<any>, {
+      onClick: (e: React.MouseEvent) => {
+        (children.props as any)?.onClick?.(e);
+        onOpenChange(true);
+      },
+    });
+  }
+  return (
+    <button type="button" onClick={() => onOpenChange(true)}>
+      {children}
+    </button>
+  );
+}
+
 export function SheetContent({
   children,
   side = 'right',

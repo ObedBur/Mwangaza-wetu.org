@@ -1986,6 +1986,54 @@ button.mw-nav-group-toggle,
   font-weight: 700;
   letter-spacing: -0.3px;
 }
+.mw-dat-preview {
+  display: grid;
+  gap: 6px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--mw-line);
+}
+.mw-dat-preview .mw-form-label { margin: 0; }
+.mw-dat-duration-options {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 5px;
+}
+.mw-dat-duration-options button {
+  min-height: 32px;
+  padding: 4px;
+  border: 1px solid var(--mw-line);
+  border-radius: 5px;
+  background: var(--mw-paper);
+  color: var(--mw-muted);
+  font: inherit;
+  font-size: 10px;
+  cursor: pointer;
+}
+.mw-dat-duration-options button.is-selected {
+  border-color: var(--mw-green);
+  background: color-mix(in srgb, var(--mw-green) 9%, var(--mw-paper));
+  color: var(--mw-green);
+  font-weight: 700;
+  box-shadow: inset 0 0 0 1px var(--mw-green);
+}
+.mw-dat-preview p { margin: 0; }
+.mw-dat-preview .mw-dat-minimum {
+  display: grid;
+  gap: 2px;
+  color: var(--mw-muted);
+  font-size: 10px;
+}
+.mw-dat-preview .mw-dat-minimum strong {
+  color: var(--mw-green);
+  font-size: 14px;
+  font-weight: 700;
+}
+.mw-dat-preview .mw-dat-minimum small {
+  color: var(--mw-ink);
+  font-size: 10px;
+  font-weight: 600;
+}
 .mw-form-section-heading .mw-link-button {
   margin-left: auto;
 }
@@ -2682,6 +2730,19 @@ button.mw-nav-group-toggle,
   /* Masquer le "FR" sur très petit écran si trop serré */
   .mw-search {
     height: 34px;
+    width: auto;
+    min-width: 0;
+    flex: 1 1 110px;
+    padding-right: 8px;
+    padding-left: 8px;
+  }
+  .mw-top-left {
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+  .mw-search input {
+    min-width: 0;
+    font-size: 10px;
   }
   .mw-content {
     padding: 16px 12px 24px;
@@ -2726,6 +2787,15 @@ button.mw-nav-group-toggle,
   .mw-donut-row {
     justify-content: space-around;
     gap: 12px;
+  }
+}
+
+@media (max-width: 480px) {
+  .mw-chart > svg > g > .mw-chart-axis {
+    display: none;
+  }
+  .mw-chart-month-label.is-hidden-on-mobile {
+    display: none;
   }
 }
 

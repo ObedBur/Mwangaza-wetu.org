@@ -39,6 +39,7 @@ model Membre {
   activationToken     String?         @map("activation_token")
   activationExpires   DateTime?       @map("activation_expires")
   isActivated         Boolean         @default(false) @map("is_activated")
+  authVersion         Int             @default(0) @map("auth_version")
   attendances         Attendance[]
   comptesEpargne      CompteEpargne[]
   credits             Credit[]
@@ -47,6 +48,7 @@ model Membre {
   epargnes            Epargne[]
   notifications       notifications[]
   retraits            Retrait[]
+  supportTickets      SupportTicket[]
 
   @@map("membres")
 }
@@ -124,6 +126,8 @@ model Epargne {
   description     String?
   createdAt       DateTime             @default(now()) @map("created_at")
   remboursementId Int?                 @map("remboursement_id")
+  executeParId    Int?                 @map("execute_par_id")
+  executeParRole  String?              @map("execute_par_role")
   membre          Membre               @relation(fields: [compte], references: [numeroCompte])
   remboursement   Remboursement?       @relation("remboursement_epargnes", fields: [remboursementId], references: [id])
 
@@ -178,8 +182,16 @@ model Retrait {
   frais         Decimal       @default(0) @db.Decimal(18, 2)
   createdAt     DateTime      @default(now()) @map("created_at")
   reference     String        @unique @default(cuid())
+  idempotencyKey String?      @unique @map("idempotency_key")
   statut        StatutRetrait @default(COMPLETED)
+  executeParId  Int?          @map("execute_par_id")
+  executeParRole String?      @map("execute_par_role")
+  annuleLe      DateTime?     @map("annule_le")
+  annuleParId   Int?          @map("annule_par_id")
+  annuleParRole String?       @map("annule_par_role")
+  motifAnnulation String?     @map("motif_annulation")
   membre        Membre        @relation(fields: [compte], references: [numeroCompte])
+  mouvementsCaisse MouvementCaisseAgent[]
 
   @@map("retraits")
 }
@@ -218,6 +230,8 @@ model Remboursement {
   idempotencyKey    String?   @unique @map("idempotency_key")
   partInteret       Decimal   @default(0) @map("part_interet") @db.Decimal(18, 2)
   partPrincipal     Decimal   @default(0) @map("part_principal") @db.Decimal(18, 2)
+  executeParId      Int?      @map("execute_par_id")
+  executeParRole    String?   @map("execute_par_role")
   updatedAt         DateTime  @updatedAt @map("updated_at")
   epargnes          Epargne[] @relation("remboursement_epargnes")
   credit            Credit    @relation(fields: [creditId], references: [id], onDelete: Cascade)
@@ -312,6 +326,9 @@ model notifications {
   id              Int             @id @default(autoincrement())
   membre_id       Int?
   admin_id        Int?
+  // Cible agent (guichet) : membre_id = null ET agent_id = null => diffusion
+  // générale visible par les membres ET les agents.
+  agent_id        Int?
   titre           String
   message         String
   type            String          @default("info")
@@ -319,10 +336,42 @@ model notifications {
   created_at      DateTime        @default(now())
   administrateurs Administrateur? @relation(fields: [admin_id], references: [id], onDelete: Cascade)
   membres         Membre?         @relation(fields: [membre_id], references: [id], onDelete: Cascade)
+  agents          Agent?          @relation(fields: [agent_id], references: [id], onDelete: Cascade)
 
   @@index([admin_id])
+  @@index([agent_id])
   @@index([created_at])
   @@index([membre_id])
+}
+
+model SupportTicket {
+  id        Int                   @id @default(autoincrement())
+  reference String                @unique @default(cuid())
+  membreId  Int                   @map("membre_id")
+  sujet     String                @db.VarChar(120)
+  categorie SupportTicketCategory @default(AUTRE)
+  statut    SupportTicketStatus   @default(OUVERT)
+  createdAt DateTime              @default(now()) @map("created_at")
+  updatedAt DateTime              @updatedAt @map("updated_at")
+  membre    Membre                @relation(fields: [membreId], references: [id], onDelete: Cascade)
+  messages  SupportTicketMessage[]
+
+  @@index([membreId, createdAt])
+  @@index([statut, updatedAt])
+  @@map("support_tickets")
+}
+
+model SupportTicketMessage {
+  id        Int          @id @default(autoincrement())
+  ticketId  Int          @map("ticket_id")
+  auteurId  Int          @map("auteur_id")
+  auteurRole String      @map("auteur_role") @db.VarChar(20)
+  message   String       @db.VarChar(3000)
+  createdAt DateTime     @default(now()) @map("created_at")
+  ticket    SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId, createdAt])
+  @@map("support_ticket_messages")
 }
 
 model Agent {
@@ -338,11 +387,54 @@ model Agent {
   soldeInitial               Decimal   @default(0) @map("solde_initial") @db.Decimal(18, 2)
   devise                     Devise    @default(USD)
   actif                      Boolean   @default(true)
+  authVersion                Int       @default(0) @map("auth_version")
   motDePasse                 String?   @map("mot_de_passe")
   userId                     String?   @unique @map("userId")
   createdAt                  DateTime  @default(now()) @map("created_at")
+  caisses                    CaisseAgent[]
+  notifications              notifications[]
 
   @@map("agents")
+}
+
+model CaisseAgent {
+  id          Int                    @id @default(autoincrement())
+  agentId     Int                    @map("agent_id")
+  devise      Devise
+  solde       Decimal                @default(0) @db.Decimal(18, 2)
+  createdAt   DateTime               @default(now()) @map("created_at")
+  updatedAt   DateTime               @updatedAt @map("updated_at")
+  agent       Agent                  @relation(fields: [agentId], references: [id], onDelete: Restrict)
+  mouvements  MouvementCaisseAgent[]
+
+  @@unique([agentId, devise])
+  @@map("caisses_agents")
+}
+
+model MouvementCaisseAgent {
+  id          Int         @id @default(autoincrement())
+  caisseId    Int         @map("caisse_id")
+  retraitId   Int?        @map("retrait_id")
+  epargneId   Int?        @map("epargne_id")
+  remboursementId Int?    @map("remboursement_id")
+  type        String
+  devise      Devise
+  montant     Decimal     @db.Decimal(18, 2)
+  soldeAvant  Decimal     @map("solde_avant") @db.Decimal(18, 2)
+  soldeApres  Decimal     @map("solde_apres") @db.Decimal(18, 2)
+  motif       String?
+  acteurId    Int?        @map("acteur_id")
+  acteurRole  String?     @map("acteur_role")
+  idempotencyKey String?  @unique @map("idempotency_key")
+  createdAt   DateTime    @default(now()) @map("created_at")
+  caisse      CaisseAgent @relation(fields: [caisseId], references: [id], onDelete: Restrict)
+  retrait     Retrait?    @relation(fields: [retraitId], references: [id], onDelete: Restrict)
+
+  @@index([caisseId, createdAt])
+  @@index([retraitId])
+  @@index([epargneId])
+  @@index([remboursementId])
+  @@map("mouvements_caisses_agents")
 }
 
 enum Role {
@@ -382,6 +474,7 @@ enum StatutRetrait {
   PENDING
   COMPLETED
   FAILED
+  CANCELLED
 }
 
 // Cycle de vie du DAT (§3.2 du dossier fonctionnel)
@@ -390,6 +483,22 @@ enum StatutDat {
   ECHEANCE // échéance atteinte — membre peut venir au guichet
   CLOTURE // capital + gain versés sur le Principal
   ANNULE // contrepassation tracée (motif obligatoire)
+}
+
+enum SupportTicketCategory {
+  COMPTE
+  EPARGNE
+  CREDIT
+  TECHNIQUE
+  AUTRE
+}
+
+enum SupportTicketStatus {
+  OUVERT
+  EN_COURS
+  ATTENTE_MEMBRE
+  RESOLU
+  FERME
 }
 
 enum StatutProjet {

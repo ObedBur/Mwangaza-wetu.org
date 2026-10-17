@@ -5,6 +5,7 @@ import {
   Body,
   Param,
   Put,
+  Patch,
   Delete,
   Query,
   ParseIntPipe,
@@ -13,6 +14,7 @@ import {
 } from '@nestjs/common';
 import { MembersService } from './members.service';
 import { CreateMemberDto } from './dto/create-member.dto';
+import { UpdateOwnProfileDto } from './dto/update-own-profile.dto';
 import { Public } from '../auth/jwt-auth.guard';
 import {
   getSectionTrigram,
@@ -59,6 +61,7 @@ export class MembersController {
     }));
   }
 
+  @Roles(...ADMIN_ROLES, 'agent')
   @Get('generate-numero')
   async generateNumero(
     @Query('year') year?: string,
@@ -84,6 +87,7 @@ export class MembersController {
     return this.membersService.getLastNumero(sectionTrigram, y);
   }
 
+  @Roles(...ADMIN_ROLES, 'agent')
   @Get('check-userid/:userId')
   async checkUserId(
     @Param('userId') userId: string,
@@ -137,6 +141,29 @@ export class MembersController {
 
   // Accessible aux membres, mais uniquement pour leurs propres données
   // (ownership vérifié ci-dessous : identifier = id ou numeroCompte du JWT)
+  @Roles('member')
+  @Get('me/transactions')
+  async getOwnTransactions(
+    @Req() req: AuthenticatedRequest,
+    @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
+  ) {
+    const pageNumber = Math.max(1, Number.parseInt(page ?? '1', 10) || 1);
+    const size = Math.min(100, Math.max(1, Number.parseInt(pageSize ?? '50', 10) || 50));
+    return this.membersService.getMemberTransactions(
+      req.user!.accountNumber!, pageNumber, size,
+    );
+  }
+
+  @Roles('member')
+  @Patch('me/profil')
+  async updateOwnProfile(
+    @Req() req: AuthenticatedRequest,
+    @Body() dto: UpdateOwnProfileDto,
+  ) {
+    return this.membersService.updateOwnProfile(req.user!.userId!, dto);
+  }
+
   @Roles(...ADMIN_ROLES, 'member')
   @Get('dashboard/:identifier')
   async getMemberDashboard(
@@ -159,24 +186,10 @@ export class MembersController {
 
     const result = await this.membersService.getMemberDashboard(identifier);
 
-    // Espace membre : aucune donnée crédit n'est exposée
-    if (isMemberCaller) {
-      return {
-        ...result,
-        balances: {
-          ...result.balances,
-          activeCredits: { USD: 0, FC: 0 },
-        },
-        activeCreditsDetails: [],
-        recentTransactions: result.recentTransactions.filter(
-          (t) => t.type !== 'remboursement',
-        ),
-      };
-    }
-
     return result;
   }
 
+  @Roles(...ADMIN_ROLES, 'agent')
   @Post()
   async create(@Body() createMemberDto: CreateMemberDto) {
     return this.membersService.create(createMemberDto);

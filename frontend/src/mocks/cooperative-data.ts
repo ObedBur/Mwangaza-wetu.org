@@ -27,6 +27,7 @@ export type AccountOperation = {
   amount: number;
   date: string;
   status: OperationStatus;
+  currency?: "USD" | "FC";
 };
 
 export type MemberCredit = {
@@ -50,6 +51,8 @@ export type AccountHolder = {
   lastDeposit: string;
   goalAmount: number | null;
   status: MemberStatus;
+  balanceUSD?: number;
+  balanceFC?: number;
 };
 
 export type AccountMock = {

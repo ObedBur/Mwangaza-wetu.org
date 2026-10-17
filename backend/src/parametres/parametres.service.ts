@@ -32,6 +32,13 @@ export interface DatDuree {
   tauxPeriode: number; // % appliqué à LA PÉRIODE (jamais ramené à un an)
   minFc: number; // minimum d'ouverture en FC
   minUsd: number; // minimum d'ouverture en USD
+  /**
+   * Capital minimal à PLACER sur le DAT pour toucher le taux.
+   * 0 = le taux s'applique quel que soit le montant.
+   * Sous le seuil, le DAT s'ouvre mais ne rapporte rien (gain = 0).
+   */
+  seuilGainFc: number;
+  seuilGainUsd: number;
 }
 
 export interface DatParameters {
@@ -40,13 +47,20 @@ export interface DatParameters {
   retraitAnticipéInterdit: boolean;
 }
 
-/** Valeurs arrêtées par la direction le 16/10/2026 — modifiables en base. */
+/**
+ * Valeurs arrêtées par la direction le 17/10/2026 — modifiables en base.
+ *
+ *  - 1 / 3 / 6 mois : AUCUN intérêt (tauxPeriode = 0)
+ *  - 12 mois         : 2 % de la période, SI le capital placé atteint
+ *                      1 000 000 FC ou 400 USD (1 000 000 ÷ 2500 FC/USD,
+ *                      taux retenu par la coopérative)
+ */
 export const DAT_DEFAULTS: DatParameters = {
   durees: [
-    { dureeMois: 1, baseJours: 31, tauxPeriode: 15, minFc: 2000, minUsd: 1 },
-    { dureeMois: 3, baseJours: 93, tauxPeriode: 15, minFc: 3000, minUsd: 2 },
-    { dureeMois: 6, baseJours: 186, tauxPeriode: 15, minFc: 5000, minUsd: 3 },
-    { dureeMois: 12, baseJours: 365, tauxPeriode: 30, minFc: 12000, minUsd: 5 },
+    { dureeMois: 1, baseJours: 31, tauxPeriode: 0, minFc: 2000, minUsd: 1, seuilGainFc: 0, seuilGainUsd: 0 },
+    { dureeMois: 3, baseJours: 93, tauxPeriode: 0, minFc: 3000, minUsd: 2, seuilGainFc: 0, seuilGainUsd: 0 },
+    { dureeMois: 6, baseJours: 186, tauxPeriode: 0, minFc: 5000, minUsd: 3, seuilGainFc: 0, seuilGainUsd: 0 },
+    { dureeMois: 12, baseJours: 365, tauxPeriode: 2, minFc: 12000, minUsd: 5, seuilGainFc: 1000000, seuilGainUsd: 400 },
   ],
   retraitAnticipéInterdit: true,
 };
@@ -163,7 +177,18 @@ export class ParametresService {
       if (!Array.isArray(parsed.durees) || parsed.durees.length === 0) {
         return DAT_DEFAULTS;
       }
-      return parsed;
+      // Keep every supported term available even when an older DB setting
+      // contains only a subset. Configured values still take precedence.
+      return {
+        ...DAT_DEFAULTS,
+        ...parsed,
+        durees: DAT_DEFAULTS.durees.map((defaults) => {
+          const configured = parsed.durees.find(
+            (item) => item.dureeMois === defaults.dureeMois,
+          );
+          return configured ? { ...defaults, ...configured } : defaults;
+        }),
+      };
     } catch {
       return DAT_DEFAULTS;
     }

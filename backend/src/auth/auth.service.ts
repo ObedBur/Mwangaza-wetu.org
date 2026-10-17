@@ -71,6 +71,7 @@ export class AuthService {
           role: 'agent',
           fullName: agent.nom,
           guichet: agent.guichetAssigne,
+          authVersion: agent.authVersion,
         };
         return {
           success: true,
@@ -100,6 +101,7 @@ export class AuthService {
           email: member.email,
           accountNumber: member.numeroCompte,
           role: 'member',
+        authVersion: member.authVersion,
         };
         return {
           success: true,
@@ -198,6 +200,7 @@ export class AuthService {
       email: member.email,
       accountNumber: member.numeroCompte,
       role: 'member',
+      authVersion: member.authVersion,
     };
 
     return {
@@ -211,6 +214,42 @@ export class AuthService {
         profilePhoto: member.photoProfil,
       },
     };
+  }
+
+  async changeMemberPassword(user: AuthUser, currentPassword: string, newPassword: string) {
+    if (user.role !== 'member' || !user.userId) {
+      throw new UnauthorizedException('Session membre invalide');
+    }
+    const member = await this.prisma.membre.findUnique({
+      where: { id: user.userId },
+      select: { id: true, motDePasse: true, isActivated: true },
+    });
+    if (!member?.isActivated || !member.motDePasse) {
+      throw new UnauthorizedException('Compte membre non activé ou invalide');
+    }
+    if (!(await bcrypt.compare(currentPassword, member.motDePasse))) {
+      throw new UnauthorizedException('Le mot de passe actuel est incorrect');
+    }
+    if (await bcrypt.compare(newPassword, member.motDePasse)) {
+      throw new BadRequestException('Le nouveau mot de passe doit être différent de l’actuel');
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, 12);
+    await this.prisma.$transaction(async (tx) => {
+      await tx.membre.update({
+        where: { id: member.id },
+        data: { motDePasse: passwordHash, authVersion: { increment: 1 } },
+      });
+      await tx.adminLog.create({
+        data: {
+          action: 'MEMBER_PASSWORD_CHANGED',
+          details: `Le membre #${member.id} a modifié son mot de passe. Toutes ses sessions existantes ont été révoquées.`,
+          success: true,
+          userId: member.id,
+        },
+      });
+    });
+    return { success: true, sessionRevoked: true };
   }
 
   async loginAgent(loginDto: LoginDto) {
@@ -249,6 +288,7 @@ export class AuthService {
       role: 'agent',
       fullName: agent.nom,
       guichet: agent.guichetAssigne,
+      authVersion: agent.authVersion,
     };
 
     return {

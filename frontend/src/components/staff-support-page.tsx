@@ -1,0 +1,20 @@
+'use client';
+
+import { useCallback, useEffect, useState } from 'react';
+import { apiClient } from '@/lib/auth';
+import { Panel } from '@/components/member-portal/portal-ui';
+
+type Ticket = { id: number; reference: string; sujet: string; categorie: string; statut: string; updatedAt: string; membre: { nomComplet: string; numeroCompte: string }; messages: Array<{ id: number; auteurRole: string; message: string; createdAt: string }> };
+type Page = { data: Ticket[] };
+const statuses = ['OUVERT', 'EN_COURS', 'ATTENTE_MEMBRE', 'RESOLU', 'FERME'];
+
+export function StaffSupportPage() {
+  const [tickets, setTickets] = useState<Ticket[]>([]); const [selected, setSelected] = useState<number | null>(null);
+  const [reply, setReply] = useState(''); const [status, setStatus] = useState(''); const [busy, setBusy] = useState(false); const [error, setError] = useState('');
+  const load = useCallback(async () => { try { const res = await apiClient.get<Page>('/support/tickets', { params: { page: 1, pageSize: 100 } }); setTickets(res.data.data); } catch (err: any) { setError(err?.response?.data?.message || 'Impossible de charger les demandes.'); } }, []);
+  useEffect(() => { void load(); }, [load]);
+  const ticket = tickets.find((item) => item.id === selected) ?? tickets[0];
+  async function sendReply() { if (!ticket || !reply.trim()) return; setBusy(true); setError(''); try { await apiClient.post(`/support/tickets/${ticket.id}/messages`, { message: reply }); setReply(''); await load(); } catch (err: any) { setError(err?.response?.data?.message || 'Réponse non envoyée.'); } finally { setBusy(false); } }
+  async function updateStatus(value: string) { if (!ticket) return; setBusy(true); setError(''); try { await apiClient.patch(`/support/tickets/${ticket.id}/statut`, { statut: value }); await load(); } catch (err: any) { setError(err?.response?.data?.message || 'Statut non modifié.'); } finally { setBusy(false); } }
+  return <main className="member-detail-page support-page"><div className="support-intro"><div><p className="support-eyebrow">Service aux membres</p><h2>Demandes d’assistance</h2><p>Consultez les demandes et répondez dans leur fil de discussion.</p></div></div>{error && <p className="profile-error" role="alert">{error}</p>}<div className="staff-support-grid"><Panel title={`File de demandes (${tickets.length})`} className="staff-ticket-list">{tickets.length === 0 ? <p className="portal-empty-state">Aucune demande enregistrée.</p> : tickets.map((item) => <button className={`staff-ticket-row ${ticket?.id === item.id ? 'is-active' : ''}`} key={item.id} onClick={() => setSelected(item.id)}><strong>{item.sujet}</strong><span>{item.membre.nomComplet} · {item.membre.numeroCompte}</span><small>{item.reference} · {item.statut}</small></button>)}</Panel>{ticket && <Panel title={ticket.reference} className="staff-ticket-detail"><div className="support-ticket-header"><div><h3>{ticket.sujet}</h3><span>{ticket.membre.nomComplet} · {ticket.membre.numeroCompte}</span></div><select value={ticket.statut} disabled={busy || ticket.statut === 'FERME'} onChange={(e) => void updateStatus(e.target.value)} aria-label="Statut de la demande">{statuses.map((value) => <option key={value}>{value}</option>)}</select></div><div className="support-ticket-messages">{ticket.messages.map((message) => <div className={`support-ticket-message ${message.auteurRole !== 'member' ? 'is-member' : ''}`} key={message.id}><strong>{message.auteurRole === 'member' ? ticket.membre.nomComplet : `Équipe · ${message.auteurRole}`}</strong><p>{message.message}</p></div>)}</div>{ticket.statut !== 'FERME' && ticket.statut !== 'RESOLU' && <div className="support-reply-form"><label className="support-field"><span>Votre réponse</span><textarea rows={3} value={reply} onChange={(e) => setReply(e.target.value)} maxLength={3000} /></label><button className="profile-primary-button" disabled={busy || reply.trim().length < 2} onClick={() => void sendReply()}>{busy ? 'Envoi…' : 'Répondre au membre'}</button></div>}</Panel>}</div></main>;
+}

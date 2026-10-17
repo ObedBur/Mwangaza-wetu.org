@@ -697,6 +697,16 @@
   font-weight: 650;
   white-space: nowrap;
 }
+.coop-dual-amount {
+  display: grid;
+  gap: 2px;
+  white-space: nowrap;
+}
+.coop-dual-amount small {
+  color: var(--mw-muted);
+  font-size: 10px;
+  font-weight: 500;
+}
 .coop-account-pills {
   display: inline-flex;
   align-items: center;
@@ -1117,6 +1127,28 @@
   color: var(--mw-green);
   box-shadow: 0 1px 3px #15281a16;
   font-weight: 650;
+}
+.coop-chart-currency-tabs {
+  display: inline-flex;
+  gap: 3px;
+  margin-left: 6px;
+  padding: 3px;
+  border: 1px solid var(--mw-line);
+  border-radius: 7px;
+}
+.coop-chart-currency-tabs button {
+  border: 0;
+  border-radius: 4px;
+  padding: 5px 7px;
+  background: transparent;
+  color: var(--mw-muted);
+  font-size: 10px;
+  cursor: pointer;
+}
+.coop-chart-currency-tabs button[aria-pressed="true"] {
+  background: var(--mw-paper);
+  color: var(--mw-green);
+  box-shadow: 0 1px 3px #15281a16;
 }
 .coop-chart-tabs button:focus-visible,
 .coop-page-content

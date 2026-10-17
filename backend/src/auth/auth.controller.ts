@@ -4,6 +4,7 @@ import { LoginDto } from './dto/login.dto';
 import { Public, Private } from './jwt-auth.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import type { AuthenticatedRequest } from '../common/types/auth-request';
+import { ChangeMemberPasswordDto } from './dto/change-member-password.dto';
 
 @Public()
 @Controller('api/auth')
@@ -38,5 +39,17 @@ export class AuthController {
       success: true,
       user: await this.authService.getProfile(req.user!),
     };
+  }
+
+  @Private()
+  @Roles('member')
+  @Post('me/mot-de-passe')
+  async changeMemberPassword(
+    @Req() req: AuthenticatedRequest,
+    @Body() dto: ChangeMemberPasswordDto,
+  ) {
+    return this.authService.changeMemberPassword(
+      req.user!, dto.currentPassword, dto.newPassword,
+    );
   }
 }

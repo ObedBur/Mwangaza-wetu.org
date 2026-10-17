@@ -10,6 +10,7 @@ import {
   Post,
   Query,
   Req,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { DatService } from './dat.service';
 import {
@@ -37,6 +38,15 @@ export class DatController {
   @Get('bareme')
   getBareme() {
     return this.datService.getBareme();
+  }
+
+  /** Placements DAT du seul membre authentifié. */
+  @Roles('member')
+  @Get('moi')
+  findMine(@Req() req: AuthenticatedRequest) {
+    const numeroCompte = req.user?.accountNumber;
+    if (!numeroCompte) throw new UnauthorizedException('Session membre invalide');
+    return this.datService.findAll(numeroCompte);
   }
 
   /** DAT arrivés à échéance, en attente de passage au guichet. */

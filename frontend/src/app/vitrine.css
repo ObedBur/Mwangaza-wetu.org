@@ -1,0 +1,1145 @@
+/* ======================================================
+   VITRINE / LANDING PAGE — Mwangaza Wetu
+   Charte Bancaire Institutionnelle (Bank of Kigali / Rawbank / EquityBCDC)
+   ====================================================== */
+
+.mw-vitrine {
+  --v-primary: #074780;
+  --v-primary-dark: #05335c;
+  --v-primary-light: #0B5EA8;
+  --v-primary-soft: #EBF3FA;
+  --v-accent: #E56A1E;
+  --v-accent-gold: #D4A017;
+  --v-green: #16A34A;
+  --v-green-soft: #DCFCE7;
+  --v-ink: #1E293B;
+  --v-muted: #64748B;
+  --v-line: #E2E8F0;
+  --v-paper: #FFFFFF;
+  --v-canvas: #F8FAFC;
+
+  font-family: "Inter Variable", Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  color: var(--v-ink);
+  background: #ffffff;
+  line-height: 1.6;
+  overflow-x: hidden;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   1. TOPBAR INSTITUTIONNELLE (Style Equity BCDC / Rawbank)
+   ───────────────────────────────────────────────────────────── */
+.v-topbar {
+  background: #042442;
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 11.5px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+.v-topbar-inner {
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 0 28px;
+  height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.v-topbar-left {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+.v-topbar-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.v-topbar-ticker {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  background: rgba(255, 255, 255, 0.06);
+  padding: 3px 10px;
+  border-radius: 4px;
+  font-weight: 500;
+}
+.v-topbar-ticker strong {
+  color: #fff;
+  font-weight: 700;
+}
+.v-topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.v-topbar-lang {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.v-topbar-lang-btn {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: all 0.15s;
+}
+.v-topbar-lang-btn:hover { color: #fff; }
+.v-topbar-lang-btn.active {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.18);
+}
+
+/* ─────────────────────────────────────────────────────────────
+   2. NAVBAR PRINCIPALE (Style Bank of Kigali / Rawbank)
+   ───────────────────────────────────────────────────────────── */
+.v-nav {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: rgba(255, 255, 255, 0.98);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--v-line);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
+}
+.v-nav-inner {
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 0 28px;
+  height: 70px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
+.v-nav-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-decoration: none;
+}
+.v-nav-logo-badge {
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #074780 0%, #1E88E5 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-weight: 850;
+  font-size: 17px;
+  letter-spacing: -0.5px;
+  box-shadow: 0 4px 12px rgba(7, 71, 128, 0.25);
+}
+.v-nav-logo-img {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  object-fit: contain;
+  background: #ffffff;
+  box-shadow: 0 2px 8px rgba(7, 71, 128, 0.15);
+  border: 1.5px solid rgba(7, 71, 128, 0.12);
+}
+.v-nav-brand-title {
+  font-size: 18px;
+  font-weight: 800;
+  color: #074780;
+  letter-spacing: -0.5px;
+  line-height: 1.1;
+  display: flex;
+  flex-direction: column;
+}
+.v-nav-brand-sub {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--v-muted);
+}
+.v-nav-links {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.v-nav-links a {
+  display: block;
+  padding: 8px 14px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #334155;
+  text-decoration: none;
+  border-radius: 8px;
+  transition: all 0.15s;
+}
+.v-nav-links a:hover {
+  color: #074780;
+  background: #F1F5F9;
+}
+.v-nav-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.v-btn-nav-outline {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 18px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #074780;
+  background: #fff;
+  border: 1.5px solid #074780;
+  border-radius: 8px;
+  text-decoration: none;
+  cursor: pointer;
+  transition: all 0.18s;
+}
+.v-btn-nav-outline:hover {
+  background: #EBF3FA;
+}
+.v-btn-nav-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 20px;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #fff;
+  background: linear-gradient(135deg, #E56A1E 0%, #D45511 100%);
+  border: none;
+  border-radius: 8px;
+  text-decoration: none;
+  cursor: pointer;
+  transition: all 0.18s;
+  box-shadow: 0 4px 12px rgba(229, 106, 30, 0.28);
+}
+.v-btn-nav-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(229, 106, 30, 0.38);
+}
+.v-hamburger {
+  display: none;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 8px;
+}
+.v-mobile-menu {
+  display: none;
+  flex-direction: column;
+  background: #fff;
+  border-top: 1px solid var(--v-line);
+  padding: 16px 24px;
+  gap: 10px;
+}
+.v-mobile-menu.open { display: flex; }
+.v-mobile-menu a {
+  padding: 10px 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--v-ink);
+  text-decoration: none;
+  border-bottom: 1px solid #F1F5F9;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   3. HERO BANCAIRE RICHE (Style Bank of Kigali / Rawbank)
+   ───────────────────────────────────────────────────────────── */
+.v-hero-bank {
+  position: relative;
+  background: linear-gradient(135deg, #03203D 0%, #074780 48%, #0C61A8 100%);
+  color: #fff;
+  padding: 70px 28px 120px;
+  overflow: hidden;
+}
+/* Décoration en filigrane (guilloché de sécurité bancaire / onde fluide) */
+.v-hero-bank-pattern {
+  position: absolute;
+  inset: 0;
+  background-image: 
+    radial-gradient(circle at 80% 30%, rgba(229, 106, 30, 0.12) 0%, transparent 45%),
+    radial-gradient(circle at 10% 80%, rgba(30, 136, 229, 0.18) 0%, transparent 50%),
+    linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+  background-size: 100% 100%, 100% 100%, 48px 48px, 48px 48px;
+  pointer-events: none;
+}
+.v-hero-bank-inner {
+  max-width: 1240px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 1.15fr 0.85fr;
+  align-items: center;
+  gap: 52px;
+  position: relative;
+  z-index: 2;
+}
+
+/* Colonne gauche */
+.v-hero-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px 6px 10px;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 24px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: #fff;
+  margin-bottom: 22px;
+  backdrop-filter: blur(8px);
+}
+.v-hero-tag-dot {
+  width: 8px;
+  height: 8px;
+  background: #22C55E;
+  border-radius: 50%;
+  box-shadow: 0 0 8px #22C55E;
+}
+.v-hero-title {
+  font-size: clamp(34px, 4.4vw, 56px);
+  font-weight: 850;
+  line-height: 1.08;
+  letter-spacing: -1.6px;
+  margin: 0 0 20px;
+  color: #fff;
+}
+.v-hero-title span {
+  color: #FFA94D;
+  text-decoration: underline;
+  text-decoration-color: rgba(229, 106, 30, 0.4);
+  text-underline-offset: 6px;
+}
+.v-hero-lead {
+  font-size: 17px;
+  line-height: 1.65;
+  color: rgba(255, 255, 255, 0.86);
+  max-width: 540px;
+  margin: 0 0 34px;
+  font-weight: 400;
+}
+.v-hero-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-bottom: 40px;
+}
+.v-btn-hero-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 28px;
+  font-size: 14.5px;
+  font-weight: 750;
+  color: #074780;
+  background: #ffffff;
+  border-radius: 10px;
+  text-decoration: none;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+}
+.v-btn-hero-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.32);
+}
+.v-btn-hero-secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 24px;
+  font-size: 14.5px;
+  font-weight: 600;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 10px;
+  text-decoration: none;
+  cursor: pointer;
+  transition: all 0.2s;
+  backdrop-filter: blur(8px);
+}
+.v-btn-hero-secondary:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* Social Proof (Style Bank of Kigali : Testimonials avatar stack) */
+.v-hero-social-proof {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.14);
+  max-width: 520px;
+}
+.v-avatar-stack {
+  display: flex;
+}
+.v-avatar-bubble {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 750;
+  color: #fff;
+  margin-left: -10px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+}
+.v-avatar-stack .v-avatar-bubble:first-child { margin-left: 0; }
+.v-social-proof-content {
+  display: flex;
+  flex-direction: column;
+}
+.v-social-proof-stars {
+  display: flex;
+  gap: 2px;
+  color: #FBBF24;
+  font-size: 13px;
+}
+.v-social-proof-text {
+  font-size: 12.5px;
+  color: rgba(255, 255, 255, 0.85);
+  line-height: 1.35;
+}
+.v-social-proof-text strong {
+  color: #fff;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   COLONNE DROITE : LE MOCKUP BANCAIRE INTERACTIF
+   (Style Rawbank smartphone + Carte Virtuelle)
+   ───────────────────────────────────────────────────────────── */
+.v-bank-showcase {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+/* 1. Carte Bancaire / Membre Digitale Mwangaza */
+.v-member-card {
+  background: linear-gradient(135deg, #052646 0%, #0B487A 50%, #07355C 100%);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 18px;
+  padding: 24px;
+  color: #fff;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(12px);
+}
+.v-member-card::before {
+  content: '';
+  position: absolute;
+  top: -50px;
+  right: -50px;
+  width: 160px;
+  height: 160px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(229, 106, 30, 0.35) 0%, transparent 70%);
+  pointer-events: none;
+}
+.v-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 22px;
+}
+.v-card-chip {
+  width: 36px;
+  height: 28px;
+  background: linear-gradient(135deg, #F5D061 0%, #B8860B 100%);
+  border-radius: 5px;
+  box-shadow: inset 0 1px 2px rgba(255,255,255,0.4);
+}
+.v-card-network {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.85);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.v-card-number {
+  font-family: "Courier New", monospace;
+  font-size: 17px;
+  letter-spacing: 2.5px;
+  color: rgba(255, 255, 255, 0.95);
+  margin-bottom: 18px;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+}
+.v-card-bottom {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+}
+.v-card-holder-label {
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: rgba(255, 255, 255, 0.6);
+  margin-bottom: 2px;
+}
+.v-card-holder-name {
+  font-size: 13.5px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: #fff;
+}
+.v-card-badge-gold {
+  background: linear-gradient(135deg, rgba(212, 160, 23, 0.3) 0%, rgba(212, 160, 23, 0.1) 100%);
+  border: 1px solid #D4A017;
+  color: #FDE047;
+  padding: 3px 9px;
+  border-radius: 6px;
+  font-size: 10.5px;
+  font-weight: 750;
+  letter-spacing: 0.8px;
+}
+
+/* 2. Widget Passbook Épargne Vivant (Style Rawbank) */
+.v-passbook-widget {
+  background: rgba(255, 255, 255, 0.96);
+  color: var(--v-ink);
+  border-radius: 16px;
+  padding: 20px 22px;
+  box-shadow: 0 14px 35px rgba(0, 0, 0, 0.25);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.v-passbook-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.v-passbook-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 750;
+  color: #074780;
+  background: #EBF3FA;
+  padding: 3px 8px;
+  border-radius: 5px;
+}
+.v-passbook-status {
+  font-size: 11px;
+  font-weight: 600;
+  color: #16A34A;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.v-passbook-status::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  background: #16A34A;
+  border-radius: 50%;
+}
+.v-passbook-title {
+  font-size: 14.5px;
+  font-weight: 750;
+  color: var(--v-ink);
+  margin: 0;
+}
+.v-passbook-progress-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.v-passbook-progress-bar {
+  height: 7px;
+  background: #E2E8F0;
+  border-radius: 4px;
+  overflow: hidden;
+}
+.v-passbook-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #074780, #22C55E);
+  border-radius: 4px;
+  width: 82%;
+}
+.v-passbook-progress-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11.5px;
+  color: var(--v-muted);
+  font-weight: 600;
+}
+.v-passbook-progress-labels strong {
+  color: #074780;
+}
+
+/* Notification de transaction flottante */
+.v-floating-notif {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #F0FDF4;
+  border: 1px solid #BBF7D0;
+  padding: 9px 14px;
+  border-radius: 10px;
+  font-size: 12px;
+  color: #166534;
+  font-weight: 600;
+}
+.v-floating-notif-icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #22C55E;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   4. TRANSITION INCURVÉE & BARRE DE STATS (Style Bank of Kigali)
+   ───────────────────────────────────────────────────────────── */
+.v-stats-dock {
+  position: relative;
+  margin-top: -50px;
+  z-index: 10;
+  padding: 0 28px;
+}
+.v-stats-dock-inner {
+  max-width: 1240px;
+  margin: 0 auto;
+  background: #ffffff;
+  border-radius: 20px;
+  box-shadow: 0 12px 35px rgba(7, 71, 128, 0.08);
+  border: 1px solid var(--v-line);
+  padding: 24px 32px;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 24px;
+}
+.v-stat-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 8px 12px;
+  border-right: 1px solid #F1F5F9;
+}
+.v-stat-card:last-child {
+  border-right: none;
+}
+.v-stat-icon-wrap {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  background: #EBF3FA;
+  color: #074780;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.v-stat-info {
+  display: flex;
+  flex-direction: column;
+}
+.v-stat-num {
+  font-size: 26px;
+  font-weight: 850;
+  color: #074780;
+  line-height: 1.1;
+  letter-spacing: -0.8px;
+}
+.v-stat-title {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--v-muted);
+  margin-top: 2px;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   5. SECTIONS COMMUNES
+   ───────────────────────────────────────────────────────────── */
+.v-section {
+  padding: 88px 28px;
+}
+.v-section-inner {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+.v-section-alt { background: var(--v-canvas); }
+
+.v-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 750;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: var(--v-accent);
+  margin-bottom: 12px;
+}
+.v-label::before {
+  content: '';
+  display: block;
+  width: 18px;
+  height: 2px;
+  background: currentColor;
+  border-radius: 2px;
+}
+.v-heading {
+  font-size: clamp(26px, 3.8vw, 38px);
+  font-weight: 800;
+  letter-spacing: -1px;
+  line-height: 1.18;
+  color: #0F172A;
+  margin: 0 0 14px;
+}
+.v-sub {
+  font-size: 15.5px;
+  color: var(--v-muted);
+  max-width: 580px;
+  line-height: 1.65;
+  margin: 0;
+}
+
+/* ── SERVICES GRID ── */
+.v-services-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 22px;
+  margin-top: 48px;
+}
+.v-service-card {
+  background: #ffffff;
+  border: 1px solid var(--v-line);
+  border-radius: 14px;
+  padding: 28px 24px;
+  transition: all 0.22s;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.v-service-card:hover {
+  box-shadow: 0 10px 30px rgba(7, 71, 128, 0.08);
+  transform: translateY(-2px);
+  border-color: #CBD5E1;
+}
+.v-service-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.v-service-name {
+  font-size: 16px;
+  font-weight: 750;
+  color: var(--v-ink);
+  margin: 0;
+}
+.v-service-sub {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--v-muted);
+  margin: 2px 0 0;
+}
+.v-service-desc {
+  font-size: 13.5px;
+  color: var(--v-muted);
+  line-height: 1.6;
+  margin: 0;
+  flex: 1;
+}
+
+/* Carte Crédit Spéciale */
+.v-service-card.credit {
+  background: linear-gradient(135deg, #042442 0%, #074780 100%);
+  color: #fff;
+  border-color: transparent;
+}
+.v-service-card.credit .v-service-name { color: #fff; }
+.v-service-card.credit .v-service-sub { color: rgba(255, 255, 255, 0.7); }
+.v-service-card.credit .v-service-desc { color: rgba(255, 255, 255, 0.85); }
+
+/* ── HOW IT WORKS ── */
+.v-steps {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 28px;
+  margin-top: 52px;
+  position: relative;
+}
+.v-step {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+.v-step-num {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #074780, #1E88E5);
+  color: #fff;
+  font-size: 20px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 6px 18px rgba(7, 71, 128, 0.3);
+}
+.v-step-title {
+  font-size: 16.5px;
+  font-weight: 750;
+  color: var(--v-ink);
+  margin: 0;
+}
+.v-step-desc {
+  font-size: 13.5px;
+  color: var(--v-muted);
+  line-height: 1.65;
+  margin: 0;
+  max-width: 260px;
+}
+
+/* ── MISSION / VISION ── */
+.v-mission-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 28px;
+  margin-top: 48px;
+}
+.v-mission-card {
+  background: #ffffff;
+  border: 1px solid var(--v-line);
+  border-radius: 14px;
+  padding: 32px 28px;
+}
+.v-mission-card-icon {
+  width: 50px;
+  height: 50px;
+  border-radius: 12px;
+  background: #EBF3FA;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 18px;
+  color: #074780;
+}
+.v-mission-card-title {
+  font-size: 18px;
+  font-weight: 750;
+  color: var(--v-ink);
+  margin: 0 0 10px;
+}
+.v-mission-card-text {
+  font-size: 14px;
+  color: var(--v-muted);
+  line-height: 1.7;
+  margin: 0;
+}
+
+/* ── TESTIMONIALS ── */
+.v-testimonials-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 22px;
+  margin-top: 48px;
+}
+.v-testimonial-card {
+  background: #ffffff;
+  border: 1px solid var(--v-line);
+  border-radius: 14px;
+  padding: 26px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.v-testimonial-stars {
+  display: flex;
+  gap: 3px;
+  color: #F59E0B;
+}
+.v-testimonial-text {
+  font-size: 13.5px;
+  color: var(--v-ink);
+  line-height: 1.7;
+  font-style: italic;
+  flex: 1;
+}
+.v-testimonial-author {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.v-testimonial-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 750;
+  color: #fff;
+  flex-shrink: 0;
+}
+.v-testimonial-name { font-size: 13.5px; font-weight: 750; color: var(--v-ink); }
+.v-testimonial-role { font-size: 11.5px; color: var(--v-muted); }
+
+/* ── NEWS ── */
+.v-news-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 22px;
+  margin-top: 48px;
+}
+.v-news-card {
+  background: #ffffff;
+  border: 1px solid var(--v-line);
+  border-radius: 14px;
+  overflow: hidden;
+  transition: all 0.22s;
+}
+.v-news-card:hover { box-shadow: 0 10px 28px rgba(0,0,0,0.06); transform: translateY(-2px); }
+.v-news-img {
+  height: 160px;
+  background: linear-gradient(135deg, #EBF3FA, #DBEAFE);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #074780;
+  font-size: 38px;
+}
+.v-news-body { padding: 22px; }
+.v-news-tag {
+  display: inline-block;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  background: #EBF3FA;
+  color: #074780;
+  border-radius: 5px;
+  margin-bottom: 10px;
+}
+.v-news-title {
+  font-size: 15px;
+  font-weight: 750;
+  color: var(--v-ink);
+  margin: 0 0 8px;
+  line-height: 1.4;
+}
+.v-news-date { font-size: 12px; color: var(--v-muted); }
+
+/* ── CTA BANNER ── */
+.v-cta-banner {
+  background: linear-gradient(135deg, #E56A1E 0%, #C44E08 100%);
+  padding: 68px 28px;
+  text-align: center;
+}
+.v-cta-banner-inner { max-width: 660px; margin: 0 auto; }
+.v-cta-banner-title {
+  font-size: clamp(24px, 3.8vw, 36px);
+  font-weight: 850;
+  color: #fff;
+  letter-spacing: -1px;
+  margin: 0 0 14px;
+}
+.v-cta-banner-sub { font-size: 15.5px; color: rgba(255,255,255,0.9); margin: 0 0 32px; }
+.v-btn-cta-white {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 30px;
+  font-size: 14.5px;
+  font-weight: 750;
+  color: #C44E08;
+  background: #fff;
+  border-radius: 10px;
+  text-decoration: none;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.18);
+}
+.v-btn-cta-white:hover { transform: translateY(-2px); box-shadow: 0 10px 28px rgba(0,0,0,0.22); }
+
+/* ── CONTACT ── */
+.v-contact-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 48px;
+  align-items: start;
+  margin-top: 52px;
+}
+.v-contact-info { display: flex; flex-direction: column; gap: 20px; }
+.v-contact-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+}
+.v-contact-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 11px;
+  background: #EBF3FA;
+  color: #074780;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.v-contact-item-title { font-size: 11.5px; font-weight: 700; color: var(--v-muted); margin: 0 0 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+.v-contact-item-val { font-size: 14.5px; font-weight: 650; color: var(--v-ink); margin: 0; line-height: 1.5; }
+.v-contact-map {
+  height: 350px;
+  background: linear-gradient(135deg, #E0ECF8, #C8DDF2);
+  border-radius: 14px;
+  border: 1px solid var(--v-line);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 10px;
+  color: #074780;
+}
+.v-contact-map-lbl { font-size: 13.5px; font-weight: 600; color: var(--v-muted); }
+
+/* ── FOOTER ── */
+.v-footer {
+  background: #042442;
+  color: rgba(255,255,255,0.78);
+  padding: 60px 28px 30px;
+}
+.v-footer-inner {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+.v-footer-top {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr 1fr;
+  gap: 40px;
+  margin-bottom: 48px;
+}
+.v-footer-brand-name {
+  font-size: 19px;
+  font-weight: 800;
+  color: #fff;
+  margin: 0 0 10px;
+  letter-spacing: -0.4px;
+}
+.v-footer-brand-desc {
+  font-size: 13px;
+  line-height: 1.65;
+  max-width: 320px;
+  margin: 0 0 20px;
+}
+.v-footer-col-title {
+  font-size: 12px;
+  font-weight: 750;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.5);
+  margin: 0 0 14px;
+}
+.v-footer-links {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+.v-footer-links a {
+  font-size: 13.5px;
+  color: rgba(255,255,255,0.68);
+  text-decoration: none;
+  transition: color 0.15s;
+}
+.v-footer-links a:hover { color: #fff; }
+.v-footer-bottom {
+  border-top: 1px solid rgba(255,255,255,0.08);
+  padding-top: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.v-footer-copy { font-size: 12.5px; }
+.v-footer-legal {
+  display: flex;
+  gap: 20px;
+}
+.v-footer-legal a {
+  font-size: 12.5px;
+  color: rgba(255,255,255,0.5);
+  text-decoration: none;
+}
+.v-footer-legal a:hover { color: rgba(255,255,255,0.85); }
+
+/* ─────────────────────────────────────────────────────────────
+   6. RESPONSIVE POUR TOUS LES ÉCRANS
+   ───────────────────────────────────────────────────────────── */
+@media (max-width: 1080px) {
+  .v-hero-bank-inner { grid-template-columns: 1fr; gap: 40px; }
+  .v-stats-dock-inner { grid-template-columns: repeat(2, 1fr); }
+  .v-stat-card:nth-child(2) { border-right: none; }
+  .v-services-grid { grid-template-columns: repeat(2, 1fr); }
+  .v-testimonials-grid { grid-template-columns: repeat(2, 1fr); }
+  .v-news-grid { grid-template-columns: repeat(2, 1fr); }
+  .v-footer-top { grid-template-columns: 1fr 1fr; gap: 30px; }
+}
+
+@media (max-width: 860px) {
+  .v-topbar-ticker { display: none; }
+  .v-nav-links { display: none; }
+  .v-btn-nav-outline { display: none; }
+  .v-hamburger { display: block; }
+  .v-steps { grid-template-columns: 1fr; }
+  .v-contact-grid { grid-template-columns: 1fr; }
+  .v-mission-grid { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 640px) {
+  .v-topbar { display: none; }
+  .v-hero-bank { padding: 40px 20px 90px; }
+  .v-hero-actions { flex-direction: column; width: 100%; }
+  .v-btn-hero-primary, .v-btn-hero-secondary { width: 100%; justify-content: center; }
+  .v-stats-dock { margin-top: -30px; padding: 0 16px; }
+  .v-stats-dock-inner { grid-template-columns: 1fr; padding: 20px; }
+  .v-stat-card { border-right: none; border-bottom: 1px solid #F1F5F9; padding-bottom: 14px; }
+  .v-stat-card:last-child { border-bottom: none; }
+  .v-services-grid { grid-template-columns: 1fr; }
+  .v-testimonials-grid { grid-template-columns: 1fr; }
+  .v-news-grid { grid-template-columns: 1fr; }
+  .v-footer-top { grid-template-columns: 1fr; }
+}

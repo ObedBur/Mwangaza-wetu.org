@@ -11,4 +11,9 @@ export class AppController {
   getHello(): string {
     return this.appService.getHello();
   }
+
+  @Get('api/public/stats')
+  async getPublicStats() {
+    return this.appService.getPublicStats();
+  }
 }

@@ -13,6 +13,7 @@ export interface JwtPayload {
   role?: string;
   fullName?: string;
   guichet?: string;
+  authVersion?: number;
 }
 
 const REVOKED_MESSAGE =
@@ -45,17 +46,23 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     if (payload.role === 'member') {
       const member = await this.prisma.membre.findUnique({
         where: { id: payload.id },
-        select: { id: true, isActivated: true },
+        select: { id: true, isActivated: true, authVersion: true },
       });
       if (!member || !member.isActivated) {
+        throw new UnauthorizedException(REVOKED_MESSAGE);
+      }
+      if ((payload.authVersion ?? 0) !== member.authVersion) {
         throw new UnauthorizedException(REVOKED_MESSAGE);
       }
     } else if (payload.role === 'agent') {
       const agent = await this.prisma.agent.findUnique({
         where: { id: payload.id },
-        select: { id: true, actif: true },
+        select: { id: true, actif: true, authVersion: true },
       });
       if (!agent || !agent.actif) {
+        throw new UnauthorizedException(REVOKED_MESSAGE);
+      }
+      if ((payload.authVersion ?? 0) !== agent.authVersion) {
         throw new UnauthorizedException(REVOKED_MESSAGE);
       }
     } else {

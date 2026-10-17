@@ -6,6 +6,7 @@ import {
   InternalServerErrorException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import type { AuthUser } from '../common/types/auth-request';
 import { CreateRemboursementDto } from './dto/create-remboursement.dto';
 import { Devise, StatutCredit, Prisma, Remboursement } from '@prisma/client';
 import { getSectionTrigram } from '../common/constants/sections';
@@ -89,7 +90,7 @@ export class RemboursementsService {
   // ────────────────────────────────────────────────────────────────────
   // CRÉATION DE REMBOURSEMENT AVEC VENTILATION PRORATA TEMPORIS
   // ────────────────────────────────────────────────────────────────────
-  async create(dto: CreateRemboursementDto) {
+  async create(dto: CreateRemboursementDto, actor: AuthUser) {
     const {
       creditId,
       montant,
@@ -98,6 +99,10 @@ export class RemboursementsService {
       description,
       idempotencyKey,
     } = dto;
+
+    if (actor.role === 'agent' && !actor.userId) {
+      throw new BadRequestException('Une session agent valide est requise.');
+    }
 
     this.logger.log(
       `📥 Créer remboursement: crédit #${creditId}, ${montant} ${devise}`,
@@ -129,7 +134,7 @@ export class RemboursementsService {
       throw new BadRequestException(`Devise mismatch.`);
     }
 
-    const dateR = new Date(dateRemboursement);
+    const dateR = actor.role === 'agent' ? new Date() : new Date(dateRemboursement);
     const dateDebut = new Date(credit.dateDebut);
     if (dateR < dateDebut) throw new BadRequestException(`Date invalide.`);
 
@@ -174,13 +179,52 @@ export class RemboursementsService {
     const existing = await this.prisma.remboursement.findUnique({
       where: { idempotencyKey: finalKey },
     });
-    if (existing && !existing.deletedAt) return this.mapToResponse(existing);
+    if (existing && !existing.deletedAt) {
+      if (
+        existing.creditId !== creditId || existing.devise !== devise ||
+        Number(existing.montant) !== montant ||
+        (actor.role === 'agent' && (existing.executeParRole !== 'agent' || existing.executeParId !== actor.userId))
+      ) throw new BadRequestException('La clé idempotente est déjà utilisée par une autre opération.');
+      return this.mapToResponse(existing);
+    }
 
     // ========================================================================
     // PHASE 4: TRANSACTION
     // ========================================================================
     try {
       const result = await this.prisma.$transaction(async (tx) => {
+        await tx.$queryRaw<Array<{ id: number }>>`
+          SELECT "id" FROM "credits" WHERE "id" = ${creditId} FOR UPDATE
+        `;
+        const currentCredit = await tx.credit.findUnique({
+          where: { id: creditId },
+          select: { statut: true, montant: true, montantRembourse: true, tauxInteret: true },
+        });
+        if (!currentCredit || currentCredit.statut !== StatutCredit.actif) {
+          throw new BadRequestException('Ce crédit n’est plus actif.');
+        }
+        const totalDueNow = Number(currentCredit.montant) * (1 + Number(currentCredit.tauxInteret) / 100);
+        const remainingNow = totalDueNow - Number(currentCredit.montantRembourse);
+        if (montant > remainingNow + 0.01) {
+          throw new BadRequestException('Le montant dépasse le solde restant dû.');
+        }
+
+        if (actor.role === 'agent') {
+          await tx.$queryRaw<Array<{ id: number }>>`
+            SELECT "id" FROM "caisses_agents"
+            WHERE "agent_id" = ${actor.userId!} AND "devise" = ${devise}::"Devise"
+            FOR UPDATE
+          `;
+        }
+        const caisse = actor.role === 'agent'
+          ? await tx.caisseAgent.findUnique({
+            where: { agentId_devise: { agentId: actor.userId!, devise: devise as Devise } },
+          })
+          : null;
+        if (actor.role === 'agent' && !caisse) {
+          throw new BadRequestException('Votre caisse n’est pas initialisée dans cette devise.');
+        }
+
         const remboursement = await tx.remboursement.create({
           data: {
             creditId,
@@ -191,8 +235,31 @@ export class RemboursementsService {
             partInteret: new Decimal(partInteret),
             idempotencyKey: finalKey,
             description: description || `Remboursement #${creditId}`,
+            executeParId: actor.userId ?? null,
+            executeParRole: actor.role ?? null,
           },
         });
+
+        if (caisse) {
+          const avant = Number(caisse.solde);
+          const apres = avant + montant;
+          await tx.caisseAgent.update({ where: { id: caisse.id }, data: { solde: { increment: montant } } });
+          await tx.mouvementCaisseAgent.create({
+            data: {
+              caisseId: caisse.id,
+              remboursementId: remboursement.id,
+              type: 'REMBOURSEMENT_CREDIT',
+              devise: devise as Devise,
+              montant,
+              soldeAvant: avant,
+              soldeApres: apres,
+              motif: `Remboursement du crédit #${creditId}`,
+              acteurId: actor.userId,
+              acteurRole: actor.role,
+              idempotencyKey: finalKey,
+            },
+          });
+        }
 
         const sectionTrigram = getSectionTrigram(credit.membre.typeCompte);
         const compCrSection = `MW-${sectionTrigram}-CREDITS`;
@@ -249,7 +316,7 @@ export class RemboursementsService {
             `💰 3% intérêts → membre (${credit.membre.numeroCompte}): +${partMembre} ${devise}`,
           );
 
-          // ── 2. Revenus 12% : section + global ───────────────────────
+          // ── 2. Revenus 12% : compte de revenus de la section ────────
           const revType = await tx.revenuType.findFirst({
             where: { nom: 'Système Remboursement' },
           });
@@ -280,26 +347,14 @@ export class RemboursementsService {
               },
             });
 
-            await tx.epargne.create({
-              data: {
-                compte: 'MW-REVENUS-GLOBAL',
-                typeOperation: 'depot',
-                devise: devise as Devise,
-                montant: new Decimal(partRevenus),
-                dateOperation: dateR,
-                description: `Intérêts (12%) remb. #${creditId} global`,
-                remboursementId: remboursement.id,
-              },
-            });
-
             this.logger.log(
-              `📈 12% intérêts → revenus section (${revSection}) + global: +${partRevenus} ${devise}`,
+              `📈 12% intérêts → revenus section (${revSection}): +${partRevenus} ${devise}`,
             );
           }
         }
 
         // MAJ Crédit
-        const totalRembourse = montantDejaRembourse + montant;
+        const totalRembourse = Number(currentCredit.montantRembourse) + montant;
         const nouveauStatut =
           totalRembourse >= montantTotalAttendu - 0.01
             ? StatutCredit.rembourse
@@ -327,7 +382,7 @@ export class RemboursementsService {
     }
   }
 
-  async remove(id: number, reason: string = 'Suppression administrative') {
+  async remove(id: number, reason: string = 'Suppression administrative', actor?: AuthUser) {
     const remboursement = await this.prisma.remboursement.findUnique({
       where: { id },
       include: {
@@ -340,6 +395,47 @@ export class RemboursementsService {
 
     return this.prisma.$transaction(async (tx) => {
       // 1. Soft-delete du remboursement
+      if (remboursement.executeParRole === 'agent' && remboursement.executeParId) {
+        await tx.$queryRaw<Array<{ id: number }>>`
+          SELECT "id" FROM "caisses_agents"
+          WHERE "agent_id" = ${remboursement.executeParId} AND "devise" = ${remboursement.devise}::"Devise"
+          FOR UPDATE
+        `;
+        const caisse = await tx.caisseAgent.findUnique({
+          where: {
+            agentId_devise: {
+              agentId: remboursement.executeParId,
+              devise: remboursement.devise as Devise,
+            },
+          },
+        });
+        if (!caisse || Number(caisse.solde) < Number(remboursement.montant)) {
+          throw new BadRequestException(
+            'Annulation impossible : la caisse de l’agent ne contient pas le montant à contrepasser.',
+          );
+        }
+        const avant = Number(caisse.solde);
+        const apres = avant - Number(remboursement.montant);
+        await tx.caisseAgent.update({
+          where: { id: caisse.id },
+          data: { solde: { decrement: remboursement.montant } },
+        });
+        await tx.mouvementCaisseAgent.create({
+          data: {
+            caisseId: caisse.id,
+            remboursementId: id,
+            type: 'ANNULATION_REMBOURSEMENT',
+            devise: remboursement.devise as Devise,
+            montant: remboursement.montant,
+            soldeAvant: avant,
+            soldeApres: apres,
+            motif: reason,
+            acteurId: actor?.userId,
+            acteurRole: actor?.role,
+          },
+        });
+      }
+
       await tx.remboursement.update({
         where: { id },
         data: {
@@ -391,6 +487,15 @@ export class RemboursementsService {
       await this.balancesService.rafraichirGarantie(
         remboursement.credit.membre.id,
       );
+
+      await tx.adminLog.create({
+        data: {
+          action: 'REMBOURSEMENT_ANNULE',
+          details: `Remboursement #${id} annulé par ${actor?.role ?? 'acteur inconnu'} #${actor?.userId ?? 'inconnu'}. Motif : ${reason}.`,
+          success: true,
+          userId: actor?.userId ?? null,
+        },
+      });
 
       return { success: true };
     });

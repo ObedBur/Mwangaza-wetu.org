@@ -6,6 +6,7 @@ import {
   StatutProjet,
   TypeOperationEpargne,
 } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 
 @Injectable()
 export class BalancesService {
@@ -90,6 +91,7 @@ export class BalancesService {
       by: ['devise'],
       where: {
         NOT: excludeSystem,
+        statut: 'COMPLETED',
       },
       _sum: { frais: true },
     });
@@ -99,23 +101,24 @@ export class BalancesService {
       return item ? item._sum.frais || 0 : 0;
     };
 
-    const beneficesFC = await this.prisma.epargne.aggregate({
-      where: {
-        compte: 'MW-REVENUS-GLOBAL',
-        devise: Devise.FC,
-        typeOperation: TypeOperationEpargne.depot,
-      },
+    // Le compte global est une vue consolidée, pas un compte comptable
+    // supplémentaire : le total est donc calculé uniquement depuis les
+    // comptes de revenus de section.
+    const revenusSections = await this.prisma.epargne.groupBy({
+      by: ['devise', 'typeOperation'],
+      where: { compte: { endsWith: '-REVENUS' } },
       _sum: { montant: true },
     });
-
-    const beneficesUSD = await this.prisma.epargne.aggregate({
-      where: {
-        compte: 'MW-REVENUS-GLOBAL',
-        devise: Devise.USD,
-        typeOperation: TypeOperationEpargne.depot,
-      },
-      _sum: { montant: true },
-    });
+    const netRevenue = (devise: Devise) =>
+      revenusSections
+        .filter((row) => row.devise === devise)
+        .reduce(
+          (sum, row) =>
+            sum +
+            Number(row._sum.montant || 0) *
+              (row.typeOperation === TypeOperationEpargne.depot ? 1 : -1),
+          0,
+        );
 
     return {
       fc: {
@@ -128,7 +131,7 @@ export class BalancesService {
         frais: Number(getFraisSum(Devise.FC)),
         credit: Number(getCreditSum(Devise.FC).total),
         remboursement: Number(getCreditSum(Devise.FC).rembourse),
-        benefices: Number(beneficesFC._sum.montant || 0),
+        benefices: netRevenue(Devise.FC),
       },
       usd: {
         solde:
@@ -140,7 +143,7 @@ export class BalancesService {
         frais: Number(getFraisSum(Devise.USD)),
         credit: Number(getCreditSum(Devise.USD).total),
         remboursement: Number(getCreditSum(Devise.USD).rembourse),
-        benefices: Number(beneficesUSD._sum.montant || 0),
+        benefices: netRevenue(Devise.USD),
       },
     };
   }
@@ -215,7 +218,7 @@ export class BalancesService {
 
   async getFraisRetraits() {
     const rows = await this.prisma.retrait.findMany({
-      where: { frais: { gt: 0 } },
+      where: { frais: { gt: 0 }, statut: 'COMPLETED' },
       orderBy: { dateOperation: 'desc' },
     });
 
@@ -293,12 +296,16 @@ export class BalancesService {
   // Si le membre a un crédit actif, une partie de son épargne est gelée
   // en guise de garantie (= montant du crédit non encore remboursé * tauxGarantie)
   // ────────────────────────────────────────────────────────────────────
-  async getSoldeDisponibleMembre(numeroCompte: string, tauxGarantie = 0.3) {
+  async getSoldeDisponibleMembre(
+    numeroCompte: string,
+    tauxGarantie = 0.3,
+    db: Prisma.TransactionClient | PrismaService = this.prisma,
+  ) {
     // 1. Calculer le solde brut d'épargne du membre.
     //    FILTRE typeCompte = 'PRINCIPAL' : le capital d'un DAT est bloqué
     //    jusqu'à échéance (décision E1 — retrait anticipé interdit) et ne
     //    doit JAMAIS entrer dans le calcul du solde retirable.
-    const epargneStats = await this.prisma.epargne.groupBy({
+    const epargneStats = await db.epargne.groupBy({
       by: ['typeOperation', 'devise'],
       where: { compte: numeroCompte, typeCompte: 'PRINCIPAL' },
       _sum: { montant: true },
@@ -311,9 +318,9 @@ export class BalancesService {
       return Number(item?._sum?.montant || 0);
     };
 
-    const fraisStats = await this.prisma.retrait.groupBy({
+    const fraisStats = await db.retrait.groupBy({
       by: ['devise'],
-      where: { compte: numeroCompte },
+      where: { compte: numeroCompte, statut: 'COMPLETED' },
       _sum: { frais: true },
     });
 
@@ -333,7 +340,7 @@ export class BalancesService {
       getFrais(Devise.USD);
 
     // 2. Calculer la garantie gelée (encours crédits actifs * tauxGarantie)
-    const creditsActifs = await this.prisma.credit.findMany({
+    const creditsActifs = await db.credit.findMany({
       where: { numeroCompte, statut: 'actif' },
       select: { montant: true, montantRembourse: true, devise: true },
     });

@@ -17,6 +17,7 @@ import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { accountConfigs, type AccountSlug } from "@/lib/account-config";
 import { cooperativeCopy as t } from "@/lib/cooperative-copy";
 import { mockMembers } from "@/mocks/cooperative-data";
+import { getAuthUser } from "@/lib/auth";
 
 import "@/app/home.css";
 import "./cooperative-pages.css";
@@ -35,6 +36,10 @@ export function CooperativePageLayout({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const authUser = getAuthUser();
+  const roleCopy = authUser?.role === "agent"
+    ? { ...sidebarCopy, adminSpace: "ESPACE AGENT", adminTools: "OUTILS DE L’AGENT" }
+    : sidebarCopy;
   const [dark, setDark] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [activeOverride, setActiveOverride] = useState("");
@@ -70,7 +75,7 @@ export function CooperativePageLayout({
         <CooperativeSidebar
           active={pageActive}
           membersCount={1248}
-          t={sidebarCopy}
+          t={roleCopy}
           onNavigate={(label) => setActiveOverride(label)}
           isCollapsed={isSidebarCollapsed}
           onToggleCollapse={() => setIsSidebarCollapsed((prev) => !prev)}

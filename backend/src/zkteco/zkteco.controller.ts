@@ -62,6 +62,7 @@ export class ZktecoController {
   }
 
   @Post('capture-fingerprint')
+  @Roles(...ADMIN_ROLES, 'agent')
   async captureFingerprint() {
     try {
       // Timeout piloté par ZKTECO_CAPTURE_TIMEOUT (défaut 30 s)

@@ -15,10 +15,12 @@ import {
   BadRequestException,
   HttpCode,
   HttpStatus,
+  Req,
 } from '@nestjs/common';
 import { RemboursementsService } from './remboursements.service';
 import { CreateRemboursementDto } from './dto/create-remboursement.dto';
 import { DeleteRemboursementDto } from './dto/delete-remboursement.dto';
+import type { AuthenticatedRequest } from '../common/types/auth-request';
 
 @Roles(...ADMIN_ROLES)
 @Controller('api/remboursements')
@@ -68,8 +70,8 @@ export class RemboursementsController {
   @Roles(...ADMIN_ROLES, 'agent')
   @Post('add')
   @HttpCode(HttpStatus.CREATED)
-  async create(@Body() dto: CreateRemboursementDto) {
-    return this.remboursementsService.create(dto);
+  async create(@Body() dto: CreateRemboursementDto, @Req() req: AuthenticatedRequest) {
+    return this.remboursementsService.create(dto, req.user!);
   }
 
   /**
@@ -81,10 +83,12 @@ export class RemboursementsController {
   async remove(
     @Param('id', ParseIntPipe) id: number,
     @Body() body?: DeleteRemboursementDto,
+    @Req() req?: AuthenticatedRequest,
   ) {
     return this.remboursementsService.remove(
       id,
       body?.reason || 'Suppression manuelle',
+      req?.user,
     );
   }
 }

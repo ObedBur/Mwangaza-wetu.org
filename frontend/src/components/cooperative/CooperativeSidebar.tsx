@@ -107,6 +107,7 @@ const navigationGroups: NavigationGroup[] = [
   {
     title: "Outils",
     items: [
+      { label: "Assistance", href: "/support", icon: IconMessageCircle },
       { label: "Rapports", href: "/rapports", icon: IconChartPie },
       { label: "Paramètres", href: "/parametres", icon: IconSettings },
     ],
@@ -152,10 +153,10 @@ export function CooperativeSidebar({
     : "SA";
   const userName = authUser?.fullName || "Super Admin";
   const userRole = authUser?.role
-    ? authUser.role === "superadmin"
+    ? authUser.role === "admin" || authUser.role === "superadmin"
       ? "Direction Générale"
-      : authUser.role === "admin"
-        ? "Administration"
+      : authUser.role === "agent"
+        ? "Agent / Guichetier"
         : authUser.role
     : t.role;
 
@@ -227,7 +228,7 @@ export function CooperativeSidebar({
         {navigationGroups
           .filter((group) => {
             if (group.title === "Administration") return authUser?.role === "admin" || authUser?.role === "superadmin";
-            if (group.title === "Mon compte") return authUser?.role === "agent";
+            if (group.title === "Mon compte") return authUser?.role === "agent" || authUser?.role === "admin" || authUser?.role === "superadmin";
             return true;
           })
           .map((group) => (

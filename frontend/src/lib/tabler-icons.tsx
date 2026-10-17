@@ -5,6 +5,8 @@ import {
   ArrowDown,
   ArrowDownLeft,
   ArrowDownRight,
+  ArrowLeft,
+  ArrowRight,
   ArrowUp,
   ArrowUpRight,
   ArrowUpDown,
@@ -13,7 +15,21 @@ import {
   Bell,
   BellRing,
   Building,
+  Landmark,
+  LifeBuoy,
+  Mail,
+  MapPin,
+  Megaphone,
+  MoreHorizontal,
+  Phone,
+  Shield,
+  Smartphone,
   Store,
+  Star,
+  Globe,
+  Target,
+  CheckCircle,
+  XCircle,
   Calculator,
   Calendar,
   Camera,
@@ -58,7 +74,6 @@ import {
   Settings,
   ShieldCheck,
   Sun,
-  Target,
   TrendingDown,
   TrendingUp,
   User,
@@ -74,14 +89,16 @@ export type TablerIcon = React.ComponentType<{
   size?: number | string;
   color?: string;
   stroke?: number | string;
+  strokeWidth?: number | string;
+  fill?: string;
   className?: string;
   'aria-hidden'?: boolean | 'true' | 'false';
   style?: React.CSSProperties;
 }>;
 
 function createIcon(LucideIcon: React.ComponentType<LucideProps>): TablerIcon {
-  return function IconWrapper({ size = 20, stroke = 1.8, className, ...props }) {
-    return <LucideIcon size={size} strokeWidth={stroke} className={className} {...props} />;
+  return function IconWrapper({ size = 20, stroke = 1.8, strokeWidth, className, ...props }) {
+    return <LucideIcon size={size} strokeWidth={strokeWidth ?? stroke} className={className} {...props} />;
   };
 }
 
@@ -154,3 +171,24 @@ export const IconPanelLeftClose = createIcon(PanelLeftClose);
 export const IconPanelLeftOpen = createIcon(PanelLeftOpen);
 export const IconLayoutSidebarLeftCollapse = IconPanelLeftClose;
 export const IconLayoutSidebarLeftExpand = IconPanelLeftOpen;
+
+// Aliases and icons for Member Portal
+export const IconArrowLeft = createIcon(ArrowLeft);
+export const IconArrowRight = createIcon(ArrowRight);
+export const IconBuildingBank = createIcon(Landmark);
+export const IconCircleX = createIcon(XCircle);
+export const IconDeviceMobile = createIcon(Smartphone);
+export const IconDots = createIcon(MoreHorizontal);
+export const IconHeartHandshake = createIcon(HeartHandshake);
+export const IconLifebuoy = createIcon(LifeBuoy);
+export const IconMail = createIcon(Mail);
+export const IconMapPin = createIcon(MapPin);
+export const IconPhone = createIcon(Phone);
+export const IconStar = createIcon(Star);
+export const IconTarget = createIcon(Target);
+export const IconGlobe = createIcon(Globe);
+export const IconCircleCheckFilled = createIcon(CheckCircle);
+export const IconMenu = IconMenu2;
+export const IconShield = createIcon(Shield);
+export const IconSpeakerphone = createIcon(Megaphone);
+export const IconLayoutDashboard = IconDashboard;

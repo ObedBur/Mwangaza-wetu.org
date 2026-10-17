@@ -83,6 +83,11 @@ export class SavingsController {
     return this.savingsService.getTotalsAll();
   }
 
+  @Get('compte-principal/dashboard')
+  async getPrincipalDashboard() {
+    return this.savingsService.getPrincipalDashboard();
+  }
+
   @Get('by-type/:type')
   async getByType(@Param('type') type: string) {
     return this.savingsService.getSoldeByTypeCompte(type);
@@ -91,8 +96,8 @@ export class SavingsController {
   // Encaissement / décaissement au guichet
   @Roles(...ADMIN_ROLES, 'agent')
   @Post()
-  async create(@Body() createDto: CreateSavingsDto) {
-    return this.savingsService.create(createDto);
+  async create(@Body() createDto: CreateSavingsDto, @Req() req: AuthenticatedRequest) {
+    return this.savingsService.create(createDto, req.user!);
   }
 
   @Roles(...SUPERADMIN_ROLES)

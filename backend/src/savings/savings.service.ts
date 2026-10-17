@@ -1,4 +1,10 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateSavingsDto, TypeOperation } from './dto/create-savings.dto';
 import {
@@ -6,6 +12,7 @@ import {
   TypeOperationEpargne as PrismaTypeOperation,
 } from '@prisma/client';
 import { ParametresService } from '../parametres/parametres.service';
+import type { AuthUser } from '../common/types/auth-request';
 
 @Injectable()
 export class SavingsService {
@@ -65,6 +72,165 @@ export class SavingsService {
     });
   }
 
+  async getPrincipalDashboard() {
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const historyStart = new Date(now.getFullYear(), now.getMonth() - 11, 1);
+    const dailyStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 29);
+    const systemAccounts = [
+      { compte: { contains: 'REVENUS' } },
+      { compte: { contains: 'SECTION-0000' } },
+      { compte: { contains: 'CREDITS' } },
+      { compte: { contains: 'TRESORERIE' } },
+    ];
+    const principalFilter = { typeCompte: 'PRINCIPAL', NOT: systemAccounts };
+
+    const [totals, fees, thisMonth, historyEntries, historyFees, members, lastDeposits] = await Promise.all([
+      this.prisma.epargne.groupBy({
+        by: ['compte', 'devise', 'typeOperation'],
+        where: principalFilter,
+        _sum: { montant: true },
+      }),
+      this.prisma.retrait.groupBy({
+        by: ['compte', 'devise'],
+        where: { NOT: systemAccounts, statut: 'COMPLETED' },
+        _sum: { frais: true },
+      }),
+      this.prisma.epargne.groupBy({
+        by: ['devise', 'typeOperation'],
+        where: { ...principalFilter, dateOperation: { gte: monthStart } },
+        _sum: { montant: true },
+      }),
+      this.prisma.epargne.findMany({
+        where: { ...principalFilter, dateOperation: { gte: historyStart } },
+        select: { compte: true, devise: true, typeOperation: true, montant: true, dateOperation: true },
+      }),
+      this.prisma.retrait.findMany({
+        where: { dateOperation: { gte: historyStart }, NOT: systemAccounts, statut: 'COMPLETED' },
+        select: { compte: true, devise: true, frais: true, dateOperation: true },
+      }),
+      this.prisma.membre.findMany({
+        where: {
+          NOT: [
+            { numeroCompte: { contains: 'REVENUS' } },
+            { numeroCompte: { contains: 'SECTION-0000' } },
+            { numeroCompte: { contains: 'CREDITS' } },
+            { numeroCompte: { contains: 'TRESORERIE' } },
+          ],
+        },
+        select: { id: true, numeroCompte: true, nomComplet: true, telephone: true, dateAdhesion: true, statut: true },
+      }),
+      this.prisma.epargne.findMany({
+        where: { ...principalFilter, typeOperation: 'depot' },
+        orderBy: { dateOperation: 'desc' },
+        distinct: ['compte'],
+        select: { compte: true, dateOperation: true },
+      }),
+    ]);
+
+    const balanceByAccount = new Map<string, { USD: number; FC: number }>();
+    for (const row of totals) {
+      const values = balanceByAccount.get(row.compte) ?? { USD: 0, FC: 0 };
+      const amount = Number(row._sum.montant || 0) * (row.typeOperation === 'retrait' ? -1 : 1);
+      values[row.devise] += amount;
+      balanceByAccount.set(row.compte, values);
+    }
+    for (const row of fees) {
+      const values = balanceByAccount.get(row.compte) ?? { USD: 0, FC: 0 };
+      values[row.devise] -= Number(row._sum.frais || 0);
+      balanceByAccount.set(row.compte, values);
+    }
+
+    const monthTotals = { deposits: { USD: 0, FC: 0 }, withdrawals: { USD: 0, FC: 0 } };
+    for (const row of thisMonth) {
+      const key = row.typeOperation === 'depot' ? 'deposits' : 'withdrawals';
+      monthTotals[key][row.devise] = Number(row._sum.montant || 0);
+    }
+
+    const membersByAccount = new Map(members.map((member) => [member.numeroCompte, member]));
+    const lastDepositByAccount = new Map(lastDeposits.map((item) => [item.compte, item.dateOperation]));
+    const holders = [...balanceByAccount.entries()]
+      .map(([accountNumber, balance]) => {
+        const member = membersByAccount.get(accountNumber);
+        return member ? {
+          memberId: member.id,
+          accountNumber,
+          name: member.nomComplet,
+          phone: member.telephone,
+          joinedAt: member.dateAdhesion,
+          status: member.statut,
+          lastDeposit: lastDepositByAccount.get(accountNumber) ?? null,
+          balanceUSD: Math.round(balance.USD * 100) / 100,
+          balanceFC: Math.round(balance.FC * 100) / 100,
+        } : null;
+      })
+      .filter((holder): holder is NonNullable<typeof holder> => !!holder && (holder.balanceUSD > 0 || holder.balanceFC > 0))
+      .sort((a, b) => a.name.localeCompare(b.name));
+
+    const netAfter = (cutoff: Date, currency: Devise) => {
+      const savings = historyEntries
+        .filter((entry) => entry.devise === currency && entry.dateOperation > cutoff)
+        .reduce((sum, entry) => sum + Number(entry.montant) * (entry.typeOperation === 'retrait' ? -1 : 1), 0);
+      const feesAfter = historyFees
+        .filter((entry) => entry.devise === currency && entry.dateOperation > cutoff)
+        .reduce((sum, entry) => sum + Number(entry.frais), 0);
+      return savings - feesAfter;
+    };
+    const currentUSD = [...balanceByAccount.values()].reduce((sum, item) => sum + item.USD, 0);
+    const currentFC = [...balanceByAccount.values()].reduce((sum, item) => sum + item.FC, 0);
+    const months = Array.from({ length: 12 }, (_, index) => {
+      const date = new Date(now.getFullYear(), now.getMonth() - 11 + index, 1);
+      const cutoff = new Date(date.getFullYear(), date.getMonth() + 1, 0, 23, 59, 59, 999);
+      return {
+        label: new Intl.DateTimeFormat('fr-FR', { month: 'short', year: '2-digit' }).format(date),
+        USD: Math.round((currentUSD - netAfter(cutoff, Devise.USD)) * 100) / 100,
+        FC: Math.round((currentFC - netAfter(cutoff, Devise.FC)) * 100) / 100,
+      };
+    });
+    const daily = Array.from({ length: 30 }, (_, index) => {
+      const date = new Date(dailyStart.getFullYear(), dailyStart.getMonth(), dailyStart.getDate() + index);
+      const cutoff = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999);
+      return {
+        label: new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'short' }).format(date),
+        USD: Math.round((currentUSD - netAfter(cutoff, Devise.USD)) * 100) / 100,
+        FC: Math.round((currentFC - netAfter(cutoff, Devise.FC)) * 100) / 100,
+      };
+    });
+
+    const [deposits, withdrawals] = await Promise.all([
+      this.prisma.epargne.findMany({
+        where: { ...principalFilter, typeOperation: 'depot' },
+        include: { membre: { select: { id: true, nomComplet: true } } },
+        orderBy: { dateOperation: 'desc' },
+        take: 20,
+      }),
+      this.prisma.retrait.findMany({
+        where: { NOT: systemAccounts },
+        include: { membre: { select: { id: true, nomComplet: true } } },
+        orderBy: { dateOperation: 'desc' },
+        take: 20,
+      }),
+    ]);
+    const operations = [
+      ...deposits.map((row) => ({ id: `d-${row.id}`, type: 'depot', memberId: row.membre.id, accountNumber: row.compte, memberName: row.membre.nomComplet, amount: Number(row.montant), currency: row.devise, date: row.dateOperation, status: 'COMPLETED', description: row.description })),
+      ...withdrawals.map((row) => ({ id: `r-${row.id}`, type: 'retrait', memberId: row.membre.id, accountNumber: row.compte, memberName: row.membre.nomComplet, amount: Number(row.montant), currency: row.devise, date: row.dateOperation, status: row.statut, description: row.description })),
+    ].sort((a, b) => b.date.getTime() - a.date.getTime()).slice(0, 20);
+
+    return {
+      overview: {
+        balanceUSD: Math.round(currentUSD * 100) / 100,
+        balanceFC: Math.round(currentFC * 100) / 100,
+        holderCount: holders.length,
+        depositsThisMonth: monthTotals.deposits,
+        withdrawalsThisMonth: monthTotals.withdrawals,
+      },
+      holders,
+      members: members.map((member) => ({ id: member.id, accountNumber: member.numeroCompte, name: member.nomComplet })),
+      operations,
+      history: { monthly: months, daily },
+    };
+  }
+
   private getSumFromGrouped(
     arr: {
       devise: Devise;
@@ -108,7 +274,7 @@ export class SavingsService {
     // Calculer les frais de retrait (depuis la table retraits)
     const sumFrais = await this.prisma.retrait.groupBy({
       by: ['devise'],
-      where: { compte: numeroCompte },
+      where: { compte: numeroCompte, statut: 'COMPLETED' },
       _sum: { frais: true },
     });
 
@@ -156,6 +322,7 @@ export class SavingsService {
       by: ['devise'],
       where: {
         NOT: excludeSystem,
+        statut: 'COMPLETED',
       },
       _sum: { frais: true },
     });
@@ -172,8 +339,20 @@ export class SavingsService {
     };
   }
 
-  async create(createDto: CreateSavingsDto) {
+  async create(createDto: CreateSavingsDto, actor: AuthUser) {
     const { typeOperation, devise, montant } = createDto;
+
+    if (actor.role === 'agent') {
+      if (typeOperation !== TypeOperation.depot) {
+        throw new ForbiddenException(
+          'Un agent ne peut enregistrer que les dépôts ici; les retraits passent par le parcours biométrique dédié.',
+        );
+      }
+      if (!actor.userId) throw new ForbiddenException('Session agent invalide');
+      if (!createDto.idempotencyKey) {
+        throw new BadRequestException('La clé idempotente du dépôt est obligatoire.');
+      }
+    }
 
     // Validation du montant minimum pour les dépôts
     if (typeOperation === TypeOperation.depot) {
@@ -190,15 +369,122 @@ export class SavingsService {
       }
     }
 
-    return this.prisma.epargne.create({
-      data: {
-        compte: createDto.compte,
-        typeOperation: createDto.typeOperation,
-        devise: createDto.devise,
-        montant: createDto.montant,
-        dateOperation: new Date(createDto.dateOperation),
-        description: createDto.description,
-      },
+    if (actor.role !== 'agent') {
+      return this.prisma.epargne.create({
+        data: {
+          compte: createDto.compte,
+          typeOperation: createDto.typeOperation,
+          devise: createDto.devise,
+          montant: createDto.montant,
+          dateOperation: new Date(createDto.dateOperation),
+          description: createDto.description,
+        },
+      });
+    }
+
+    const agentId = actor.userId!;
+    const member = await this.prisma.membre.findUnique({
+      where: { numeroCompte: createDto.compte },
+      select: { id: true, numeroCompte: true, statut: true },
+    });
+    if (!member || member.statut !== 'actif' || createDto.compte.includes('REVENUS') || createDto.compte.includes('CREDITS') || createDto.compte.includes('TRESORERIE')) {
+      throw new NotFoundException('Compte membre actif introuvable.');
+    }
+
+    const replay = await this.prisma.mouvementCaisseAgent.findUnique({
+      where: { idempotencyKey: createDto.idempotencyKey },
+      include: { caisse: { select: { agentId: true } } },
+    });
+    if (replay) {
+      const operation = replay.epargneId
+        ? await this.prisma.epargne.findUnique({ where: { id: replay.epargneId } })
+        : null;
+      if (
+        replay.caisse.agentId !== agentId || replay.type !== 'DEPOT' ||
+        replay.devise !== devise || Number(replay.montant) !== montant ||
+        operation?.compte !== createDto.compte
+      ) {
+        throw new ConflictException('La clé idempotente est déjà utilisée par une autre opération.');
+      }
+      return operation;
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw<Array<{ id: number }>>`
+        SELECT "id" FROM "caisses_agents"
+        WHERE "agent_id" = ${agentId} AND "devise" = ${devise}::"Devise"
+        FOR UPDATE
+      `;
+      const duplicate = await tx.mouvementCaisseAgent.findUnique({
+        where: { idempotencyKey: createDto.idempotencyKey },
+        include: { caisse: { select: { agentId: true } } },
+      });
+      if (duplicate) {
+        if (duplicate.caisse.agentId !== agentId || duplicate.type !== 'DEPOT' || duplicate.devise !== devise || Number(duplicate.montant) !== montant) {
+          throw new ConflictException('La clé idempotente est déjà utilisée par une autre opération.');
+        }
+        if (duplicate.epargneId) {
+          const existingDeposit = await tx.epargne.findUnique({ where: { id: duplicate.epargneId } });
+          if (existingDeposit?.compte === createDto.compte) return existingDeposit;
+          throw new ConflictException('La clé idempotente est déjà utilisée par une autre opération.');
+        }
+        throw new ConflictException('Cette opération est déjà traitée mais sa référence est manquante.');
+      }
+
+      await tx.$queryRaw<Array<{ id: number }>>`
+        SELECT "id" FROM "membres" WHERE "id" = ${member.id} FOR UPDATE
+      `;
+      const currentMember = await tx.membre.findUnique({
+        where: { id: member.id }, select: { statut: true },
+      });
+      if (!currentMember || currentMember.statut !== 'actif') {
+        throw new BadRequestException('Le compte membre est inactif.');
+      }
+      const caisse = await tx.caisseAgent.findUnique({
+        where: { agentId_devise: { agentId, devise } },
+      });
+      if (!caisse) throw new BadRequestException('Votre caisse n’est pas initialisée dans cette devise.');
+
+      const dateOperation = new Date();
+      const operation = await tx.epargne.create({
+        data: {
+          compte: member.numeroCompte,
+          typeOperation: TypeOperation.depot,
+          devise,
+          montant,
+          dateOperation,
+          description: createDto.description?.trim() || `Dépôt au guichet — ${member.numeroCompte}`,
+          executeParId: agentId,
+          executeParRole: 'agent',
+        },
+      });
+      const avant = Number(caisse.solde);
+      const apres = avant + montant;
+      await tx.caisseAgent.update({ where: { id: caisse.id }, data: { solde: { increment: montant } } });
+      await tx.mouvementCaisseAgent.create({
+        data: {
+          caisseId: caisse.id,
+          epargneId: operation.id,
+          type: 'DEPOT',
+          devise,
+          montant,
+          soldeAvant: avant,
+          soldeApres: apres,
+          motif: `Dépôt reçu pour le compte ${member.numeroCompte}`,
+          acteurId: agentId,
+          acteurRole: 'agent',
+          idempotencyKey: createDto.idempotencyKey,
+        },
+      });
+      await tx.adminLog.create({
+        data: {
+          action: 'DEPOT_GUICHET',
+          details: `Dépôt ${operation.id}, compte ${member.numeroCompte}, ${montant} ${devise}; agent #${agentId}; caisse ${avant} → ${apres}.`,
+          success: true,
+          userId: agentId,
+        },
+      });
+      return operation;
     });
   }
 
@@ -230,7 +516,7 @@ export class SavingsService {
 
     const sumFrais = await this.prisma.retrait.groupBy({
       by: ['devise'],
-      where: { compte: { in: comptes } },
+      where: { compte: { in: comptes }, statut: 'COMPLETED' },
       _sum: { frais: true },
     });
 
@@ -258,6 +544,7 @@ export class SavingsService {
 
     const retraitFraisStats = await this.prisma.retrait.groupBy({
       by: ['compte', 'devise'],
+      where: { statut: 'COMPLETED' },
       _sum: { frais: true },
     });
 

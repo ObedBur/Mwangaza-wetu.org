@@ -18,6 +18,8 @@ import { ReportsModule } from './reports/reports.module';
 import { ZktecoModule } from './zkteco/zkteco.module';
 import { ProjectsModule } from './projects/projects.module';
 import { DatModule } from './dat/dat.module';
+import { NotificationsModule } from './notifications/notifications.module';
+import { SupportModule } from './support/support.module';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { join } from 'path';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
@@ -50,6 +52,8 @@ import { RolesGuard } from './common/guards/roles.guard';
     ZktecoModule,
     ProjectsModule,
     DatModule,
+    NotificationsModule,
+    SupportModule,
     ServeStaticModule.forRoot({
       rootPath: join(process.cwd(), 'uploads'),
       serveRoot: '/uploads',

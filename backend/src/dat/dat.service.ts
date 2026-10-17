@@ -7,6 +7,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { ParametresService } from '../parametres/parametres.service';
 import { CreateDatDto } from './dto/create-dat.dto';
+import type { DatDuree } from '../parametres/parametres.service';
 import { Devise, StatutDat } from '@prisma/client';
 
 /** Statuts pour lesquels le membre ne peut PAS ouvrir un second DAT. */
@@ -80,22 +81,65 @@ export class DatService {
   }
 
   // ── Barème ────────────────────────────────────────────────────────
-  /** Barème DAT (taux + minimums), lu en base — zéro valeur en dur. */
+  /** Barème DAT (taux + minimums + seuils), lu en base — zéro valeur en dur. */
   async getBareme() {
     const params = await this.parametres.getDatParameters();
     return {
       retraitAnticipéInterdit: params.retraitAnticipéInterdit,
-      durees: params.durees.map((d) => ({
-        dureeMois: d.dureeMois,
-        baseJours: d.baseJours,
-        tauxPeriode: d.tauxPeriode,
-        minFc: d.minFc,
-        minUsd: d.minUsd,
-        // Gain indicatif pour un capital au minimum — aide à la saisie
-        gainMinFc: Math.round(d.minFc * (d.tauxPeriode / 100)),
-        gainMinUsd: Math.round(d.minUsd * (d.tauxPeriode / 100) * 100) / 100,
-      })),
+      durees: params.durees.map((d) => {
+        const gainDe = (capital: number, seuil: number) =>
+          capital >= seuil
+            ? Math.round(capital * (d.tauxPeriode / 100) * 100) / 100
+            : 0;
+        return {
+          dureeMois: d.dureeMois,
+          baseJours: d.baseJours,
+          tauxPeriode: d.tauxPeriode,
+          /** Ce rapport rapporte-t-il quelque chose ? */
+          rapporte: d.tauxPeriode > 0,
+          minFc: d.minFc,
+          minUsd: d.minUsd,
+          seuilGainFc: d.seuilGainFc,
+          seuilGainUsd: d.seuilGainUsd,
+          // Gain au minimum d'ouverture — tient compte du seuil
+          gainMinFc: gainDe(d.minFc, d.seuilGainFc),
+          gainMinUsd: gainDe(d.minUsd, d.seuilGainUsd),
+          // Aide à la saisie : montant à atteindre pour gagner
+          messageSeuil:
+            d.tauxPeriode > 0 && d.seuilGainFc > 0
+              ? `Intérêt de ${d.tauxPeriode} % uniquement si le capital ` +
+                `placé atteint ${d.seuilGainFc.toLocaleString('fr-FR')} FC ` +
+                `ou ${d.seuilGainUsd} USD.`
+              : d.tauxPeriode === 0
+                ? `Ce rapport n'applique aucun intérêt : le capital est ` +
+                  `simplement bloqué pendant ${d.dureeMois} mois.`
+                : undefined,
+        };
+      }),
     };
+  }
+
+  /** Seuil de gain d'une durée, selon la devise. */
+  private seuilDe(bareme: DatDuree, devise: Devise): number {
+    return devise === Devise.FC ? bareme.seuilGainFc : bareme.seuilGainUsd;
+  }
+
+  /**
+   * Gain d'un DAT : capital × taux de période, SOUS LA RÉSERVE que le
+   * capital placé atteigne le seuil. Sous le seuil (ou durée sans
+   * intérêt), le DAT s'ouvre mais ne rapporte rien.
+   */
+  private calculerGain(
+    capital: number,
+    bareme: DatDuree,
+    devise: Devise,
+  ): { gain: number; seuilGain: number; seuilAtteint: boolean } {
+    const seuilGain = this.seuilDe(bareme, devise);
+    const seuilAtteint = capital >= seuilGain;
+    const gain = seuilAtteint
+      ? Math.round(capital * (bareme.tauxPeriode / 100) * 100) / 100
+      : 0;
+    return { gain, seuilGain, seuilAtteint };
   }
 
   // ── Ouverture ─────────────────────────────────────────────────────
@@ -168,7 +212,12 @@ export class DatService {
     dateEcheance.setMonth(dateEcheance.getMonth() + dto.dureeMois);
 
     const capital = dto.montant;
-    const gain = Math.round(capital * (bareme.tauxPeriode / 100) * 100) / 100;
+    // Gain conditionné au seuil : sous le seuil, ou durée sans intérêt, gain = 0
+    const { gain, seuilGain, seuilAtteint } = this.calculerGain(
+      capital,
+      bareme,
+      dto.devise,
+    );
 
     // 7. Écriture atomique : DAT + sortie du Principal + entrée sur le DAT
     const resultat = await this.prisma.$transaction(async (tx) => {
@@ -216,6 +265,15 @@ export class DatService {
       return this.format(dat, {
         soldePrincipal: soldePrincipal - capital,
         soldeDat: capital,
+        seuilGain,
+        seuilAtteint,
+        // Explique un gain à 0 : soit durée sans intérêt, soit seuil non atteint
+        motifGainNul: gain > 0
+          ? undefined
+          : bareme.tauxPeriode === 0
+            ? `Le DAT de ${dto.dureeMois} mois n'applique aucun intérêt.`
+            : `Capital inférieur au seuil de ${seuilGain.toLocaleString('fr-FR')} ` +
+              `${dto.devise} : pas d'intérêt.`,
       });
     });
 
@@ -223,8 +281,12 @@ export class DatService {
       `DAT_OUVERTURE_${resultat.id}`,
       `DAT n°${resultat.id} — ${dto.numeroCompte} : ${capital} ${dto.devise} ` +
         `bloqués ${dto.dureeMois} mois au taux de période ${bareme.tauxPeriode} % ` +
-        `(gain attendu ${gain} ${dto.devise}, échéance ` +
-        `${resultat.dateEcheance.toLocaleDateString('fr-FR')})`,
+        (seuilAtteint
+          ? `(gain attendu ${gain} ${dto.devise}, échéance ` +
+            `${resultat.dateEcheance.toLocaleDateString('fr-FR')})`
+          : `— seuil de ${seuilGain.toLocaleString('fr-FR')} ${dto.devise} ` +
+            `non atteint, aucun gain, échéance ` +
+            `${resultat.dateEcheance.toLocaleDateString('fr-FR')})`),
       userId,
       true,
     );

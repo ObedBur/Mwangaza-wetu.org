@@ -3,8 +3,15 @@ import './globals.css';
 import './home.css';
 
 export const metadata: Metadata = {
-  title: 'Mwangaza Wetu - Administration Coopérative',
-  description: 'Système de gestion et d\'administration de la Coopérative Mwangaza Wetu',
+  title: 'Mwangaza Wetu - Coopérative d\'Épargne et de Crédit',
+  description: 'Mini-Coopérative d\'Épargne et de Crédit Mwangaza Wetu — Épargne, Crédits et Développement',
+  icons: {
+    icon: [
+      { url: '/logo.png', sizes: 'any' },
+    ],
+    shortcut: '/logo.png',
+    apple: '/logo.png',
+  },
 };
 
 export default function RootLayout({

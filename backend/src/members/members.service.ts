@@ -1,13 +1,17 @@
 import {
   Injectable,
   BadRequestException,
+  ConflictException,
   NotFoundException,
+  InternalServerErrorException,
+  HttpException,
   Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { MemberMailService } from './member-mail.service';
 import { CloudinaryService } from './cloudinary.service';
 import { CreateMemberDto, Sexe } from './dto/create-member.dto';
+import { UpdateOwnProfileDto } from './dto/update-own-profile.dto';
 import {
   normalizeSectionName,
   getSectionTrigram,
@@ -113,6 +117,50 @@ export class MembersService {
     });
     if (!membre) throw new NotFoundException('Membre non trouvé');
     return membre;
+  }
+
+  async updateOwnProfile(id: number, dto: UpdateOwnProfileDto) {
+    const telephone = dto.telephone?.trim();
+    const email = dto.email === undefined ? undefined : dto.email?.trim().toLowerCase() || null;
+    const adresse = dto.adresse === undefined ? undefined : dto.adresse?.trim() || null;
+    if (telephone === undefined && email === undefined && adresse === undefined) {
+      throw new BadRequestException('Aucune information à modifier');
+    }
+
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        const member = await tx.membre.update({
+          where: { id },
+          data: { telephone, email, adresse },
+          select: {
+            id: true,
+            nomComplet: true,
+            numeroCompte: true,
+            telephone: true,
+            email: true,
+            adresse: true,
+            typeCompte: true,
+            statut: true,
+            dateAdhesion: true,
+            photoProfil: true,
+          },
+        });
+        await tx.adminLog.create({
+          data: {
+            action: 'MEMBER_PROFILE_UPDATED',
+            details: `Le membre #${id} a mis à jour ses coordonnées de contact.`,
+            success: true,
+            userId: id,
+          },
+        });
+        return member;
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        throw new ConflictException('Cet e-mail ou numéro de téléphone est déjà utilisé');
+      }
+      throw error;
+    }
   }
 
   async search(term: string, limit = 20) {
@@ -297,7 +345,7 @@ export class MembersService {
         );
       }
 
-      return await this.prisma.$transaction(async (tx) => {
+      const creation = await this.prisma.$transaction(async (tx) => {
       const membre = await tx.membre.create({
         data: {
           numeroCompte: finalNumeroCompte,
@@ -357,17 +405,6 @@ export class MembersService {
           },
         });
 
-        // 3. Enregistrement sur le compte REVENUS GLOBAL
-        await tx.epargne.create({
-          data: {
-            compte: 'MW-REVENUS-GLOBAL',
-            typeOperation: 'depot',
-            devise: Devise.FC,
-            montant: 2000,
-            dateOperation: new Date(dateAdhesion),
-            description: `Frais d'adhésion membre ${finalNumeroCompte} (via ${typeNormalise})`,
-          },
-        });
       }
 
       // 2. Gérer le délégué
@@ -386,26 +423,137 @@ export class MembersService {
         });
       }
 
-      await this.memberMail.sendTemporaryPassword({
-        email,
-        fullName: membre.nomComplet,
-        accountNumber: membre.numeroCompte,
-        password: temporaryPassword,
+      const { motDePasse: _passwordHash, activationToken: _token, ...safeMembre } = membre;
+      return safeMembre;
       });
 
+      // ── Envoi des identifiants : APRÈS le commit, jamais dedans ──────────
+      // Avant, cet envoi était dans la transaction Prisma. Or une transaction
+      // expire au bout de 5 s (par défaut) alors que l'envoi vers Brevo peut
+      // en prendre 18 : la transaction expirait, tout était annulé, et
+      // l'API répondait 500 SANS créer le membre. Une panne de SMTP ne doit
+      // pas empêcher de créer un membre → on renvoie credentialsSent: false.
+      let credentialsSent = false;
+      try {
+        await this.memberMail.sendTemporaryPassword({
+          email,
+          fullName: creation.nomComplet,
+          accountNumber: creation.numeroCompte,
+          password: temporaryPassword,
+        });
+        credentialsSent = true;
+      } catch (error) {
+        this.logger.warn(
+          `⚠ Membre ${creation.numeroCompte} créé, mais l'e-mail d'identifiants non envoyé : ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+
+      // Laisser une trace visible dans le portail membre. Cette écriture est
+      // volontairement après la création : une panne de notifications ne doit
+      // jamais annuler l'inscription ni l'envoi des identifiants.
+      try {
+        await this.prisma.notifications.create({
+          data: {
+            membre_id: creation.id,
+            titre: 'Bienvenue dans votre espace membre',
+            message: credentialsSent
+              ? 'Votre compte est prêt. Vos identifiants temporaires ont été envoyés à votre adresse e-mail. Après votre première connexion, modifiez votre mot de passe depuis votre profil.'
+              : 'Votre compte est créé, mais l’envoi des identifiants par e-mail n’a pas pu être confirmé. Contactez votre agence pour obtenir de l’aide avant votre première connexion.',
+            type: 'compte',
+          },
+        });
+      } catch (error) {
+        this.logger.warn(
+          `Notification de bienvenue non créée pour ${creation.numeroCompte} : ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+
       this.logger.log(
-        `✅ Membre créé avec succès : ${membre.numeroCompte} - ${membre.nomComplet}`,
+        `✅ Membre créé avec succès : ${creation.numeroCompte} - ${creation.nomComplet}`,
       );
-      const { motDePasse: _passwordHash, activationToken: _token, ...safeMembre } = membre;
-      return { ...safeMembre, credentialsSent: true };
-      });
+      // Mot de passe temporaire renvoyé uniquement à l'appelant autorisé
+      // lors de cette création, afin qu'il puisse le remettre au membre.
+      return { ...creation, credentialsSent, motDePasseTemporaire: temporaryPassword };
     } catch (error) {
       await this.deletePhotoAssets([
         { url: memberPhoto?.url, publicId: memberPhoto?.publicId },
         { url: delegatePhoto?.url, publicId: delegatePhoto?.publicId },
       ]);
-      throw error;
+      throw this.traduireErreurCreation(error);
     }
+  }
+
+  /**
+   * Traduit une erreur brute en message réellement exploitable.
+   *
+   * Sans cela NestJS renvoie « Internal server error » sans aucun détail :
+   * ni l'agent au guichet ni le développeur suivant ne peuvent comprendre ce
+   * qui s'est passé. On conserve la stack complète côté serveur et on ne
+   * renvoie côté client que ce qui aide à agir — jamais de détails internes
+   * (SQL, chemins de fichiers, mots de passe).
+   */
+  private traduireErreurCreation(error: unknown): unknown {
+    // Une exception déjà formulée (champ vide, format invalide, ...) est
+    // renvoyée telle quelle : son message est déjà lisible par l'utilisateur.
+    if (error instanceof HttpException) {
+      return error;
+    }
+
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      switch (error.code) {
+        case 'P2002': {
+          // Contrainte d'unicité violée : on dit quel champ est déjà pris.
+          const cibles = Array.isArray(error.meta?.target)
+            ? (error.meta.target as string[])
+            : typeof error.meta?.target === 'string'
+              ? [error.meta.target]
+              : [];
+          const champ = cibles.map((c) => this.traduireColonne(c)).join(', ');
+          return new BadRequestException(
+            champ
+              ? `Ce ${champ} est déjà utilisé par un autre membre.`
+              : 'Ces informations sont déjà utilisées par un autre membre.',
+          );
+        }
+        case 'P2003':
+          return new BadRequestException(
+            `Opération impossible : une donnée de référence manque en base (table « ${
+              String(error.meta?.table ?? 'inconnue')
+            } »). Aucun membre n'a été créé. Prévenez le responsable technique.`,
+          );
+        case 'P2025':
+          return new NotFoundException('Enregistrement introuvable.');
+        case 'P2028':
+          return new InternalServerErrorException(
+            "La base de données n'a pas répondu à temps : l'opération a été annulée et rien n'a été enregistré. Réessayez.",
+          );
+      }
+    }
+
+    // Erreur inconnue : tout est journalisé (stack comprise) sous une
+    // référence que l'opérateur peut transmettre, sans rien exposer d'autre.
+    const reference = crypto.randomBytes(3).toString('hex');
+    this.logger.error(
+      `Création de membre impossible (réf. ${reference}) : ${
+        error instanceof Error ? error.stack : String(error)
+      }`,
+    );
+    return new InternalServerErrorException(
+      "Erreur interne lors de la création du membre — rien n'a été enregistré. " +
+        `Référence à transmettre au responsable technique : ${reference}`,
+    );
+  }
+
+  /** Noms de colonnes de la base → libellés compréhensibles à l'écran. */
+  private traduireColonne(colonne: string): string {
+    const libelles: Record<string, string> = {
+      numero_compte: 'numéro de compte',
+      telephone: 'numéro de téléphone',
+      email: 'adresse e-mail',
+      id_nationale: 'identifiant national',
+      user_id: 'identifiant agent',
+    };
+    return libelles[colonne] ?? colonne;
   }
 
   async generateNumero(year: number, section?: string) {
@@ -837,47 +985,68 @@ export class MembersService {
 
     // Mettre à plat et trier les transactions récentes interactives
     const allTransactions = [
-      ...membre.epargnes.map((e) => ({
-        type: 'depot',
-        devise: e.devise,
-        montant: Number(e.montant),
-        date: e.dateOperation,
-        description: e.description,
-      })),
-      ...membre.retraits.map((r) => ({
-        type: 'retrait',
-        devise: r.devise,
-        montant: Number(r.montant),
-        date: r.dateOperation,
-        description: r.description,
-      })),
+      ...membre.epargnes
+        .filter((e) => !e.remboursementId)
+        .map((e) => {
+          const retraitAssocie = e.typeOperation === 'retrait'
+            ? membre.retraits.find((r) => r.devise === e.devise && Number(r.montant) === Number(e.montant) && new Date(r.dateOperation).getTime() === new Date(e.dateOperation).getTime())
+            : undefined;
+          return {
+            type: e.typeOperation,
+            devise: e.devise,
+            montant: Number(e.montant),
+            date: e.dateOperation,
+            description: e.description,
+            compteType: e.typeCompte,
+            statut: retraitAssocie?.statut ?? 'COMPLETED',
+          };
+        }),
+      ...membre.retraits
+        .filter((r) => !membre.epargnes.some((e) => e.typeOperation === 'retrait' && e.devise === r.devise && Number(e.montant) === Number(r.montant) && new Date(e.dateOperation).getTime() === new Date(r.dateOperation).getTime()))
+        .map((r) => ({
+          type: 'retrait',
+          devise: r.devise,
+          montant: Number(r.montant),
+          date: r.dateOperation,
+          description: r.description,
+          compteType: 'PRINCIPAL',
+          statut: r.statut,
+        })),
       ...membre.credits.flatMap((c) =>
-        c.remboursements.map((r) => ({
+        c.remboursements.filter((r) => !r.deletedAt).map((r) => ({
           type: 'remboursement',
           devise: r.devise,
           montant: Number(r.montant),
           date: r.dateRemboursement,
           description: r.description,
+          compteType: 'CREDIT',
+          statut: 'COMPLETED',
         })),
       ),
     ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
     // Calculs de l'épargne (dépôts - retraits)
-    const epargneUSD =
-      membre.epargnes
-        .filter((e) => e.devise === Devise.USD)
-        .reduce((sum, e) => sum + Number(e.montant), 0) -
-      membre.retraits
-        .filter((r) => r.devise === Devise.USD)
-        .reduce((sum, r) => sum + Number(r.montant), 0);
-
-    const epargneFC =
-      membre.epargnes
-        .filter((e) => e.devise === Devise.FC)
-        .reduce((sum, e) => sum + Number(e.montant), 0) -
-      membre.retraits
-        .filter((r) => r.devise === Devise.FC)
-        .reduce((sum, r) => sum + Number(r.montant), 0);
+    const balanceFor = (devise: Devise) => membre.epargnes
+      .filter((e) => e.devise === devise && e.typeCompte !== 'DAT')
+      .reduce((sum, e) => sum + Number(e.montant) * (e.typeOperation === 'retrait' ? -1 : 1), 0);
+    const epargneUSD = balanceFor(Devise.USD);
+    const epargneFC = balanceFor(Devise.FC);
+    const now = new Date();
+    const monthlyActivity = Array.from({ length: 6 }, (_, index) => {
+      const monthDate = new Date(now.getFullYear(), now.getMonth() - 5 + index, 1);
+      const monthKey = `${monthDate.getFullYear()}-${String(monthDate.getMonth() + 1).padStart(2, '0')}`;
+      return { monthKey, month: monthDate.toLocaleDateString('fr-FR', { month: 'short' }), USD: { deposits: 0, withdrawals: 0 }, FC: { deposits: 0, withdrawals: 0 } };
+    });
+    const activityByMonth = new Map(monthlyActivity.map((item) => [item.monthKey, item]));
+    for (const transaction of allTransactions) {
+      if (transaction.statut !== 'COMPLETED') continue;
+      const date = new Date(transaction.date);
+      const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+      const bucket = activityByMonth.get(key);
+      if (!bucket || (transaction.devise !== Devise.USD && transaction.devise !== Devise.FC)) continue;
+      if (transaction.type === 'depot') bucket[transaction.devise].deposits += transaction.montant;
+      if (transaction.type === 'retrait') bucket[transaction.devise].withdrawals += transaction.montant;
+    }
 
     // Filter active credits
     const activeCredits = membre.credits.filter(
@@ -918,6 +1087,7 @@ export class MembersService {
         tauxInteret: Number(c.tauxInteret),
         devise: c.devise,
         dateDebut: c.dateDebut,
+        dateEcheance: c.dateEcheance,
         statut: c.statut,
         progression: montantTotal > 0 ? (rembourse / montantTotal) * 100 : 0,
       };
@@ -928,6 +1098,10 @@ export class MembersService {
         id: membre.id,
         numeroCompte: membre.numeroCompte,
         nomComplet: membre.nomComplet,
+        telephone: membre.telephone,
+        email: membre.email,
+        adresse: membre.adresse,
+        sexe: membre.sexe,
         typeCompte: membre.typeCompte,
         statut: membre.statut,
         dateAdhesion: membre.dateAdhesion,
@@ -944,7 +1118,92 @@ export class MembersService {
         },
       },
       activeCreditsDetails: creditsDetails,
+      monthlyActivity,
       recentTransactions: allTransactions.slice(0, 15), // Only last 15 for dashboard performance
+    };
+  }
+
+  async getMemberTransactions(numeroCompte: string, page: number, pageSize: number) {
+    const membre = await this.prisma.membre.findUnique({
+      where: { numeroCompte },
+      select: { id: true },
+    });
+    if (!membre) throw new NotFoundException('Membre non trouvé');
+
+    const take = page * pageSize;
+    const [depots, retraits, credits, depotsCount, retraitsCount, remboursementsCount] = await Promise.all([
+      this.prisma.epargne.findMany({
+        where: { compte: numeroCompte, typeOperation: 'depot', remboursementId: null },
+        orderBy: { dateOperation: 'desc' },
+        take,
+      }),
+      this.prisma.retrait.findMany({
+        where: { compte: numeroCompte },
+        orderBy: { dateOperation: 'desc' },
+        take,
+      }),
+      this.prisma.credit.findMany({
+        where: { numeroCompte },
+        select: {
+          id: true,
+          remboursements: {
+            where: { deletedAt: null },
+            orderBy: { dateRemboursement: 'desc' },
+            take,
+          },
+        },
+      }),
+      this.prisma.epargne.count({
+        where: { compte: numeroCompte, typeOperation: 'depot', remboursementId: null },
+      }),
+      this.prisma.retrait.count({ where: { compte: numeroCompte } }),
+      this.prisma.remboursement.count({
+        where: { credit: { numeroCompte }, deletedAt: null },
+      }),
+    ]);
+
+    const transactions = [
+      ...depots.map((row) => ({
+        id: `epargne-${row.id}`,
+        date: row.dateOperation,
+        description: row.description ?? 'Opération d’épargne',
+        type: row.typeOperation,
+        devise: row.devise,
+        montant: Number(row.montant),
+        statut: 'COMPLETED',
+      })),
+      ...retraits.map((row) => ({
+        id: `retrait-${row.id}`,
+        date: row.dateOperation,
+        description: row.description ?? 'Retrait au guichet',
+        type: 'retrait',
+        devise: row.devise,
+        montant: Number(row.montant),
+        statut: row.statut,
+      })),
+      ...credits.flatMap((credit) => credit.remboursements.map((row) => ({
+        id: `remboursement-${row.id}`,
+        date: row.dateRemboursement,
+        description: row.description ?? 'Remboursement de crédit',
+        type: 'remboursement',
+        devise: row.devise,
+        montant: Number(row.montant),
+        statut: 'COMPLETED',
+      }))),
+    ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+    const total = depotsCount + retraitsCount + remboursementsCount;
+    const data = transactions.slice((page - 1) * pageSize, page * pageSize);
+    return {
+      data,
+      meta: {
+        total,
+        page,
+        pageSize,
+        totalPages: Math.ceil(total / pageSize),
+        hasNextPage: page * pageSize < total,
+        hasPrevPage: page > 1,
+      },
     };
   }
 

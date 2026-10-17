@@ -4,6 +4,9 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  IsPositive,
+  IsDateString,
+  IsUUID,
 } from 'class-validator';
 import { TypeOperationEpargne as TypeOperation, Devise } from '@prisma/client';
 
@@ -23,14 +26,18 @@ export class CreateSavingsDto {
   devise: Devise;
 
   @IsNumber()
-  @IsNotEmpty()
+  @IsPositive()
   montant: number;
 
-  @IsString()
+  @IsDateString()
   @IsNotEmpty()
   dateOperation: string;
 
   @IsString()
   @IsOptional()
   description?: string;
+
+  @IsUUID()
+  @IsOptional()
+  idempotencyKey?: string;
 }

@@ -86,11 +86,10 @@ export function getPostLoginRedirect(role: UserRole): string {
   switch (role) {
     case 'admin':
     case 'superadmin':
+    case 'agent':
       return '/dashboard';
     case 'member':
-      return '/mon-epargne';
-    case 'agent':
-      return '/operations/depots-cotisations'; // ou kit guichet
+      return '/accueil';
     default:
       return '/dashboard';
   }
