@@ -43,5 +43,5 @@ export class CreateSavingsDto {
 
   @IsString()
   @IsOptional()
-  biometricUserId?: string;
+  biometricVerificationToken?: string;
 }

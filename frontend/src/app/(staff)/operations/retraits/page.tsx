@@ -12,6 +12,7 @@ import {
 import { useMemo, useState, type FormEvent } from "react";
 
 import { CooperativeDataState } from "@/components/cooperative/CooperativeDataState";
+import { CooperativePagination } from "@/components/cooperative/CooperativePagination";
 import {
   AccountPills,
   CooperativeBreadcrumb,
@@ -45,7 +46,6 @@ import {
   type WithdrawalStatus,
 } from "@/mocks/operations-data";
 
-const pageSize = 10;
 const statuses: WithdrawalStatus[] = [
   "En attente",
   "Approuvé",
@@ -80,6 +80,7 @@ export default function WithdrawalsRoute() {
   const [urgency, setUrgency] = useState(false);
   const [period, setPeriod] = useState<(typeof periods)[number]>(periods[1]);
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
@@ -111,7 +112,6 @@ export default function WithdrawalsRoute() {
             : request.requestedAt >= "2025-05-26"),
       );
   }, [account, activeStatus, period, query, records, urgency]);
-  const pages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const visible = filtered.slice((page - 1) * pageSize, page * pageSize);
   const pending = records.filter((request) => request.status === "En attente");
   const pendingAmount = pending.reduce(
@@ -520,30 +520,14 @@ export default function WithdrawalsRoute() {
             </table>
           </div>
         </CooperativeDataState>
-        <div className="coop-pagination">
-          <span>{filtered.length} demandes</span>
-          <div>
-            <button
-              className="mw-secondary"
-              type="button"
-              disabled={page <= 1}
-              onClick={() => setPage((value) => value - 1)}
-            >
-              {"Précédent"}
-            </button>
-            <span>
-              Page {page} sur {pages}
-            </span>
-            <button
-              className="mw-secondary"
-              type="button"
-              disabled={page >= pages}
-              onClick={() => setPage((value) => value + 1)}
-            >
-              {"Suivant"}
-            </button>
-          </div>
-        </div>
+        <CooperativePagination
+          totalItems={filtered.length}
+          page={page}
+          pageSize={pageSize}
+          onPageChange={setPage}
+          onPageSizeChange={(value) => { setPageSize(value); setPage(1); }}
+          itemLabel="demandes"
+        />
       </section>
 
       <Sheet

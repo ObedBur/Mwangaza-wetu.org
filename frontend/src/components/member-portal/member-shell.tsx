@@ -200,9 +200,16 @@ function MemberTopbar({ activePath }: { activePath: string }) {
   const firstName = displayName.split(" ")[0];
   useEffect(() => {
     setIsDark(document.documentElement.classList.contains("dark"));
-    apiClient.get<{ count: number }>("/notifications/moi/non-lues")
-      .then((response) => setUnreadCount(response.data.count))
-      .catch(() => setUnreadCount(0));
+    let active = true;
+    const refreshUnreadCount = () => apiClient.get<{ count: number }>("/notifications/moi/non-lues")
+      .then((response) => { if (active) setUnreadCount(response.data.count); })
+      .catch(() => { if (active) setUnreadCount(0); });
+    void refreshUnreadCount();
+    const interval = window.setInterval(() => void refreshUnreadCount(), 15000);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+    };
   }, []);
 
   function toggleTheme() {

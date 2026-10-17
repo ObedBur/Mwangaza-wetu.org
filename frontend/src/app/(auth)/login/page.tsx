@@ -28,21 +28,21 @@ interface SlideItem {
 const SLIDES: SlideItem[] = [
   {
     id: 'kelasi',
-    image: '/images/img1.jpg',
+    image: '/images/img1.png',
     title: 'Épargne Kelasi',
     subtitle: 'Offrez à vos enfants un avenir éclairé',
     description: 'Préparez sereinement les études et l’éducation de vos enfants avec des solutions d’épargne sécurisées.',
   },
   {
     id: 'biashara',
-    image: '/images/img2.jpg',
+    image: '/images/img2.png',
     title: 'Épargne Biashara',
     subtitle: 'Financement et renforcement des PME',
     description: 'Protégez vos revenus commerciaux, développez votre activité et sécurisez la trésorerie de votre entreprise.',
   },
   {
     id: 'sante',
-    image: '/images/img3.jpg',
+    image: '/images/img3.png',
     title: 'Épargne Santé',
     subtitle: 'Couvrir les urgences médicales',
     description: 'La santé n’attend pas : prévoyez aujourd’hui pour protéger et soigner votre famille en toute tranquillité.',

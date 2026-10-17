@@ -14,6 +14,7 @@ import {
 import { useMemo, useState, type FormEvent } from "react";
 
 import { CooperativeDataState } from "@/components/cooperative/CooperativeDataState";
+import { CooperativePagination } from "@/components/cooperative/CooperativePagination";
 import {
   CooperativeBreadcrumb,
   CooperativeStatCard,
@@ -49,7 +50,6 @@ import {
   type CooperativeMember,
 } from "@/mocks/cooperative-data";
 
-const pageSize = 10;
 const statuses: (CreditStatus | "Tous")[] = [
   "En attente", "Actif", "En retard", "Soldé", "Rejeté", "Tous",
 ];
@@ -68,6 +68,7 @@ export default function CreditsRoute() {
   const [purpose, setPurpose] = useState<CreditPurpose | "">("");
   const [period, setPeriod] = useState<(typeof periods)[number]>(periods[0]);
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [rejectTarget, setRejectTarget] = useState<CooperativeCredit | null>(null);
@@ -88,7 +89,6 @@ export default function CreditsRoute() {
       .filter((credit) => !purpose || credit.purpose === purpose)
       .filter((credit) => period === periods[0] || (period === periods[1] ? credit.requestedAt.startsWith("2025-06") : credit.requestedAt >= "2025-05-26"));
   }, [activeStatus, period, purpose, query, records]);
-  const pages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const visible = filtered.slice((page - 1) * pageSize, page * pageSize);
   const activeCredits = records.filter((credit) => ["Actif", "En retard"].includes(credit.status));
   const outstanding = activeCredits.reduce((sum, credit) => sum + credit.remainingBalance, 0);
@@ -188,7 +188,7 @@ export default function CreditsRoute() {
         <CooperativeDataState loading={false} error={false} empty={visible.length === 0} emptyMessage="Aucun crédit ne correspond à ces filtres.">
           <div className="coop-table-scroll"><table className="mw-table coop-credit-table"><thead><tr><th>Référence</th><th>Membre</th><th>Montant accordé</th><th>Taux</th><th>Durée</th><th>Objet</th><th>Solde restant</th><th>Remboursé</th><th>Prochaine échéance</th><th>Statut</th></tr></thead><tbody>{visible.map((credit) => <CreditRow key={credit.id} credit={credit} onSelect={() => setSelectedId(credit.id)} />)}</tbody></table></div>
         </CooperativeDataState>
-        <div className="coop-pagination"><span>{filtered.length} crédits</span><div><button className="mw-secondary" type="button" disabled={page <= 1} onClick={() => setPage((value) => value - 1)}>Précédent</button><span>Page {page} sur {pages}</span><button className="mw-secondary" type="button" disabled={page >= pages} onClick={() => setPage((value) => value + 1)}>Suivant</button></div></div>
+        <CooperativePagination totalItems={filtered.length} page={page} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={(value) => { setPageSize(value); setPage(1); }} itemLabel="crédits" />
       </section>
 
       <Sheet open={selectedCredit !== null} onOpenChange={(open) => !open && setSelectedId(null)}>

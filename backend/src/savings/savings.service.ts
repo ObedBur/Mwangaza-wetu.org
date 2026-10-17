@@ -1,5 +1,6 @@
 import {
   Injectable,
+  Logger,
   BadRequestException,
   ConflictException,
   ForbiddenException,
@@ -15,14 +16,49 @@ import {
 import { ParametresService } from '../parametres/parametres.service';
 import { ZktecoService } from '../zkteco/zkteco.service';
 import type { AuthUser } from '../common/types/auth-request';
+import { randomUUID } from 'node:crypto';
+
+type DepositBiometricVerification = {
+  memberId: number;
+  userId: string;
+  actorUserId: number | null;
+  actorRole: string | null;
+  expiresAt: number;
+};
 
 @Injectable()
 export class SavingsService {
+  private readonly depositBiometricVerifications = new Map<string, DepositBiometricVerification>();
+  private readonly logger = new Logger(SavingsService.name);
+
   constructor(
     private prisma: PrismaService,
     private parametresService: ParametresService,
     private zktecoService: ZktecoService,
   ) {}
+
+  private async notifyMemberOfDeposit(
+    memberId: number,
+    accountNumber: string,
+    operationId: number,
+    amount: number,
+    currency: Devise,
+  ) {
+    try {
+      await this.prisma.notifications.create({
+        data: {
+          membre_id: memberId,
+          titre: 'Dépôt effectué avec succès',
+          message: `Votre dépôt de ${amount.toFixed(2)} ${currency} a bien été enregistré sur le compte ${accountNumber} (référence DEP-${operationId}).`,
+          type: 'epargne',
+        },
+      });
+    } catch (error) {
+      this.logger.warn(
+        `Notification du dépôt ${operationId} non créée pour le membre ${memberId} : ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
 
   private async captureAndVerifyMemberFingerprint(
     memberUserId: string | null,
@@ -48,6 +84,47 @@ export class SavingsService {
       );
     }
     return scannedUserId;
+  }
+
+  async verifyDepositBiometric(compte: string, actor: AuthUser) {
+    const accountNumber = compte.trim();
+    if (!accountNumber) throw new BadRequestException('Sélectionnez un membre avant la lecture biométrique.');
+    const member = await this.prisma.membre.findUnique({
+      where: { numeroCompte: accountNumber },
+      select: {
+        id: true,
+        nomComplet: true,
+        statut: true,
+        userId: true,
+        delegues: { select: { nom: true, userId: true } },
+      },
+    });
+    if (!member || member.statut !== 'actif' || accountNumber.includes('REVENUS') || accountNumber.includes('CREDITS') || accountNumber.includes('TRESORERIE')) {
+      throw new NotFoundException('Compte membre actif introuvable.');
+    }
+
+    const scannedUserId = await this.captureAndVerifyMemberFingerprint(
+      member.userId,
+      member.delegues.map((delegate) => delegate.userId),
+    );
+    const matchedDelegate = member.delegues.find((delegate) => delegate.userId === scannedUserId);
+    const displayName = matchedDelegate
+      ? `${matchedDelegate.nom} (délégué de ${member.nomComplet})`
+      : member.nomComplet;
+
+    const now = Date.now();
+    for (const [token, verification] of this.depositBiometricVerifications) {
+      if (verification.expiresAt <= now) this.depositBiometricVerifications.delete(token);
+    }
+    const verificationToken = randomUUID();
+    this.depositBiometricVerifications.set(verificationToken, {
+      memberId: member.id,
+      userId: scannedUserId,
+      actorUserId: actor.userId ?? null,
+      actorRole: actor.role ?? null,
+      expiresAt: now + 2 * 60 * 1000,
+    });
+    return { verificationToken, displayName, expiresInSeconds: 120 };
   }
 
   async findAll(params: {
@@ -91,6 +168,52 @@ export class SavingsService {
         hasNextPage: page * pageSize < total,
         hasPrevPage: page > 1,
       },
+    };
+  }
+
+  /** Résumé léger des dépôts récents pour la cloche de l'administration. */
+  async getDepositNotifications(since: Date, afterId = 0) {
+    const where = {
+      typeOperation: PrismaTypeOperation.depot,
+      OR: [
+        { createdAt: { gt: since } },
+        { createdAt: since, id: { gt: afterId } },
+      ],
+      NOT: [
+        { compte: { contains: 'REVENUS' } },
+        { compte: { contains: 'SECTION-0000' } },
+        { compte: { contains: 'CREDITS' } },
+        { compte: { contains: 'TRESORERIE' } },
+      ],
+    };
+    const [count, recent] = await Promise.all([
+      this.prisma.epargne.count({ where }),
+      this.prisma.epargne.findMany({
+        where,
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        take: 5,
+        select: {
+          id: true,
+          compte: true,
+          devise: true,
+          montant: true,
+          createdAt: true,
+          membre: { select: { nomComplet: true } },
+        },
+      }),
+    ]);
+    return {
+      count,
+      cursor: recent[0]?.createdAt.toISOString() ?? since.toISOString(),
+      cursorId: recent[0]?.id ?? afterId,
+      recent: recent.map((item) => ({
+        id: item.id,
+        accountNumber: item.compte,
+        memberName: item.membre.nomComplet,
+        amount: Number(item.montant),
+        currency: item.devise,
+        createdAt: item.createdAt,
+      })),
     };
   }
 
@@ -424,22 +547,29 @@ export class SavingsService {
         throw new NotFoundException('Compte membre actif introuvable.');
       }
 
-      const scannedUserId = createDto.biometricUserId?.trim();
-      if (!scannedUserId) {
+      const verificationToken = createDto.biometricVerificationToken?.trim();
+      const verification = verificationToken
+        ? this.depositBiometricVerifications.get(verificationToken)
+        : undefined;
+      if (!verification || verification.expiresAt <= Date.now()) {
+        if (verificationToken) this.depositBiometricVerifications.delete(verificationToken);
         throw new BadRequestException(
-          'Capturez et vérifiez l’empreinte du membre ou de son délégué avant de valider le dépôt.',
+          'Lisez l’empreinte du membre ou de son délégué avant de valider le dépôt.',
         );
       }
+      this.depositBiometricVerifications.delete(verificationToken!);
       if (
-        member.userId !== scannedUserId &&
-        !member.delegues.some((delegate) => delegate.userId === scannedUserId)
+        verification.memberId !== member.id ||
+        verification.actorUserId !== (actor.userId ?? null) ||
+        verification.actorRole !== (actor.role ?? null)
       ) {
         throw new ForbiddenException(
-          'L’empreinte reconnue ne correspond ni au membre ni à un délégué autorisé pour ce compte.',
+          'La vérification biométrique ne correspond pas au membre sélectionné ou à votre session.',
         );
       }
+      const scannedUserId = verification.userId;
 
-      return this.prisma.$transaction(async (tx) => {
+      const operation = await this.prisma.$transaction(async (tx) => {
         await tx.$queryRaw<Array<{ id: number }>>`
           SELECT "id" FROM "membres" WHERE "id" = ${member.id} FOR UPDATE
         `;
@@ -479,6 +609,8 @@ export class SavingsService {
         });
         return operation;
       });
+      await this.notifyMemberOfDeposit(member.id, member.numeroCompte, operation.id, montant, devise);
+      return operation;
     }
 
     const agentId = actor.userId!;
@@ -519,7 +651,7 @@ export class SavingsService {
       member.delegues.map((delegate) => delegate.userId),
     );
 
-    return this.prisma.$transaction(async (tx) => {
+    const operation = await this.prisma.$transaction(async (tx) => {
       await tx.$queryRaw<Array<{ id: number }>>`
         SELECT "id" FROM "caisses_agents"
         WHERE "agent_id" = ${agentId} AND "devise" = ${devise}::"Devise"
@@ -603,6 +735,8 @@ export class SavingsService {
       });
       return operation;
     });
+    await this.notifyMemberOfDeposit(member.id, member.numeroCompte, operation.id, montant, devise);
+    return operation;
   }
 
   async remove(id: number) {

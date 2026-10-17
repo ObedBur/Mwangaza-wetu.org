@@ -14,6 +14,7 @@ import {
 } from "@tabler/icons-react";
 
 import { CooperativeDataState } from "@/components/cooperative/CooperativeDataState";
+import { CooperativePagination } from "@/components/cooperative/CooperativePagination";
 import {
   AccountPills,
   CooperativeBreadcrumb,
@@ -31,8 +32,7 @@ import {
 } from "@/lib/account-config";
 import { cooperativeCopy as t } from "@/lib/cooperative-copy";
 import { apiClient } from "@/lib/auth";
-const rowsPerPage = 10;
-
+import { downloadReportCsv, downloadReportPdf } from "@/lib/cooperative-report-export";
 type MemberRecord = {
   id: string;
   memberNumber: string;
@@ -95,6 +95,7 @@ function MembersContent() {
   const [account, setAccount] = useState<AccountSlug | "">("");
   const [sort, setSort] = useState("recent");
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const [selectedMember, setSelectedMember] =
     useState<MemberRecord | null>(null);
   const [members, setMembers] = useState<MemberRecord[]>([]);
@@ -151,13 +152,9 @@ function MembersContent() {
       });
   }, [account, members, query, sort, status]);
 
-  const totalPages = Math.max(
-    1,
-    Math.ceil(filteredMembers.length / rowsPerPage),
-  );
   const pageMembers = filteredMembers.slice(
-    (page - 1) * rowsPerPage,
-    page * rowsPerPage,
+    (page - 1) * pageSize,
+    page * pageSize,
   );
   const joinedThisMonth = members.filter((member) => {
     const date = new Date(`${member.joinedAt}T12:00:00`);
@@ -165,36 +162,31 @@ function MembersContent() {
     return date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth();
   }).length;
 
-  function exportMembers() {
-    const csv = [
-      [
-        t.memberNumber,
-        t.memberSummary,
-        t.phone,
-        t.joinDate,
-        t.savings,
-        t.status,
-      ],
-      ...filteredMembers.map((member) => [
-        member.memberNumber,
-        member.name,
-        member.phone,
-        member.joinedAt,
-        member.savingsTotal === null ? "" : formatCurrency(member.savingsTotal),
-        member.status,
-      ]),
-    ]
-      .map((row) =>
-        row.map((cell) => `"${cell.replace(/"/g, '""')}"`).join(";"),
-      )
-      .join("\n");
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(
-      new Blob([csv], { type: "text/csv;charset=utf-8" }),
-    );
-    link.download = "membres-mwangaza-wetu.csv";
-    link.click();
-    URL.revokeObjectURL(link.href);
+  const memberExportHeaders = [
+    t.memberNumber,
+    t.memberSummary,
+    t.phone,
+    t.joinDate,
+    t.accounts,
+    t.savings,
+    t.status,
+  ];
+  const memberExportRows = filteredMembers.map((member) => [
+    member.memberNumber,
+    member.name,
+    member.phone,
+    member.joinedAt,
+    member.accountTypes.join(", ") || "—",
+    member.savingsTotal === null ? "Non disponible" : formatCurrency(member.savingsTotal),
+    member.status,
+  ]);
+
+  function exportMembersCsv() {
+    downloadReportCsv("membres-mwangaza-wetu", memberExportHeaders, memberExportRows);
+  }
+
+  async function exportMembersPdf() {
+    await downloadReportPdf("Liste des membres · Mwangaza Wetu", "membres-mwangaza-wetu", memberExportHeaders, memberExportRows);
   }
 
   function changeFilters(change: () => void) {
@@ -213,14 +205,24 @@ function MembersContent() {
           <h1>{t.membersTitle}</h1>
           <p>{t.membersDescription}</p>
         </div>
-        <div className="coop-page-actions">
+        <div className="coop-page-actions coop-export-actions">
           <button
             className="mw-secondary"
             type="button"
-            onClick={exportMembers}
+            onClick={exportMembersPdf}
+            disabled={loading || loadError || filteredMembers.length === 0}
           >
             <IconDownload aria-hidden="true" />
-            {t.export}
+            Exporter PDF
+          </button>
+          <button
+            className="mw-secondary"
+            type="button"
+            onClick={exportMembersCsv}
+            disabled={loading || loadError || filteredMembers.length === 0}
+          >
+            <IconDownload aria-hidden="true" />
+            Exporter CSV
           </button>
           <button
             className="mw-primary"
@@ -400,32 +402,16 @@ function MembersContent() {
             </table>
           </div>
         </CooperativeDataState>
-        <div className="coop-pagination">
-          <span>
-            {filteredMembers.length} {t.records}
-          </span>
-          <div>
-            <button
-              type="button"
-              className="mw-secondary"
-              disabled={page <= 1}
-              onClick={() => setPage((value) => value - 1)}
-            >
-              {t.previous}
-            </button>
-            <span>
-              {t.pageOf} {page} {t.of} {totalPages}
-            </span>
-            <button
-              type="button"
-              className="mw-secondary"
-              disabled={page >= totalPages}
-              onClick={() => setPage((value) => value + 1)}
-            >
-              {t.next}
-            </button>
-          </div>
-        </div>
+        <CooperativePagination
+          totalItems={filteredMembers.length}
+          page={page}
+          pageSize={pageSize}
+          onPageChange={setPage}
+          onPageSizeChange={(value) => { setPageSize(value); setPage(1); }}
+          itemLabel={t.records}
+          previousLabel={t.previous}
+          nextLabel={t.next}
+        />
       </section>
 
       <Sheet

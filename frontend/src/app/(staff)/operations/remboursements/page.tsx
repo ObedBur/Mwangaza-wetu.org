@@ -16,6 +16,7 @@ import { useMemo, useState, type FormEvent } from "react";
 
 
 import { CooperativeDataState } from "@/components/cooperative/CooperativeDataState";
+import { CooperativePagination } from "@/components/cooperative/CooperativePagination";
 import {
   CooperativeBreadcrumb,
   CooperativeStatCard,
@@ -33,7 +34,6 @@ import {
 import { findCreditMember, getCreditRecords, getUpcomingInstallment, updateCreditRecord, applyCreditPayment, type CooperativeCredit, type CreditInstallment } from "@/mocks/credit-data";
 import { paymentMethods, type PaymentMethod } from "@/mocks/operations-data";
 
-const pageSize = 10;
 const today = "2025-06-25";
 const tabs = ["À venir", "En retard", "Payés", "Tous"] as const;
 const periods = ["Toutes les périodes", "Ce mois", "30 derniers jours"] as const;
@@ -68,6 +68,7 @@ export default function RepaymentsRoute() {
   const [period, setPeriod] = useState<(typeof periods)[number]>(periods[0]);
   const [methodFilter, setMethodFilter] = useState<PaymentMethod | "">("");
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const [paymentOpen, setPaymentOpen] = useState(false);
   const [selectedCreditId, setSelectedCreditId] = useState("");
   const [selectedInstallmentNumber, setSelectedInstallmentNumber] = useState(0);
@@ -105,7 +106,6 @@ export default function RepaymentsRoute() {
       .filter(({ installment }) => !methodFilter || installment.paymentMethod === methodFilter)
       .sort((left, right) => activeTab === "En retard" ? left.installment.dueDate.localeCompare(right.installment.dueDate) : right.installment.dueDate.localeCompare(left.installment.dueDate));
   }, [activeTab, methodFilter, period, query, rows]);
-  const pages = Math.max(1, Math.ceil(filteredRows.length / pageSize));
   const visible = filteredRows.slice((page - 1) * pageSize, page * pageSize);
 
   function changeFilter(action: () => void) {
@@ -173,7 +173,7 @@ export default function RepaymentsRoute() {
         <div className="coop-repayment-toolbar"><div className="coop-withdrawal-tabs" role="tablist" aria-label="Filtrer les échéances">{tabs.map((tab) => <button type="button" role="tab" aria-selected={activeTab === tab} className={activeTab === tab ? "is-active" : ""} key={tab} onClick={() => changeFilter(() => setActiveTab(tab))}>{tab}<span>{counts[tab]}</span></button>)}</div><div className="coop-reminder-actions"><label className="coop-filter-select"><span className="sr-only">Canal des rappels</span><select value={channel} onChange={(event) => setChannel(event.target.value as RemittanceChannel)}><option>SMS</option><option>WhatsApp</option></select></label><button className="mw-secondary" type="button" disabled={!overdueRows.length} onClick={() => remind()}><IconBellRinging aria-hidden="true" />Rappeler tous les retards</button></div></div>
         <div className="coop-filter-bar"><label className="coop-filter-search"><IconSearch aria-hidden="true" /><input type="search" value={query} aria-label="Rechercher un membre ou une référence de crédit" placeholder="Membre ou référence du crédit…" onChange={(event) => changeFilter(() => setQuery(event.target.value))} /></label><label className="coop-filter-select"><span className="sr-only">Période</span><select value={period} onChange={(event) => changeFilter(() => setPeriod(event.target.value as (typeof periods)[number]))}>{periods.map((item) => <option key={item}>{item}</option>)}</select></label><label className="coop-filter-select"><span className="sr-only">Mode de paiement</span><select value={methodFilter} onChange={(event) => changeFilter(() => setMethodFilter(event.target.value as PaymentMethod | ""))}><option value="">Tous les modes</option>{paymentMethods.map((method) => <option key={method}>{method}</option>)}</select></label></div>
         <CooperativeDataState loading={false} error={false} empty={visible.length === 0} emptyMessage="Aucune échéance ne correspond à ces filtres."><div className="coop-table-scroll"><table className="mw-table coop-repayment-table"><thead><tr><th>Membre</th><th>Crédit</th><th>Échéance</th><th>Date d’échéance</th><th>Montant dû</th><th>Pénalité</th><th>Montant payé</th><th>Statut</th><th>Actions</th></tr></thead><tbody>{visible.map(({ credit, installment }) => { const member = findCreditMember(credit); const status = getInstallmentStatus(installment); const lateDays = status === "En retard" ? Math.max(1, Math.floor((new Date(`${today}T12:00:00`).getTime() - new Date(`${installment.dueDate}T12:00:00`).getTime()) / 86400000)) : 0; return <tr key={`${credit.id}-${installment.number}`}><td><span className="mw-member"><span className="mw-member-avatar">{member.name.split(" ").map((part) => part[0]).slice(0, 2).join("")}</span><span>{member.name}</span></span></td><td><Link className="coop-credit-reference" href="/operations/credits">{credit.reference}</Link></td><td>{installment.number}/{credit.termMonths}</td><td><span>{formatDate(installment.dueDate)}</span>{lateDays > 0 && <small className="coop-late-days">{lateDays} j de retard</small>}</td><td className="coop-amount-cell">{formatCurrency(installment.totalDue)}</td><td>{installment.penalty ? formatCurrency(installment.penalty) : "—"}</td><td>{formatCurrency(installment.amountPaid)}</td><td><InstallmentStatusBadge status={status} /></td><td><div className="coop-repayment-row-actions">{status !== "Payé" && <button className="mw-secondary" type="button" onClick={() => startPayment(credit, installment)}>Enregistrer le paiement</button>}{status === "En retard" && <button className="coop-icon-action" type="button" aria-label={`Rappeler ${member.name}`} title="Rappeler" onClick={() => remind({ credit, installment })}><IconBellRinging aria-hidden="true" /></button>}</div></td></tr>; })}</tbody></table></div></CooperativeDataState>
-        <div className="coop-pagination"><span>{filteredRows.length} échéances</span><div><button className="mw-secondary" type="button" disabled={page <= 1} onClick={() => setPage((value) => value - 1)}>Précédent</button><span>Page {page} sur {pages}</span><button className="mw-secondary" type="button" disabled={page >= pages} onClick={() => setPage((value) => value + 1)}>Suivant</button></div></div>
+        <CooperativePagination totalItems={filteredRows.length} page={page} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={(value) => { setPageSize(value); setPage(1); }} itemLabel="échéances" />
       </section>
 
       <Dialog open={paymentOpen} onOpenChange={setPaymentOpen}>

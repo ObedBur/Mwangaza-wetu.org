@@ -4,6 +4,7 @@ import {
   SUPERADMIN_ROLES,
 } from '../common/decorators/roles.decorator';
 import {
+  BadRequestException,
   Controller,
   Get,
   Post,
@@ -61,6 +62,22 @@ export class SavingsController {
     });
   }
 
+  @Get('notifications/deposits')
+  async getDepositNotifications(
+    @Query('since') since?: string,
+    @Query('afterId') afterId?: string,
+  ) {
+    const parsedSince = since ? new Date(since) : new Date(Date.now() - 24 * 60 * 60 * 1000);
+    if (Number.isNaN(parsedSince.getTime())) {
+      throw new BadRequestException('Date de référence invalide.');
+    }
+    const parsedAfterId = afterId === undefined ? 0 : Number(afterId);
+    if (!Number.isSafeInteger(parsedAfterId) || parsedAfterId < 0) {
+      throw new BadRequestException('Identifiant de référence invalide.');
+    }
+    return this.savingsService.getDepositNotifications(parsedSince, parsedAfterId);
+  }
+
   // Guichet (agent) et membre : historique d'un seul compte (ownership ci-dessous)
   @Roles(...ADMIN_ROLES, 'agent', 'member')
   @Get('compte/:compte')
@@ -94,6 +111,15 @@ export class SavingsController {
   }
 
   // Encaissement / décaissement au guichet
+  @Roles(...ADMIN_ROLES, 'agent')
+  @Post('verify-deposit-biometric')
+  async verifyDepositBiometric(
+    @Body() body: { compte?: string },
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.savingsService.verifyDepositBiometric(body.compte ?? '', req.user!);
+  }
+
   @Roles(...ADMIN_ROLES, 'agent')
   @Post()
   async create(@Body() createDto: CreateSavingsDto, @Req() req: AuthenticatedRequest) {
