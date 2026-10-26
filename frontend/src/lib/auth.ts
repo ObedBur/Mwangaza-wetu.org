@@ -15,7 +15,7 @@ export const apiClient = axios.create({
 // Intercepteur pour injecter automatiquement le token Bearer
 apiClient.interceptors.request.use((config) => {
   if (typeof window !== 'undefined') {
-    const token = localStorage.getItem(TOKEN_KEY);
+    const token = localStorage.getItem(TOKEN_KEY) || sessionStorage.getItem(TOKEN_KEY);
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -41,22 +41,26 @@ apiClient.interceptors.response.use(
 );
 
 // Helpers de stockage
-export function setAuthSession(token: string, user: AuthUser): void {
+export function setAuthSession(token: string, user: AuthUser, rememberMe = true): void {
   if (typeof window === 'undefined') return;
-  localStorage.setItem(TOKEN_KEY, token);
-  localStorage.setItem(USER_KEY, JSON.stringify(user));
+  const storage = rememberMe ? localStorage : sessionStorage;
+  const otherStorage = rememberMe ? sessionStorage : localStorage;
+  storage.setItem(TOKEN_KEY, token);
+  storage.setItem(USER_KEY, JSON.stringify(user));
+  otherStorage.removeItem(TOKEN_KEY);
+  otherStorage.removeItem(USER_KEY);
   // Pour le support SSR si nécessaire, on peut également définir un cookie léger
   document.cookie = `mwangaza_role=${user.role}; path=/; max-age=86400; SameSite=Lax`;
 }
 
 export function getAuthToken(): string | null {
   if (typeof window === 'undefined') return null;
-  return localStorage.getItem(TOKEN_KEY);
+  return localStorage.getItem(TOKEN_KEY) || sessionStorage.getItem(TOKEN_KEY);
 }
 
 export function getAuthUser(): AuthUser | null {
   if (typeof window === 'undefined') return null;
-  const userStr = localStorage.getItem(USER_KEY);
+  const userStr = localStorage.getItem(USER_KEY) || sessionStorage.getItem(USER_KEY);
   if (!userStr) return null;
   try {
     return JSON.parse(userStr) as AuthUser;
@@ -69,6 +73,8 @@ export function clearAuthSession(): void {
   if (typeof window === 'undefined') return;
   localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(USER_KEY);
+  sessionStorage.removeItem(TOKEN_KEY);
+  sessionStorage.removeItem(USER_KEY);
   document.cookie = 'mwangaza_role=; path=/; max-age=0';
 }
 
@@ -113,13 +119,14 @@ export type LoginRole = 'admin' | 'agent' | 'member';
 export async function login(
   identifier: string,
   password: string,
+  rememberMe = true,
 ): Promise<LoginResponse> {
   const response = await apiClient.post<LoginResponse>(
     '/auth/login',
     formatIdentifierBody(identifier, password),
   );
   if (response.data.success && response.data.token) {
-    setAuthSession(response.data.token, response.data.user);
+    setAuthSession(response.data.token, response.data.user, rememberMe);
   }
   return response.data;
 }

@@ -4,48 +4,35 @@ import React, { useState, useEffect, Suspense } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
+import axios from 'axios';
+import { login, getPostLoginRedirect, getAuthToken, getAuthUser } from '@/lib/auth';
+import { MWANGAZA_BRAND } from '@/lib/theme-constants';
 import {
   Eye,
   EyeOff,
   AlertCircle,
   CheckCircle2,
-  ShieldCheck,
-  HelpCircle,
-  Check
+  HelpCircle
 } from 'lucide-react';
-import axios from 'axios';
-import { login, getPostLoginRedirect, getAuthToken, getAuthUser } from '@/lib/auth';
-import { MWANGAZA_BRAND } from '@/lib/theme-constants';
 
-interface SlideItem {
-  id: string;
-  image: string;
-  title: string;
-  subtitle: string;
-  description: string;
-}
-
-const SLIDES: SlideItem[] = [
+const LOGIN_SLIDES = [
   {
-    id: 'kelasi',
-    image: '/images/img1.png',
-    title: 'Épargne Kelasi',
-    subtitle: 'Offrez à vos enfants un avenir éclairé',
-    description: 'Préparez sereinement les études et l’éducation de vos enfants avec des solutions d’épargne sécurisées.',
-  },
-  {
-    id: 'biashara',
-    image: '/images/img2.png',
-    title: 'Épargne Biashara',
-    subtitle: 'Financement et renforcement des PME',
-    description: 'Protégez vos revenus commerciaux, développez votre activité et sécurisez la trésorerie de votre entreprise.',
-  },
-  {
-    id: 'sante',
-    image: '/images/img3.png',
+    image: '/images/login-sante.jpg',
     title: 'Épargne Santé',
     subtitle: 'Couvrir les urgences médicales',
     description: 'La santé n’attend pas : prévoyez aujourd’hui pour protéger et soigner votre famille en toute tranquillité.',
+  },
+  {
+    image: '/images/login-kelasi.jpg',
+    title: 'Épargne Kelasi',
+    subtitle: 'Offrez un avenir éclairé à vos enfants',
+    description: 'Épargnez sereinement pour accompagner les études et les projets de vos enfants.',
+  },
+  {
+    image: '/images/login-biashara.jpg',
+    title: 'Épargne Biashara',
+    subtitle: 'Financement et renforcement des PME',
+    description: 'Protégez vos revenus commerciaux, développez votre activité et sécurisez la trésorerie de votre entreprise.',
   },
 ];
 
@@ -65,17 +52,17 @@ function LoginForm() {
   );
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [showHelpModal, setShowHelpModal] = useState(false);
-
-  // État du carrousel d'images plein écran (left 50%)
   const [currentSlide, setCurrentSlide] = useState(0);
 
   useEffect(() => {
-    const timer = setInterval(() => {
-      setCurrentSlide((prev) => (prev + 1) % SLIDES.length);
-    }, 5000);
-    return () => clearInterval(timer);
-  }, []);
+    const motionPreference = window.matchMedia('(prefers-reduced-motion: reduce)');
+    if (motionPreference.matches) return;
 
+    const timer = window.setInterval(() => {
+      setCurrentSlide((current) => (current + 1) % LOGIN_SLIDES.length);
+    }, 6000);
+    return () => window.clearInterval(timer);
+  }, []);
   // Session déjà active : on redirige directement vers l'espace du rôle
   useEffect(() => {
     const user = getAuthUser();
@@ -103,7 +90,7 @@ function LoginForm() {
     setIsLoading(true);
 
     try {
-      const res = await login(cleanId, password);
+      const res = await login(cleanId, password, rememberMe);
 
       if (res.success && res.user) {
         setSuccessMsg(`Connexion réussie. Bienvenue, ${res.user.fullName || 'Cher utilisateur'} !`);
@@ -127,47 +114,50 @@ function LoginForm() {
     }
   };
 
-  const activeSlideData = SLIDES[currentSlide];
-
   return (
-    <div className="min-h-screen w-full flex flex-col lg:flex-row bg-white font-sans overflow-x-hidden">
-      {/* ========================================================================= */}
-      {/* GAUCHE (50% Exact) : Photo Plein Écran (Full Bleed) avec Textes & Indicateurs */}
-      {/* ========================================================================= */}
-      <div className="relative w-full lg:w-1/2 min-h-[460px] lg:min-h-screen flex flex-col justify-between p-8 sm:p-12 lg:p-14 overflow-hidden bg-slate-900">
-        {/* Images en fondu-enchaîné occupant 100% de la surface gauche */}
-        {SLIDES.map((slide, idx) => {
-          const isActive = idx === currentSlide;
-          return (
-            <div
-              key={slide.id}
-              className={`absolute inset-0 transition-opacity duration-1000 ease-in-out ${isActive ? 'opacity-100 z-0' : 'opacity-0 z-0 pointer-events-none'
-                }`}
-            >
-              <Image
-                src={slide.image}
-                alt={slide.title}
-                fill
-                priority={idx === 0}
-                className="object-cover object-center scale-100"
-                sizes="(max-width: 1024px) 100vw, 50vw"
-              />
+    <main className="login-page min-h-screen min-h-svh w-full bg-white">
+      <div className="mx-auto flex min-h-screen min-h-svh w-full max-w-7xl flex-col px-6 py-6 sm:px-12 sm:py-10 xl:mx-0 xl:max-w-none xl:flex-row xl:px-0 xl:py-0">
+        <aside className="relative hidden min-h-svh overflow-hidden bg-slate-950 text-white xl:flex xl:w-1/2 xl:flex-col xl:justify-between xl:p-12 2xl:p-16" aria-label="Présentation des produits Mwangaza Wetu">
+          {LOGIN_SLIDES.map((slide, index) => (
+            <Image
+              key={slide.image}
+              src={slide.image}
+              alt=""
+              fill
+              priority={index === 0}
+              sizes="50vw"
+              className={`object-cover transition-opacity duration-700 ${index === currentSlide ? 'opacity-100' : 'opacity-0'}`}
+              aria-hidden="true"
+            />
+          ))}
+          <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/45 to-slate-950/15" />
+          <header className="relative z-10 flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white p-1 shadow-sm ring-1 ring-white/30">
+              <Image src="/images/logo.png" alt="" width={30} height={30} className="object-contain" priority />
             </div>
-          );
-        })}
-
-        {/* Voile sombre dégradé subtil pour la lisibilité des textes */}
-        <div
-          className="absolute inset-0 pointer-events-none z-10"
-          style={{
-            background:
-              'linear-gradient(180deg, rgba(0, 0, 0, 0.45) 0%, rgba(0, 0, 0, 0.05) 35%, rgba(0, 0, 0, 0.65) 70%, rgba(0, 0, 0, 0.88) 100%)',
-          }}
-        />
-
-        {/* Haut Gauche : Logo & Nom de la marque */}
-        <div className="relative z-20 flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-white/95 shadow-md flex items-center justify-center p-1.5 backdrop-blur-sm">
+            <span className="text-sm font-bold tracking-wide text-white uppercase">{MWANGAZA_BRAND.name}</span>
+          </header>
+          <div className="relative z-10 max-w-xl pb-2">
+            <h2 className="text-4xl font-black tracking-tight 2xl:text-5xl">{LOGIN_SLIDES[currentSlide].title}</h2>
+            <p className="mt-3 text-lg font-semibold text-white/90">{LOGIN_SLIDES[currentSlide].subtitle}</p>
+            <p className="mt-3 max-w-lg text-sm leading-relaxed text-white/80">{LOGIN_SLIDES[currentSlide].description}</p>
+            <div className="mt-7 flex items-center gap-2" aria-label="Choisir une présentation">
+              {LOGIN_SLIDES.map((slide, index) => (
+                <button
+                  key={slide.image}
+                  type="button"
+                  onClick={() => setCurrentSlide(index)}
+                  aria-label={`Afficher ${slide.title}`}
+                  aria-current={index === currentSlide ? 'true' : undefined}
+                  className={`h-2.5 rounded-full transition-all ${index === currentSlide ? 'w-8 bg-white' : 'w-2.5 bg-white/50 hover:bg-white/80'}`}
+                />
+              ))}
+            </div>
+          </div>
+        </aside>
+        <div className="flex min-h-screen min-h-svh flex-1 flex-col xl:w-1/2 xl:px-12 2xl:px-20">
+        <header className="flex items-center gap-3 xl:hidden">
+          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white p-1 shadow-sm ring-1 ring-slate-200">
             <Image
               src="/images/logo.png"
               alt="Logo Mwangaza Wetu"
@@ -177,68 +167,19 @@ function LoginForm() {
               priority
             />
           </div>
-          <div>
-            <span className="text-white font-extrabold text-lg tracking-wide uppercase drop-shadow-sm">
-              {MWANGAZA_BRAND.name}
-            </span>
-          </div>
-        </div>
+          <span className="text-sm font-bold tracking-wide text-slate-900 uppercase">
+            {MWANGAZA_BRAND.name}
+          </span>
+        </header>
 
-        {/* Bas Gauche : Titre, Description & Indicateurs (Dots) comme la référence */}
-        <div className="relative z-20 mt-auto pt-16">
-          <div className="max-w-lg">
-            <h2 className="text-3xl sm:text-4xl xl:text-5xl font-black text-white leading-tight drop-shadow-md tracking-tight">
-              {activeSlideData.title}
-            </h2>
-            <p className="text-base sm:text-lg font-medium text-white/90 mt-2 drop-shadow-sm">
-              {activeSlideData.subtitle}
-            </p>
-            <p className="text-xs sm:text-sm text-white/75 mt-2 line-clamp-2 max-w-md drop-shadow-sm">
-              {activeSlideData.description}
-            </p>
-          </div>
-
-          {/* Indicateurs de diapositives (Pill active + dots inactifs) */}
-          <div className="flex items-center gap-2 mt-8">
-            {SLIDES.map((slide, idx) => {
-              const isActive = idx === currentSlide;
-              return (
-                <button
-                  key={slide.id}
-                  type="button"
-                  onClick={() => setCurrentSlide(idx)}
-                  aria-label={`Aller à la diapositive ${idx + 1}`}
-                  className={`h-2 rounded-full transition-all duration-300 ${isActive
-                      ? 'w-8 bg-white'
-                      : 'w-2 bg-white/40 hover:bg-white/70'
-                    }`}
-                />
-              );
-            })}
-          </div>
-        </div>
-      </div>
-
-      {/* ========================================================================= */}
-      {/* DROITE (50% Exact) : Formulaire Minimaliste & Épuré sur Fond Blanc Pur     */}
-      {/* ========================================================================= */}
-      <div className="w-full lg:w-1/2 min-h-screen bg-white flex flex-col justify-between p-8 sm:p-12 lg:p-16 xl:p-20">
-        {/* En-tête supérieur droit : Bouton / Badge institutionnel */}
-        <div className="flex justify-end items-center">
-          <div className="inline-flex items-center gap-2 bg-slate-900 text-white text-xs font-semibold px-4 py-2 rounded-full shadow-sm">
-            <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-            <span>Portail Sécurisé</span>
-          </div>
-        </div>
-
-        {/* Conteneur Central du Formulaire (centré exactement comme la référence) */}
-        <div className="max-w-[420px] w-full mx-auto my-auto py-8">
+        <div className="flex flex-1 items-center justify-center py-10 xl:py-12">
+          <section className="w-full max-w-[420px]">
           <div className="mb-8">
-            <h1 className="text-3xl sm:text-4xl font-black text-slate-900 tracking-tight">
-              Bienvenue sur Mwangaza Wetu!
+            <h1 className="text-3xl sm:text-4xl font-bold text-slate-900 tracking-tight">
+              Connexion
             </h1>
             <p className="text-sm text-slate-500 mt-2">
-              Connectez-vous à votre espace sécurisé
+              Accédez à votre compte en toute sécurité.
             </p>
           </div>
 
@@ -262,7 +203,7 @@ function LoginForm() {
             <div>
               <label
                 htmlFor="identifier"
-                className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2"
+                className="block text-sm font-semibold text-slate-700 mb-2"
               >
                 Identifiant
               </label>
@@ -273,7 +214,7 @@ function LoginForm() {
                 autoComplete="username"
                 value={identifier}
                 onChange={(e) => setIdentifier(e.target.value)}
-                placeholder="Email, numéro de compte ou téléphone"
+                placeholder="E-mail, téléphone ou numéro de compte"
                 className="w-full px-4 py-3.5 bg-white border border-slate-300 rounded-xl text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-slate-900 transition-all"
               />
             </div>
@@ -282,7 +223,7 @@ function LoginForm() {
             <div>
               <label
                 htmlFor="password"
-                className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2"
+                className="block text-sm font-semibold text-slate-700 mb-2"
               >
                 Mot de passe
               </label>
@@ -301,7 +242,7 @@ function LoginForm() {
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
                   aria-label={showPassword ? 'Masquer' : 'Afficher'}
-                  className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-700 transition-colors"
+                  className="absolute inset-y-0 right-0 flex w-11 items-center justify-center text-slate-400 hover:text-slate-700 transition-colors"
                 >
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
@@ -310,24 +251,23 @@ function LoginForm() {
 
             {/* Ligne Se souvenir de moi / Aide */}
             <div className="flex items-center justify-between text-xs sm:text-sm pt-1">
-              <label className="flex items-center gap-2 cursor-pointer select-none text-slate-600 font-medium">
-                <div
-                  onClick={() => setRememberMe(!rememberMe)}
-                  className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${rememberMe ? 'bg-slate-900 border-slate-900 text-white' : 'border-slate-300 bg-white'
-                    }`}
-                >
-                  {rememberMe && <Check className="w-3 h-3 stroke-[3]" />}
-                </div>
+              <label className="flex min-h-11 items-center gap-2 cursor-pointer select-none text-slate-600 font-medium">
+                <input
+                  type="checkbox"
+                  checked={rememberMe}
+                  onChange={(e) => setRememberMe(e.target.checked)}
+                  className="h-4 w-4 rounded border-slate-300 accent-slate-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
+                />
                 <span>Se souvenir de moi</span>
               </label>
 
               <button
                 type="button"
                 onClick={() => setShowHelpModal(true)}
-                className="text-slate-500 hover:text-slate-900 font-semibold transition-colors flex items-center gap-1"
+                className="flex min-h-11 items-center gap-1 text-slate-500 hover:text-slate-900 font-semibold transition-colors"
               >
                 <HelpCircle className="w-3.5 h-3.5" />
-                <span>Besoin d&apos;aide ?</span>
+                <span>Assistance</span>
               </button>
             </div>
 
@@ -350,7 +290,7 @@ function LoginForm() {
 
           {/* Lien d'activation membre pour nouveau compte */}
           <div className="mt-8 text-center text-xs text-slate-500">
-            <span>Nouveau membre de la coopérative ? </span>
+            <span>Nouveau membre ? </span>
             <Link
               href="/activate"
               className="font-bold text-slate-900 hover:underline inline-block ml-1"
@@ -358,11 +298,12 @@ function LoginForm() {
               Activer mon compte
             </Link>
           </div>
+          </section>
         </div>
 
-        {/* Pied de page discret */}
-        <div className="text-center text-xs text-slate-400">
-          {MWANGAZA_BRAND.name} • {MWANGAZA_BRAND.slogan} • © {new Date().getFullYear()}
+        <footer className="text-center text-xs text-slate-400">
+          {MWANGAZA_BRAND.name} • © {new Date().getFullYear()}
+        </footer>
         </div>
       </div>
 
@@ -417,7 +358,7 @@ function LoginForm() {
           </div>
         </div>
       )}
-    </div>
+    </main>
   );
 }
 
