@@ -2,642 +2,664 @@
 
 import './vitrine.css';
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useState, useMemo } from 'react';
 import {
-  IconUsers,
-  IconChartBar,
-  IconArrowRight,
-  IconMapPin,
-  IconPhone,
-  IconMail,
-  IconClock,
-  IconStar,
-  IconBuildingBank,
-  IconTarget,
-  IconEye,
-  IconSchool,
-  IconHeartPlus,
-  IconHome,
-  IconBabyCarriage,
-  IconBuildingStore,
-  IconWallet,
-  IconCreditCard,
-  IconCircleCheckFilled,
-  IconShieldCheck,
-  IconMenu2,
-  IconX,
-  type TablerIcon,
-} from '@tabler/icons-react';
+  Users,
+  BarChart3,
+  ArrowRight,
+  MapPin,
+  Phone,
+  Mail,
+  Clock,
+  Star,
+  Landmark,
+  Target,
+  Eye,
+  GraduationCap,
+  HeartPulse,
+  Home,
+  Baby,
+  Store,
+  Wallet,
+  CreditCard,
+  CheckCircle2,
+  ShieldCheck,
+  Menu,
+  X,
+  Lock,
+  Calculator,
+  ArrowLeftRight,
+  Building2,
+  AlertTriangle,
+  ChevronRight,
+  Sparkles,
+  Search,
+  ExternalLink,
+  ShieldAlert,
+} from 'lucide-react';
 
 /* ─────────────────────────────────────────────
-   Copy bilingue FR / EN
+   Types & Données
 ───────────────────────────────────────────── */
 type Lang = 'FR' | 'EN';
+type Segment = 'particuliers' | 'entrepreneurs' | 'diaspora';
+type SimType = 'epargne' | 'credit';
 
-const copy = {
-  FR: {
-    topbar: {
-      hotline: 'Assistance : +243 820 000 000',
-      hours: 'Lun – Sam : 8h00 – 16h30',
-      ticker: 'Taux indicatif : 1 USD = 2 850 CDF',
-      regulated: 'Agrément BCC / COOPEC',
-    },
-    nav: {
-      brandSub: 'Épargne • Crédit • Développement',
-      services: 'Comptes & Épargne',
-      howItWorks: 'Comment ça marche',
-      about: 'À propos',
-      news: 'Actualités',
-      contact: 'Contact',
-      login: 'Espace Membre',
-      openAccount: 'Devenir membre',
-    },
-    hero: {
-      badge: 'COOPÉRATIVE FINANCIÈRE AGRÉÉE — RDC',
-      title: (
-        <>
-          La coopérative qui grandit avec vous.<br />
-          <span>Pour tous, partout.</span>
-        </>
-      ),
-      desc:
-        'Sécurisez votre épargne, financez la scolarité de vos enfants, construisez votre logement et développez votre commerce avec des solutions de crédit sur mesure.',
-      ctaPrimary: 'Devenir membre',
-      ctaSecondary: 'Accéder à mon espace',
-      rating: '4.9 / 5',
-      trust: 'Plus de 500 membres et familles font confiance à Mwangaza Wetu',
-      card: {
-        type: 'CARTE DE MEMBRE DIGITALE',
-        tier: 'MEMBRE PRIVILÈGE',
-        category: 'MWANGAZA GOLD',
-        number: '•••• •••• •••• 4821',
-        holder: 'MEMBRE ACTIF',
-        expires: '12/28',
-      },
-      widget: {
-        tag: 'Épargne active',
-        title: 'Épargne Kelasi — Scolarité',
-        targetLabel: '850 $ sur 1 000 $ atteints',
-        rateLabel: '85%',
-        notif: 'Dépôt de +50 $ validé avec succès',
-      },
-    },
-    stats: {
-      members: 'Membres actifs',
-      projects: 'Projets financés',
-      repayment: 'Taux de remboursement',
-      years: 'Années d\'expérience',
-    },
-    services: {
-      label: 'Nos Solutions',
-      heading: 'Des formules d\'épargne pensées pour chaque étape de vie',
-      sub: 'Six comptes d\'épargne thématiques et des crédits responsables adaptés à votre réalité financière.',
-      accounts: [
-        { slug: 'principal', name: 'Compte Principal', sub: 'Épargne libre', desc: 'Déposez et retirez à votre rythme. Votre compte pivot sécurisé et accessible en agence.', color: '#25825c' },
-        { slug: 'kelasi',    name: 'Épargne Kelasi',  sub: 'Scolarité & Études', desc: 'Préparez sereinement les frais académiques de vos enfants avec des versements planifiés.', color: '#c18c2d' },
-        { slug: 'hopital',  name: 'Épargne Hôpital', sub: 'Santé & Urgences',  desc: 'Constituez un matelas de sécurité médicale pour protéger votre famille contre les imprévus.', color: '#d16c68' },
-        { slug: 'nyumba',   name: 'Épargne Nyumba',  sub: 'Logement & Bâtiment', desc: 'Concrétisez votre projet de construction ou d\'acquisition grâce à une épargne progressive.', color: '#99724f' },
-        { slug: 'mutoto',   name: 'Épargne Mutoto',  sub: 'Avenir des enfants', desc: 'Un horizon d\'épargne à long terme pour garantir le tremplin financier de vos enfants.', color: '#9a75c1' },
-        { slug: 'biashara', name: 'Épargne Biashara', sub: 'Commerce & Activité', desc: 'Alimentez le fonds de roulement de votre activité commerciale et bénéficiez de facilités.', color: '#4384b5' },
-      ],
-      credit: {
-        name: 'Crédit Coopératif Responsable',
-        sub: 'Accompagnement financier sur mesure',
-        desc: 'Bénéficiez d\'un financement transparent indexé sur votre régularité d\'épargne. Taux préférentiels, formalités allégées et conseils personnalisés.',
-      },
-    },
-    howItWorks: {
-      label: 'Fonctionnement',
-      heading: 'Rejoindre Mwangaza Wetu en 3 étapes simples',
-      sub: 'Une adhésion transparente et un parcours clair pensé pour chaque citoyen.',
-      steps: [
-        { num: 1, title: 'Adhésion', desc: 'Présentez une pièce d\'identité en agence ou auprès d\'un agent délégué pour remplir votre fiche d\'adhésion.' },
-        { num: 2, title: 'Épargne régulière', desc: 'Effectuez vos versements libres ou programmés selon vos objectifs sur vos comptes thématiques.' },
-        { num: 3, title: 'Bénéfices & Crédits', desc: 'Accédez aux crédits bonifiés, aux retraits et à tous les services coopératifs après 6 mois d\'activité.' },
-      ],
-    },
-    about: {
-      label: 'Institution',
-      heading: 'Une coopérative solidaire au cœur de l\'économie réelle',
-      sub: 'Mwangaza Wetu mobilise l\'épargne locale pour créer de la valeur partagée et de la stabilité.',
-      mission: {
-        title: 'Notre Mission',
-        text: 'Fournir à nos membres des services financiers sûrs, accessibles et solidaires, en soutenant l\'auto-prise en charge des familles et la croissance des entrepreneurs en RDC.',
-      },
-      vision: {
-        title: 'Notre Vision',
-        text: 'Être l\'institution d\'épargne et de crédit communautaire la plus fiable et innovante, catalyseur de progrès socio-économique durable.',
-      },
-      values: ['Solidarité', 'Sécurité', 'Intégrité', 'Proximité', 'Excellence'],
-    },
-    testimonials: {
-      label: 'Témoignages de nos membres',
-      heading: 'La confiance de notre communauté',
-      sub: 'Commerçants, parents, fonctionnaires et entrepreneurs partagent leur vécu.',
-      items: [
-        { name: 'Amina K.', role: 'Membre depuis 3 ans • Épargne Kelasi', initials: 'AK', color: '#074780', text: '"Grâce à mon Épargne Kelasi, j\'ai pu payer les frais de scolarité de ma fille à temps. Aucun stress, Mwangaza Wetu a transformé notre quotidien."' },
-        { name: 'Jean-Pierre M.', role: 'Commerçant • Épargne Biashara', initials: 'JM', color: '#16A34A', text: '"Le crédit coopératif m\'a permis de réapprovisionner mon stock avant les fêtes. Les conditions sont justes et les agents sont toujours disponibles."' },
-        { name: 'Claudine B.', role: 'Membre fondatrice • Épargne Nyumba', initials: 'CB', color: '#E56A1E', text: '"La clarté des relevés et la sécurité de mes dépôts m\'ont immédiatement convaincue. Une vraie institution de confiance."' },
-      ],
-    },
-    news: {
-      label: 'Actualités & Publications',
-      heading: 'La vie de notre coopérative',
-      sub: 'Annonces officielles, assemblées générales et nouvelles fonctionnalités.',
-      items: [
-        { tag: 'Assemblée', icon: '🏛️', title: 'Assemblée Générale Ordinaire des Membres 2026', date: '15 novembre 2026' },
-        { tag: 'Digital', icon: '📱', title: 'Portail membre en ligne : consultation de solde instantanée', date: 'Octobre 2026' },
-        { tag: 'Éducation', icon: '📊', title: 'Séance d\'éducation financière et gestion budgétaire', date: 'Septembre 2026' },
-      ],
-    },
-    contact: {
-      label: 'Nous contacter',
-      heading: 'Nos équipes à votre service',
-      sub: 'Rencontrez un conseiller en agence ou échangez directement avec nous.',
-      address: { label: 'Siège social', val: 'Kinshasa, République Démocratique du Congo' },
-      phone:   { label: 'Hotline & WhatsApp', val: '+243 820 000 000' },
-      email:   { label: 'Courriel officiel', val: 'contact@mwangazawetu.cd' },
-      hours:   { label: 'Heures d\'ouverture', val: 'Lundi – Vendredi : 8h00 – 16h30\nSamedi : 9h00 – 13h00' },
-      mapLabel: 'Agence principale — Kinshasa, RDC',
-    },
-    cta: {
-      title: 'Prêt à bâtir votre avenir financier ?',
-      sub: 'Rejoignez Mwangaza Wetu dès aujourd\'hui et découvrez une gestion financière humaine, transparente et performante.',
-      btn: 'Accéder à l\'espace membre',
-    },
-    footer: {
-      desc: 'Institution coopérative d\'épargne et de crédit au service des familles et entrepreneurs congolais. Fonds garantis et gestion certifiée.',
-      links: {
-        services: { title: 'Comptes', items: [['Compte Principal','#services'],['Épargne Kelasi','#services'],['Épargne Hôpital','#services'],['Crédit Coopératif','#services']] },
-        useful: { title: 'Accès rapide', items: [['Espace Membre','/login'],['Comment adhérer','#comment-ca-marche'],['Actualités','#actualites'],['Contact','#contact']] },
-        legal: { title: 'Conformité', items: [['Statuts de la Coopérative','#'],['Règlement Intérieur','#'],['Protection des données','#']] },
-      },
-      copy: `© ${new Date().getFullYear()} Mwangaza Wetu. Tous droits réservés. Agréé en RDC.`,
-      legal: [['Mentions légales','#'],['Politique de confidentialité','#']],
-    },
-  },
-  EN: {
-    topbar: {
-      hotline: 'Hotline: +243 820 000 000',
-      hours: 'Mon – Sat: 8:00 AM – 4:30 PM',
-      ticker: 'Indicative FX: 1 USD = 2,850 CDF',
-      regulated: 'Licensed Cooperative — DRC',
-    },
-    nav: {
-      brandSub: 'Savings • Credit • Development',
-      services: 'Accounts & Savings',
-      howItWorks: 'How it works',
-      about: 'About Us',
-      news: 'News',
-      contact: 'Contact',
-      login: 'Member Portal',
-      openAccount: 'Become a member',
-    },
-    hero: {
-      badge: 'LICENSED FINANCIAL COOPERATIVE — DRC',
-      title: (
-        <>
-          The cooperative that grows with you.<br />
-          <span>For everyone, anywhere.</span>
-        </>
-      ),
-      desc:
-        'Secure your savings, finance your children\'s education, build your home, and expand your business with responsible, tailor-made cooperative credit.',
-      ctaPrimary: 'Become a member',
-      ctaSecondary: 'Member Login',
-      rating: '4.9 / 5',
-      trust: 'Over 500 active members and families trust Mwangaza Wetu',
-      card: {
-        type: 'DIGITAL MEMBERSHIP CARD',
-        tier: 'PRESTIGE MEMBER',
-        category: 'MWANGAZA GOLD',
-        number: '•••• •••• •••• 4821',
-        holder: 'ACTIVE MEMBER',
-        expires: '12/28',
-      },
-      widget: {
-        tag: 'Active Savings',
-        title: 'Kelasi Savings — Schooling',
-        targetLabel: '$850 of $1,000 reached',
-        rateLabel: '85%',
-        notif: '+$50 deposit confirmed successfully',
-      },
-    },
-    stats: {
-      members: 'Active members',
-      projects: 'Financed projects',
-      repayment: 'Repayment rate',
-      years: 'Years of experience',
-    },
-    services: {
-      label: 'Our Solutions',
-      heading: 'Savings plans designed for every stage of life',
-      sub: 'Six themed savings accounts and responsible loans adapted to your real financial capacity.',
-      accounts: [
-        { slug: 'principal', name: 'Main Account', sub: 'Flexible savings', desc: 'Deposit and withdraw at your pace. Your core secure account accessible at any branch.', color: '#25825c' },
-        { slug: 'kelasi',    name: 'Kelasi Savings', sub: 'Schooling & Studies', desc: 'Prepare for school and university fees with structured monthly deposits.', color: '#c18c2d' },
-        { slug: 'hopital',  name: 'Hospital Savings', sub: 'Health & Emergencies', desc: 'Build a family medical safety cushion to face healthcare unexpected needs.', color: '#d16c68' },
-        { slug: 'nyumba',   name: 'Nyumba Savings', sub: 'Housing & Building', desc: 'Realize your home construction or acquisition plan with steady progress.', color: '#99724f' },
-        { slug: 'mutoto',   name: 'Mutoto Savings', sub: 'Children\'s future', desc: 'A long-term savings fund to secure the launchpad for your children\'s future.', color: '#9a75c1' },
-        { slug: 'biashara', name: 'Biashara Savings', sub: 'Business & Trade', desc: 'Grow your working capital and access merchant credit facilities.', color: '#4384b5' },
-      ],
-      credit: {
-        name: 'Responsible Cooperative Credit',
-        sub: 'Tailored financial backing',
-        desc: 'Access transparent loans based on your savings track record. Preferential interest rates, streamlined approvals, and personal guidance.',
-      },
-    },
-    howItWorks: {
-      label: 'Process',
-      heading: 'Join Mwangaza Wetu in 3 straightforward steps',
-      sub: 'A transparent membership pathway created for every citizen and business owner.',
-      steps: [
-        { num: 1, title: 'Registration', desc: 'Present a valid ID at any agency to complete your official membership registration.' },
-        { num: 2, title: 'Regular Savings', desc: 'Make flexible or scheduled deposits into your themed accounts tailored to your ambitions.' },
-        { num: 3, title: 'Benefits & Credit', desc: 'Qualify for tailored cooperative credit and full banking services after 6 months of steady savings.' },
-      ],
-    },
-    about: {
-      label: 'Institution',
-      heading: 'A solidarity-driven financial institution rooted in the real economy',
-      sub: 'Mwangaza Wetu mobilizes community savings to fuel local economic stability and empowerment.',
-      mission: {
-        title: 'Our Mission',
-        text: 'Deliver secure, accessible, and ethical financial services to foster self-reliance among families and accelerate business growth in the DRC.',
-      },
-      vision: {
-        title: 'Our Vision',
-        text: 'Become the benchmark savings and credit cooperative, recognized for governance excellence, trust, and community impact.',
-      },
-      values: ['Solidarity', 'Security', 'Integrity', 'Proximity', 'Excellence'],
-    },
-    testimonials: {
-      label: 'Member Stories',
-      heading: 'Trusted by our community',
-      sub: 'Merchants, parents, workers, and entrepreneurs share their real journey.',
-      items: [
-        { name: 'Amina K.', role: 'Member for 3 years • Kelasi Savings', initials: 'AK', color: '#074780', text: '"Thanks to Kelasi savings, I paid my daughter\'s tuition on time without stress. Mwangaza Wetu brought peace to our family."' },
-        { name: 'Jean-Pierre M.', role: 'Merchant • Biashara Savings', initials: 'JM', color: '#16A34A', text: '"Cooperative credit allowed me to stock up before the festive season. Transparent terms and great agent support."' },
-        { name: 'Claudine B.', role: 'Founding Member • Nyumba Savings', initials: 'CB', color: '#E56A1E', text: '"Transparent monthly statements and guaranteed security made me an early believer. A truly dependable partner."' },
-      ],
-    },
-    news: {
-      label: 'News & Official Releases',
-      heading: 'Cooperative life & announcements',
-      sub: 'Official bulletins, member meetings, and new feature launches.',
-      items: [
-        { tag: 'Meeting', icon: '🏛️', title: '2026 Annual General Meeting of Members', date: 'November 15, 2026' },
-        { tag: 'Digital', icon: '📱', title: 'Online Member Portal: instant balance and statement check', date: 'October 2026' },
-        { tag: 'Workshop', icon: '📊', title: 'Financial Literacy & Household Budgeting Session', date: 'September 2026' },
-      ],
-    },
-    contact: {
-      label: 'Get in Touch',
-      heading: 'Our advisors are here to help',
-      sub: 'Visit an agency or speak with a member representative today.',
-      address: { label: 'Headquarters', val: 'Kinshasa, Democratic Republic of Congo' },
-      phone:   { label: 'Hotline & WhatsApp', val: '+243 820 000 000' },
-      email:   { label: 'Official Email', val: 'contact@mwangazawetu.cd' },
-      hours:   { label: 'Working Hours', val: 'Monday – Friday: 8:00 AM – 4:30 PM\nSaturday: 9:00 AM – 1:00 PM' },
-      mapLabel: 'Main Branch — Kinshasa, DRC',
-    },
-    cta: {
-      title: 'Ready to build your financial future?',
-      sub: 'Join Mwangaza Wetu today and experience transparent, human-centered financial growth.',
-      btn: 'Open member portal',
-    },
-    footer: {
-      desc: 'Savings and credit cooperative serving Congolese households and entrepreneurs. Guaranteed deposits and certified governance.',
-      links: {
-        services: { title: 'Accounts', items: [['Main Account','#services'],['Kelasi Savings','#services'],['Hospital Savings','#services'],['Cooperative Credit','#services']] },
-        useful: { title: 'Quick Links', items: [['Member Portal','/login'],['How to Join','#comment-ca-marche'],['News','#actualites'],['Contact','#contact']] },
-        legal: { title: 'Compliance', items: [['Cooperative Bylaws','#'],['Internal Rules','#'],['Data Protection','#']] },
-      },
-      copy: `© ${new Date().getFullYear()} Mwangaza Wetu. All rights reserved. Licensed in DRC.`,
-      legal: [['Legal Notices','#'],['Privacy Policy','#']],
-    },
-  },
-} as const;
-
-/* ─────────────────────────────────────────────
-   Public Stats Hook (Safe API fetch, no capital)
-───────────────────────────────────────────── */
-interface DashboardStats {
-  totalMembers: number;
-  activeMembersCount: number;
-  activeProjectsCount: number;
-  repaymentRate: number;
+interface AccountFormula {
+  slug: string;
+  name: string;
+  sub: string;
+  desc: string;
+  color: string;
+  segment: 'particuliers' | 'entrepreneurs' | 'all';
+  icon: any;
+  rateBonus: string;
 }
 
-function usePublicStats() {
-  const [stats, setStats] = useState<DashboardStats | null>(null);
-  const [loading, setLoading] = useState(true);
+const accountsList: AccountFormula[] = [
+  {
+    slug: 'principal',
+    name: 'Compte Courant & Pivot',
+    sub: 'Épargne libre et quotidienne',
+    desc: 'Effectuez vos dépôts et retraits en toute liberté au guichet ou auprès des agents de proximité certifiés.',
+    color: '#074780',
+    segment: 'all',
+    icon: Wallet,
+    rateBonus: 'Liquidité 100% immédiate',
+  },
+  {
+    slug: 'kelasi',
+    name: 'Épargne Kelasi',
+    sub: 'Scolarité & Université',
+    desc: 'Planifiez sereinement les frais académiques de vos enfants et protégez leur avenir sans stress de rentrée.',
+    color: '#D97706',
+    segment: 'particuliers',
+    icon: GraduationCap,
+    rateBonus: 'Bonus rentrée scolaire',
+  },
+  {
+    slug: 'hopital',
+    name: 'Épargne Hôpital',
+    sub: 'Santé & Urgences médicales',
+    desc: 'Un filet de sécurité indispensable pour parer aux imprévus de santé de toute votre famille avec décaissement prioritaire.',
+    color: '#DC2626',
+    segment: 'particuliers',
+    icon: HeartPulse,
+    rateBonus: 'Déblocage prioritaire 24h',
+  },
+  {
+    slug: 'nyumba',
+    name: 'Épargne Nyumba',
+    sub: 'Habitat & Construction',
+    desc: 'Constituez votre apport personnel pour l’achat de parcelle, les matériaux ou la construction de votre maison.',
+    color: '#9333EA',
+    segment: 'particuliers',
+    icon: Home,
+    rateBonus: 'Accès crédit immobilier',
+  },
+  {
+    slug: 'biashara',
+    name: 'Épargne Biashara',
+    sub: 'Commerce & Activités PME',
+    desc: 'Développez votre fonds de roulement commercial, sécurisez vos recettes journalières et accédez aux lignes de crédit.',
+    color: '#0D9488',
+    segment: 'entrepreneurs',
+    icon: Store,
+    rateBonus: 'Facilités de caisse & stock',
+  },
+  {
+    slug: 'mutoto',
+    name: 'Épargne Mutoto',
+    sub: 'Avenir des mineurs & enfants',
+    desc: 'Un compte bloqué au nom de votre enfant pour lui garantir un capital d’envol à sa majorité ou pour ses études.',
+    color: '#2563EB',
+    segment: 'particuliers',
+    icon: Baby,
+    rateBonus: 'Intérêts capitalisés garantis',
+  },
+];
 
-  useEffect(() => {
-    const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
-    fetch(`${API}/public/stats`, { cache: 'no-store' })
-      .then((r) => r.json())
-      .then((d) => {
-        if (d?.data) setStats(d.data);
-        else if (d?.totalMembers !== undefined) setStats(d);
-      })
-      .catch(() => {
-        setStats({
-          totalMembers: 520,
-          activeMembersCount: 480,
-          activeProjectsCount: 12,
-          repaymentRate: 98,
-        });
-      })
-      .finally(() => setLoading(false));
-  }, []);
-
-  return { stats, loading };
-}
-
-/* ─────────────────────────────────────────────
-   Service Icons Mapping
-───────────────────────────────────────────── */
-const ServiceIcons: Record<string, TablerIcon> = {
-  principal: IconWallet,
-  kelasi: IconSchool,
-  hopital: IconHeartPlus,
-  nyumba: IconHome,
-  mutoto: IconBabyCarriage,
-  biashara: IconBuildingStore,
-};
-
-/* ─────────────────────────────────────────────
-   MAIN COMPONENT
-───────────────────────────────────────────── */
 export default function VitrinePage() {
   const [lang, setLang] = useState<Lang>('FR');
-  const [mobileOpen, setMobileOpen] = useState(false);
-  const t = copy[lang];
-  const { stats, loading } = usePublicStats();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [activeSegment, setActiveSegment] = useState<Segment>('particuliers');
+  const [modalOpen, setModalOpen] = useState(false);
 
-  const statItems = [
-    {
-      icon: <IconUsers size={22} />,
-      value: loading ? '…' : stats ? (stats.activeMembersCount ?? stats.totalMembers).toLocaleString() : '500+',
-      label: t.stats.members,
-    },
-    {
-      icon: <IconChartBar size={22} />,
-      value: loading ? '…' : stats ? stats.activeProjectsCount.toLocaleString() : '12',
-      label: t.stats.projects,
-    },
-    {
-      icon: <IconCircleCheckFilled size={22} />,
-      value: loading ? '…' : stats ? `${stats.repaymentRate ?? 98}%` : '98%',
-      label: t.stats.repayment,
-    },
-    {
-      icon: <IconBuildingBank size={22} />,
-      value: '5+ Ans',
-      label: t.stats.years,
-    },
-  ];
+  // Simulateur State
+  const [simType, setSimType] = useState<SimType>('credit');
+  const [amount, setAmount] = useState<number>(1000);
+  const [durationMonths, setDurationMonths] = useState<number>(12);
+  const [currency, setCurrency] = useState<'USD' | 'CDF'>('USD');
+
+  // Convertisseur devises rapide
+  const [fxAmountUSD, setFxAmountUSD] = useState<number>(100);
+  const FX_RATE = 2850;
+
+  // Calculs du simulateur
+  const simResults = useMemo(() => {
+    if (simType === 'credit') {
+      const monthlyRate = 0.02; // 2% indicatif
+      const totalInterest = amount * monthlyRate * durationMonths;
+      const totalToRepay = amount + totalInterest;
+      const monthlyPayment = totalToRepay / durationMonths;
+      return {
+        label1: 'Mensualité estimée',
+        val1: `${Math.round(monthlyPayment).toLocaleString()} ${currency}`,
+        label2: 'Total remboursable',
+        val2: `${Math.round(totalToRepay).toLocaleString()} ${currency}`,
+        info: 'Estimation indicative soumise aux conditions d’adhésion et de régularité d’épargne.',
+      };
+    } else {
+      const bonusRate = 0.045; // 4.5% l'an
+      const estimatedBonus = (amount * bonusRate * (durationMonths / 12));
+      const totalSaved = amount + estimatedBonus;
+      return {
+        label1: 'Capital accumulé estimé',
+        val1: `${Math.round(totalSaved).toLocaleString()} ${currency}`,
+        label2: 'Bonus coopératif projeté',
+        val2: `+${Math.round(estimatedBonus).toLocaleString()} ${currency}`,
+        info: 'Rendement coopératif calculé selon les statuts de distribution des excédents d’exercice.',
+      };
+    }
+  }, [simType, amount, durationMonths, currency]);
+
+  // Filtrage des formules selon le segment
+  const filteredAccounts = useMemo(() => {
+    if (activeSegment === 'entrepreneurs') {
+      return accountsList.filter((a) => a.segment === 'entrepreneurs' || a.slug === 'principal');
+    }
+    if (activeSegment === 'diaspora') {
+      return accountsList.filter((a) => a.slug === 'nyumba' || a.slug === 'principal' || a.slug === 'mutoto');
+    }
+    return accountsList;
+  }, [activeSegment]);
 
   return (
-    <div className="mw-vitrine">
+    <div className="bk-portal">
       {/* ─────────────────────────────────────────────────────────────
-          1. TOPBAR INSTITUTIONNELLE (Style Equity BCDC / Rawbank)
+          1. TOPBAR INSTITUTIONNELLE STYLE EQUITY BCDC / BANK OF KIGALI
          ───────────────────────────────────────────────────────────── */}
-      <div className="v-topbar">
-        <div className="v-topbar-inner">
-          <div className="v-topbar-left">
-            <span className="v-topbar-item">
-              <IconPhone size={13} /> {t.topbar.hotline}
+      <aside className="bk-topbar">
+        <div className="bk-container bk-topbar-inner">
+          <div className="bk-topbar-left">
+            <span className="bk-topbar-tag">
+              <ShieldCheck size={13} className="text-emerald-400" />
+              COOPÉRATIVE AGRÉÉE BCC N° 048/COOPEC
             </span>
-            <span className="v-topbar-item" style={{ opacity: 0.7 }}>
-              <IconClock size={13} /> {t.topbar.hours}
+            <span className="bk-topbar-divider">|</span>
+            <span className="bk-topbar-link">
+              <Phone size={13} /> Hotline & WhatsApp : <strong>+243 820 000 000</strong>
             </span>
-            <span className="v-topbar-ticker">
-              <strong>CDF / USD</strong> {t.topbar.ticker}
+            <span className="bk-topbar-divider">|</span>
+            <span className="bk-topbar-hours">
+              <Clock size={13} /> Agences : Lun – Sam 8h00 – 16h30
             </span>
           </div>
 
-          <div className="v-topbar-right">
-            <span className="v-topbar-item" style={{ color: '#86EFAC', fontWeight: 600 }}>
-              <IconShieldCheck size={14} /> {t.topbar.regulated}
-            </span>
-            <div className="v-topbar-lang">
+          <div className="bk-topbar-right">
+            <div className="bk-fx-pill">
+              <ArrowLeftRight size={12} />
+              <span>Taux indicatif : <strong>1 USD = 2 850 CDF</strong></span>
+            </div>
+            <div className="bk-lang-switch">
               <button
-                className={`v-topbar-lang-btn${lang === 'FR' ? ' active' : ''}`}
+                type="button"
+                className={lang === 'FR' ? 'active' : ''}
                 onClick={() => setLang('FR')}
-                aria-label="Français"
               >
                 FR
               </button>
-              <span style={{ opacity: 0.3 }}>|</span>
+              <span>/</span>
               <button
-                className={`v-topbar-lang-btn${lang === 'EN' ? ' active' : ''}`}
+                type="button"
+                className={lang === 'EN' ? 'active' : ''}
                 onClick={() => setLang('EN')}
-                aria-label="English"
               >
                 EN
               </button>
             </div>
           </div>
         </div>
-      </div>
+      </aside>
 
       {/* ─────────────────────────────────────────────────────────────
-          2. NAVIGATION PRINCIPALE (Style Bank of Kigali / Rawbank)
+          2. BANDEAU DE SEGMENTATION (Style BOA & Equity BCDC)
          ───────────────────────────────────────────────────────────── */}
-      <nav className="v-nav" role="navigation">
-        <div className="v-nav-inner">
-          {/* Logo & Slogan Institutionnel */}
-          <a href="#" className="v-nav-brand">
-            <img
-              src="/logo.png"
-              alt="Logo Mwangaza Wetu"
-              className="v-nav-logo-img"
-            />
-            <div className="v-nav-brand-title">
-              <span>Mwangaza Wetu</span>
-              <span className="v-nav-brand-sub">{t.nav.brandSub}</span>
+      <section className="bk-segment-strip">
+        <div className="bk-container bk-segment-inner">
+          <div className="bk-segment-tabs">
+            <button
+              type="button"
+              className={`bk-seg-tab ${activeSegment === 'particuliers' ? 'active' : ''}`}
+              onClick={() => setActiveSegment('particuliers')}
+            >
+              <Users size={14} /> Particuliers & Familles
+            </button>
+            <button
+              type="button"
+              className={`bk-seg-tab ${activeSegment === 'entrepreneurs' ? 'active' : ''}`}
+              onClick={() => setActiveSegment('entrepreneurs')}
+            >
+              <Store size={14} /> Commerçants & Entrepreneurs
+            </button>
+            <button
+              type="button"
+              className={`bk-seg-tab ${activeSegment === 'diaspora' ? 'active' : ''}`}
+              onClick={() => setActiveSegment('diaspora')}
+            >
+              <Landmark size={14} /> Diaspora & Investissement
+            </button>
+          </div>
+          <div className="bk-segment-help">
+            <span>Besoin d’un conseil personnalisé ?</span>
+            <a href="#contact" className="bk-link-help">Nos conseillers d’agence →</a>
+          </div>
+        </div>
+      </section>
+
+      {/* ─────────────────────────────────────────────────────────────
+          3. NAVBAR PRINCIPALE HAUTE-GAMME
+         ───────────────────────────────────────────────────────────── */}
+      <header className="bk-header">
+        <div className="bk-container bk-header-inner">
+          {/* Logo officiel */}
+          <Link href="/" className="bk-brand">
+            <div className="bk-logo-frame">
+              <img src="/logo.png" alt="Mwangaza Wetu" className="bk-logo-img" />
             </div>
-          </a>
+            <div className="bk-brand-titles">
+              <span className="bk-brand-name">MWANGAZA WETU</span>
+              <span className="bk-brand-motto">Épargne • Crédit • Progrès Communautaire</span>
+            </div>
+          </Link>
 
           {/* Menus Desktop */}
-          <ul className="v-nav-links">
-            {[
-              ['#services', t.nav.services],
-              ['#comment-ca-marche', t.nav.howItWorks],
-              ['#a-propos', t.nav.about],
-              ['#actualites', t.nav.news],
-              ['#contact', t.nav.contact],
-            ].map(([href, label]) => (
-              <li key={href}><a href={href}>{label}</a></li>
-            ))}
-          </ul>
+          <nav className="bk-nav" aria-label="Menu principal">
+            <ul className="bk-nav-list">
+              <li>
+                <a href="#services" className="bk-nav-item">
+                  Comptes & Formules
+                </a>
+              </li>
+              <li>
+                <a href="#simulateur" className="bk-nav-item">
+                  Simulateur Express
+                </a>
+              </li>
+              <li>
+                <a href="#securite" className="bk-nav-item">
+                  Sécurité & Biométrie
+                </a>
+              </li>
+              <li>
+                <a href="#fonctionnement" className="bk-nav-item">
+                  Comment adhérer
+                </a>
+              </li>
+              <li>
+                <a href="#contact" className="bk-nav-item">
+                  Nos Agences
+                </a>
+              </li>
+            </ul>
+          </nav>
 
-          {/* Actions : Espace Membre (Outline) + Devenir Membre (CTA Coloré) */}
-          <div className="v-nav-actions">
-            <Link href="/login" className="v-btn-nav-outline">
-              {t.nav.login}
+          {/* Boutons d'accès directs */}
+          <div className="bk-header-actions">
+            <Link href="/login" className="bk-btn-login">
+              <Lock size={15} className="bk-lock-icon" />
+              <span>Espace Membre</span>
             </Link>
-            <a href="#services" className="v-btn-nav-primary">
-              {t.nav.openAccount} <IconArrowRight size={14} />
-            </a>
 
-            {/* Hamburger Mobile */}
             <button
-              className="v-hamburger"
-              onClick={() => setMobileOpen((v) => !v)}
+              type="button"
+              className="bk-btn-open-account"
+              onClick={() => setModalOpen(true)}
+            >
+              <span>Devenir membre</span>
+              <ArrowRight size={15} />
+            </button>
+
+            {/* Mobile Hamburger */}
+            <button
+              type="button"
+              className="bk-mobile-toggle"
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
               aria-label="Menu"
             >
-              {mobileOpen ? <IconX size={22} color="#074780" /> : <IconMenu2 size={22} color="#074780" />}
+              {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
             </button>
           </div>
         </div>
 
-        {/* Menu Mobile Déroulant */}
-        <div className={`v-mobile-menu${mobileOpen ? ' open' : ''}`}>
-          {[
-            ['#services', t.nav.services],
-            ['#comment-ca-marche', t.nav.howItWorks],
-            ['#a-propos', t.nav.about],
-            ['#actualites', t.nav.news],
-            ['#contact', t.nav.contact],
-          ].map(([href, label]) => (
-            <a key={href} href={href} onClick={() => setMobileOpen(false)}>{label}</a>
-          ))}
-          <Link
-            href="/login"
-            onClick={() => setMobileOpen(false)}
-            style={{ color: '#074780', fontWeight: 750, marginTop: 4 }}
-          >
-            {t.nav.login} →
-          </Link>
-        </div>
-      </nav>
+        {/* Menu Mobile Accordéon */}
+        {mobileMenuOpen && (
+          <div className="bk-mobile-drawer">
+            <div className="bk-mobile-drawer-links">
+              <a href="#services" onClick={() => setMobileMenuOpen(false)}>Comptes & Formules</a>
+              <a href="#simulateur" onClick={() => setMobileMenuOpen(false)}>Simulateur de crédit / épargne</a>
+              <a href="#securite" onClick={() => setMobileMenuOpen(false)}>Sécurité & Biométrie</a>
+              <a href="#fonctionnement" onClick={() => setMobileMenuOpen(false)}>Comment adhérer</a>
+              <a href="#contact" onClick={() => setMobileMenuOpen(false)}>Nos Agences</a>
+            </div>
+            <div className="bk-mobile-drawer-actions">
+              <Link href="/login" className="bk-btn-login w-full justify-center">
+                <Lock size={16} /> Espace Membre Sécurisé
+              </Link>
+              <button
+                type="button"
+                className="bk-btn-open-account w-full justify-center"
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  setModalOpen(true);
+                }}
+              >
+                Devenir membre →
+              </button>
+            </div>
+          </div>
+        )}
+      </header>
 
       {/* ─────────────────────────────────────────────────────────────
-          3. HERO BANCAIRE RICHE (Bank of Kigali + Rawbank Product Mockup)
+          4. BANDEAU DE SÉCURITÉ OFFICIEL & ANTI-FRAUDE (Style Equity BCDC)
          ───────────────────────────────────────────────────────────── */}
-      <section className="v-hero-bank" id="accueil">
-        <div className="v-hero-bank-pattern" aria-hidden />
+      <section className="bk-fraud-alert" id="securite">
+        <div className="bk-container bk-fraud-inner">
+          <div className="bk-fraud-icon">
+            <ShieldAlert size={20} />
+          </div>
+          <div className="bk-fraud-text">
+            <strong>Avertissement Officiel de Sécurité :</strong> Les agents et guichetiers Mwangaza Wetu ne vous demanderont <u>JAMAIS</u> votre mot de passe, ni code PIN par téléphone ou WhatsApp. Toute opération en agence ou auprès d'un agent délégué fait l'objet d'une validation biométrique certifiée.
+          </div>
+        </div>
+      </section>
 
-        <div className="v-hero-bank-inner">
-          {/* Colonne Gauche : Titre fort, lead, CTAs et Social proof Bank of Kigali */}
-          <div>
-            <div className="v-hero-tag">
-              <span className="v-hero-tag-dot" />
-              {t.hero.badge}
+      {/* ─────────────────────────────────────────────────────────────
+          5. HERO BANCAIRE RICHE (Bank of Kigali + Equity BCDC)
+         ───────────────────────────────────────────────────────────── */}
+      <section className="bk-hero">
+        <div className="bk-hero-bg-overlay" />
+        <div className="bk-container bk-hero-inner">
+          {/* Colonne gauche : Titre & Propositions de valeur */}
+          <div className="bk-hero-content">
+            <div className="bk-badge-pill">
+              <Sparkles size={14} className="text-amber-400" />
+              <span>COOPÉRATIVE D’ÉPARGNE ET DE CRÉDIT DE RÉFÉRENCE EN RDC</span>
             </div>
 
-            <h1 className="v-hero-title">{t.hero.title}</h1>
-            <p className="v-hero-lead">{t.hero.desc}</p>
+            <h1 className="bk-hero-title">
+              La finance solidaire qui <br />
+              <span className="bk-highlight">sécurise vos ambitions</span> au quotidien.
+            </h1>
 
-            <div className="v-hero-actions">
-              <a href="#services" className="v-btn-hero-primary">
-                {t.hero.ctaPrimary} <IconArrowRight size={16} />
-              </a>
-              <Link href="/login" className="v-btn-hero-secondary">
-                {t.hero.ctaSecondary}
+            <p className="bk-hero-lead">
+              Sécurisez votre épargne, planifiez les études de vos enfants avec <strong>Kelasi</strong>, financez votre stock avec <strong>Biashara</strong> et bâtissez votre logement avec des crédits responsables.
+            </p>
+
+            <div className="bk-hero-cta-group">
+              <button
+                type="button"
+                onClick={() => setModalOpen(true)}
+                className="bk-cta-primary"
+              >
+                <span>Ouvrir mon compte maintenant</span>
+                <ArrowRight size={18} />
+              </button>
+              <Link href="/login" className="bk-cta-secondary">
+                <Lock size={16} />
+                <span>Consulter mes comptes en direct</span>
               </Link>
             </div>
 
-            {/* Social Proof (Style Bank of Kigali : avatar stack avec étoiles et avis certifiés) */}
-            <div className="v-hero-social-proof">
-              <div className="v-avatar-stack">
-                {[
-                  { label: 'A', bg: '#0B5EA8' },
-                  { label: 'J', bg: '#16A34A' },
-                  { label: 'C', bg: '#E56A1E' },
-                  { label: 'M', bg: '#9A75C1' },
-                  { label: 'K', bg: '#4384B5' },
-                ].map((av, idx) => (
-                  <div
-                    key={idx}
-                    className="v-avatar-bubble"
-                    style={{ background: av.bg }}
-                  >
-                    {av.label}
-                  </div>
+            {/* Social Proof certifié */}
+            <div className="bk-social-proof">
+              <div className="bk-rating-stars">
+                {[...Array(5)].map((_, i) => (
+                  <Star key={i} size={15} fill="#FBBF24" color="#FBBF24" />
                 ))}
+                <span className="bk-rating-score">4.9 / 5</span>
               </div>
-              <div className="v-social-proof-content">
-                <div className="v-social-proof-stars">
-                  {[...Array(5)].map((_, i) => (
-                    <span key={i}>★</span>
-                  ))}
-                  <strong style={{ color: '#fff', marginLeft: 6 }}>{t.hero.rating}</strong>
-                </div>
-                <span className="v-social-proof-text">
-                  <strong>500+ membres</strong> · {t.hero.trust}
-                </span>
-              </div>
+              <p className="bk-social-text">
+                Plus de <strong>520 familles et commerçants actifs</strong> nous confient leur avenir financier.
+              </p>
             </div>
           </div>
 
-          {/* Colonne Droite : Showcase Bancaire (Carte Membre Virtuelle + Passbook Rawbank) */}
-          <div className="v-bank-showcase" aria-hidden>
-            {/* 1. Carte de Membre Digitale Mwangaza Gold */}
-            <div className="v-member-card">
-              <div className="v-card-top">
-                <div className="v-card-chip" />
-                <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-                  <img
-                    src="/logo.png"
-                    alt="Logo"
-                    style={{
-                      width: 24,
-                      height: 24,
-                      borderRadius: '50%',
-                      background: '#fff',
-                      padding: 1.5,
-                      objectFit: 'contain',
-                    }}
-                  />
-                  <span className="v-card-network">
-                    MWANGAZA COOP
-                  </span>
-                </div>
+          {/* Colonne droite : Carte bancaire prestige & Passbook digital */}
+          <div className="bk-hero-showcase">
+            {/* Carte de Membre Digitale Mwangaza Gold */}
+            <div className="bk-virtual-card">
+              <div className="bk-card-header">
+                <div className="bk-card-chip" />
+                <span className="bk-card-tier">MEMBRE PRIVILÈGE</span>
               </div>
-
-              <div className="v-card-number">{t.hero.card.number}</div>
-
-              <div className="v-card-bottom">
+              <div className="bk-card-number">•••• •••• •••• 5824</div>
+              <div className="bk-card-footer">
                 <div>
-                  <div className="v-card-holder-label">{t.hero.card.type}</div>
-                  <div className="v-card-holder-name">{t.hero.card.holder}</div>
+                  <div className="bk-card-label">TITULAIRE DU COMPTE</div>
+                  <div className="bk-card-name">MEMBRE ACTIF CERTIFIÉ</div>
                 </div>
-                <div style={{ textAlign: 'right' }}>
-                  <span className="v-card-badge-gold">{t.hero.card.category}</span>
+                <div className="bk-card-brand">
+                  <span className="bk-card-tag">MWANGAZA GOLD</span>
                 </div>
               </div>
             </div>
 
-            {/* 2. Passbook Épargne Vivant (Style Rawbank) */}
-            <div className="v-passbook-widget">
-              <div className="v-passbook-header">
-                <span className="v-passbook-tag">
-                  <IconSchool size={13} /> {t.hero.widget.tag}
-                </span>
-                <span className="v-passbook-status">
-                  {lang === 'FR' ? 'Compte certifié' : 'Verified account'}
-                </span>
+            {/* Widget transactionnel en temps réel */}
+            <div className="bk-hero-widget">
+              <div className="bk-widget-top">
+                <div className="bk-widget-badge">
+                  <CheckCircle2 size={13} className="text-emerald-500" />
+                  <span>Dernière opération vérifiée</span>
+                </div>
+                <span className="bk-widget-time">Il y a 3 min</span>
+              </div>
+              <div className="bk-widget-body">
+                <div>
+                  <div className="bk-widget-acc">Épargne Scolaire Kelasi</div>
+                  <div className="bk-widget-amount">+ 150.00 USD</div>
+                </div>
+                <span className="bk-widget-status">Validé par biométrie</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ─────────────────────────────────────────────────────────────
+            6. LE QUICK-ACTION TRAY FLOTTANT (Exactement comme Bank of Kigali)
+           ───────────────────────────────────────────────────────────── */}
+        <div className="bk-container bk-quick-tray-container">
+          <div className="bk-quick-tray">
+            <div
+              className="bk-tray-card"
+              role="button"
+              tabIndex={0}
+              onClick={() => setModalOpen(true)}
+            >
+              <div className="bk-tray-icon bg-blue-50 text-blue-700">
+                <CreditCard size={24} />
+              </div>
+              <div className="bk-tray-info">
+                <h3>Ouvrir un compte</h3>
+                <p>Adhésion simple en 3 étapes</p>
+              </div>
+              <ChevronRight size={18} className="bk-tray-arrow" />
+            </div>
+
+            <a href="#simulateur" className="bk-tray-card">
+              <div className="bk-tray-icon bg-amber-50 text-amber-600">
+                <Calculator size={24} />
+              </div>
+              <div className="bk-tray-info">
+                <h3>Simuler mon crédit</h3>
+                <p>Calcul des mensualités en direct</p>
+              </div>
+              <ChevronRight size={18} className="bk-tray-arrow" />
+            </a>
+
+            <a href="#devises" className="bk-tray-card">
+              <div className="bk-tray-icon bg-emerald-50 text-emerald-600">
+                <ArrowLeftRight size={24} />
+              </div>
+              <div className="bk-tray-info">
+                <h3>Taux de change</h3>
+                <p>1 USD = 2 850 CDF (Achat/Vente)</p>
+              </div>
+              <ChevronRight size={18} className="bk-tray-arrow" />
+            </a>
+
+            <a href="#contact" className="bk-tray-card">
+              <div className="bk-tray-icon bg-purple-50 text-purple-600">
+                <MapPin size={24} />
+              </div>
+              <div className="bk-tray-info">
+                <h3>Nos Agences</h3>
+                <p>Guichets & agents de quartier</p>
+              </div>
+              <ChevronRight size={18} className="bk-tray-arrow" />
+            </a>
+          </div>
+        </div>
+      </section>
+
+      {/* ─────────────────────────────────────────────────────────────
+          7. SECTION SIMULATEUR INTERACTIF (Style Loan Calculator de BK)
+         ───────────────────────────────────────────────────────────── */}
+      <section className="bk-section bk-calculator-section" id="simulateur">
+        <div className="bk-container">
+          <div className="bk-section-header text-center">
+            <div className="bk-kicker">OUTIL FINANCIER EN LIGNE</div>
+            <h2 className="bk-section-title">
+              Planifiez votre avenir financier avec notre simulateur
+            </h2>
+            <p className="bk-section-sub">
+              Ajustez le montant et la durée pour estimer immédiatement vos mensualités de crédit coopératif ou le rendement de votre épargne thématique.
+            </p>
+          </div>
+
+          <div className="bk-calculator-box">
+            {/* Toggle Épargne / Crédit */}
+            <div className="bk-calc-tabs">
+              <button
+                type="button"
+                className={`bk-calc-tab ${simType === 'credit' ? 'active' : ''}`}
+                onClick={() => setSimType('credit')}
+              >
+                <Landmark size={18} /> Simuler un Crédit Coopératif
+              </button>
+              <button
+                type="button"
+                className={`bk-calc-tab ${simType === 'epargne' ? 'active' : ''}`}
+                onClick={() => setSimType('epargne')}
+              >
+                <Wallet size={18} /> Simuler mon Épargne Progressive
+              </button>
+            </div>
+
+            <div className="bk-calc-grid">
+              {/* Sliders de configuration */}
+              <div className="bk-calc-inputs">
+                {/* Choix devise */}
+                <div className="bk-input-group">
+                  <div className="flex justify-between items-center mb-2">
+                    <label className="bk-input-label">Devise de l'opération :</label>
+                    <div className="bk-currency-toggle">
+                      <button
+                        type="button"
+                        className={currency === 'USD' ? 'active' : ''}
+                        onClick={() => setCurrency('USD')}
+                      >
+                        USD ($)
+                      </button>
+                      <button
+                        type="button"
+                        className={currency === 'CDF' ? 'active' : ''}
+                        onClick={() => setCurrency('CDF')}
+                      >
+                        CDF (FC)
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Slider Montant */}
+                <div className="bk-input-group">
+                  <div className="flex justify-between items-center mb-2">
+                    <label className="bk-input-label">
+                      {simType === 'credit' ? 'Montant du financement souhaité :' : 'Capital initial à épargner :'}
+                    </label>
+                    <span className="bk-input-val">
+                      {amount.toLocaleString()} {currency}
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min={currency === 'USD' ? 100 : 250000}
+                    max={currency === 'USD' ? 10000 : 25000000}
+                    step={currency === 'USD' ? 50 : 100000}
+                    value={amount}
+                    onChange={(e) => setAmount(Number(e.target.value))}
+                    className="bk-slider"
+                  />
+                  <div className="bk-slider-bounds">
+                    <span>{currency === 'USD' ? '100 $' : '250 000 FC'}</span>
+                    <span>{currency === 'USD' ? '10 000 $' : '25 000 000 FC'}</span>
+                  </div>
+                </div>
+
+                {/* Slider Durée */}
+                <div className="bk-input-group mt-6">
+                  <div className="flex justify-between items-center mb-2">
+                    <label className="bk-input-label">Durée de l'engagement :</label>
+                    <span className="bk-input-val">{durationMonths} mois</span>
+                  </div>
+                  <input
+                    type="range"
+                    min={3}
+                    max={36}
+                    step={3}
+                    value={durationMonths}
+                    onChange={(e) => setDurationMonths(Number(e.target.value))}
+                    className="bk-slider"
+                  />
+                  <div className="bk-slider-bounds">
+                    <span>3 mois</span>
+                    <span>12 mois</span>
+                    <span>24 mois</span>
+                    <span>36 mois</span>
+                  </div>
+                </div>
               </div>
 
-              <h4 className="v-passbook-title">{t.hero.widget.title}</h4>
-
-              <div className="v-passbook-progress-wrap">
-                <div className="v-passbook-progress-bar">
-                  <div className="v-passbook-progress-fill" />
+              {/* Panneau de résultats chiffrés */}
+              <div className="bk-calc-result-card">
+                <div className="bk-result-badge">
+                  {simType === 'credit' ? 'PROPOSITION DE CRÉDIT ESTIMÉE' : 'PROJECTION D’ÉPARGNE'}
                 </div>
-                <div className="v-passbook-progress-labels">
-                  <span>{t.hero.widget.targetLabel}</span>
-                  <strong>{t.hero.widget.rateLabel}</strong>
-                </div>
-              </div>
 
-              <div className="v-floating-notif">
-                <div className="v-floating-notif-icon">✓</div>
-                <span>{t.hero.widget.notif}</span>
+                <div className="bk-result-main">
+                  <span className="bk-result-sublabel">{simResults.label1}</span>
+                  <div className="bk-result-big">{simResults.val1}</div>
+                </div>
+
+                <div className="bk-result-secondary">
+                  <span>{simResults.label2}</span>
+                  <strong>{simResults.val2}</strong>
+                </div>
+
+                <p className="bk-result-disclaimer">{simResults.info}</p>
+
+                <div className="bk-result-actions">
+                  <button
+                    type="button"
+                    onClick={() => setModalOpen(true)}
+                    className="bk-btn-apply"
+                  >
+                    <span>Faire ma demande en agence</span>
+                    <ArrowRight size={16} />
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -645,282 +667,392 @@ export default function VitrinePage() {
       </section>
 
       {/* ─────────────────────────────────────────────────────────────
-          4. BARRE DE CHIFFRES CLÉS DOCKÉE (Style Bank of Kigali)
+          8. SECTION DES FORMULES ADAPTÉES PAR SEGMENT
          ───────────────────────────────────────────────────────────── */}
-      <section className="v-stats-dock">
-        <div className="v-stats-dock-inner">
-          {statItems.map((s, i) => (
-            <div className="v-stat-card" key={i}>
-              <div className="v-stat-icon-wrap">{s.icon}</div>
-              <div className="v-stat-info">
-                <span className="v-stat-num">{s.value}</span>
-                <span className="v-stat-title">{s.label}</span>
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
+      <section className="bk-section" id="services">
+        <div className="bk-container">
+          <div className="bk-section-header">
+            <div className="bk-kicker">NOS SOLUTIONS PAR ÉTAPE DE VIE</div>
+            <h2 className="bk-section-title">
+              Des comptes adaptés à votre situation réelle
+            </h2>
+            <p className="bk-section-sub">
+              Chaque formule répond à un objectif concret : protéger la famille, scolariser vos enfants ou investir dans votre commerce.
+            </p>
+          </div>
 
-      {/* ─────────────────────────────────────────────────────────────
-          5. SERVICES & FORMULES D'ÉPARGNE
-         ───────────────────────────────────────────────────────────── */}
-      <section className="v-section" id="services">
-        <div className="v-section-inner">
-          <div className="v-label">{t.services.label}</div>
-          <h2 className="v-heading">{t.services.heading}</h2>
-          <p className="v-sub">{t.services.sub}</p>
-
-          <div className="v-services-grid">
-            {t.services.accounts.map((acc) => {
-              const Icon = ServiceIcons[acc.slug] ?? IconWallet;
+          <div className="bk-cards-grid">
+            {filteredAccounts.map((acc) => {
+              const IconComp = acc.icon;
               return (
-                <div className="v-service-card" key={acc.slug}>
-                  <div className="v-service-icon" style={{ background: `${acc.color}18` }}>
-                    <Icon size={24} color={acc.color} />
+                <div className="bk-product-card" key={acc.slug}>
+                  <div className="bk-card-accent" style={{ background: acc.color }} />
+                  <div className="bk-prod-top">
+                    <div
+                      className="bk-prod-icon"
+                      style={{ background: `${acc.color}15`, color: acc.color }}
+                    >
+                      <IconComp size={24} />
+                    </div>
+                    <span className="bk-prod-tag" style={{ color: acc.color, borderColor: `${acc.color}40` }}>
+                      {acc.rateBonus}
+                    </span>
                   </div>
-                  <div>
-                    <h3 className="v-service-name">{acc.name}</h3>
-                    <p className="v-service-sub">{acc.sub}</p>
+
+                  <h3 className="bk-prod-name">{acc.name}</h3>
+                  <div className="bk-prod-sub">{acc.sub}</div>
+                  <p className="bk-prod-desc">{acc.desc}</p>
+
+                  <div className="bk-prod-action">
+                    <button
+                      type="button"
+                      onClick={() => setModalOpen(true)}
+                      className="bk-prod-link"
+                    >
+                      <span>Souscrire à ce compte</span>
+                      <ChevronRight size={16} />
+                    </button>
                   </div>
-                  <p className="v-service-desc">{acc.desc}</p>
                 </div>
               );
             })}
+          </div>
+        </div>
+      </section>
 
-            {/* Carte Crédit Spéciale pleine largeur */}
-            <div className="v-service-card credit" style={{ gridColumn: '1 / -1' }}>
-              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 20, flexWrap: 'wrap' }}>
-                <div className="v-service-icon" style={{ background: 'rgba(255,255,255,0.15)', flexShrink: 0 }}>
-                  <IconCreditCard size={26} color="#fff" />
+      {/* ─────────────────────────────────────────────────────────────
+          9. CONVERTISSEUR DE DEVISES EN DIRECT (CDF / USD)
+         ───────────────────────────────────────────────────────────── */}
+      <section className="bk-section bk-fx-section" id="devises">
+        <div className="bk-container">
+          <div className="bk-fx-box">
+            <div className="bk-fx-header">
+              <div>
+                <h3 className="text-xl font-bold text-slate-900">
+                  Convertisseur de devises du jour
+                </h3>
+                <p className="text-sm text-slate-500">
+                  Taux indicatif appliqué sur les opérations de dépôt et de change en agence.
+                </p>
+              </div>
+              <div className="bk-rate-badge">
+                1 USD = <strong>2 850 CDF</strong>
+              </div>
+            </div>
+
+            <div className="bk-fx-converter-grid">
+              <div className="bk-fx-input-wrap">
+                <label className="text-xs font-semibold uppercase text-slate-500">Montant en USD ($)</label>
+                <div className="flex items-center gap-2 mt-1">
+                  <input
+                    type="number"
+                    min={1}
+                    value={fxAmountUSD}
+                    onChange={(e) => setFxAmountUSD(Math.max(0, Number(e.target.value)))}
+                    className="bk-fx-input"
+                  />
+                  <span className="font-bold text-slate-700">USD</span>
                 </div>
-                <div style={{ flex: 1 }}>
-                  <h3 className="v-service-name">{t.services.credit.name}</h3>
-                  <p className="v-service-sub">{t.services.credit.sub}</p>
-                  <p className="v-service-desc" style={{ marginTop: 8 }}>{t.services.credit.desc}</p>
+              </div>
+
+              <div className="flex items-center justify-center">
+                <div className="bk-fx-arrow">
+                  <ArrowLeftRight size={20} />
                 </div>
-                <Link href="/login" className="v-btn-hero-primary" style={{ flexShrink: 0, marginTop: 4 }}>
-                  {lang === 'FR' ? 'Accéder au crédit' : 'Access credit'} <IconArrowRight size={15} />
+              </div>
+
+              <div className="bk-fx-input-wrap">
+                <label className="text-xs font-semibold uppercase text-slate-500">Équivalent en Francs Congolais (CDF)</label>
+                <div className="flex items-center gap-2 mt-1">
+                  <div className="bk-fx-result">
+                    {(fxAmountUSD * FX_RATE).toLocaleString()} <strong>CDF</strong>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ─────────────────────────────────────────────────────────────
+          10. CANAUX DIGITAUX & PROXIMITÉ (Style Rawbank / Bank of Kigali)
+         ───────────────────────────────────────────────────────────── */}
+      <section className="bk-section bk-digital-section" id="canaux">
+        <div className="bk-container">
+          <div className="bk-digital-grid">
+            <div className="bk-digital-text">
+              <div className="bk-kicker">MODERNITÉ & SÉCURITÉ</div>
+              <h2 className="bk-section-title">
+                Votre coopérative dans votre poche et à chaque coin de rue
+              </h2>
+              <p className="bk-section-sub">
+                Mwangaza Wetu allie la force de la technologie digitale à la proximité humaine de ses agents de terrain.
+              </p>
+
+              <div className="bk-channel-list">
+                <div className="bk-channel-item">
+                  <div className="bk-ch-icon">
+                    <Lock size={20} />
+                  </div>
+                  <div>
+                    <h4>Espace Membre Web Sécurisé</h4>
+                    <p>Consultez vos soldes, téléchargez vos relevés d’épargne et suivez vos échéances 24h/24.</p>
+                  </div>
+                </div>
+
+                <div className="bk-channel-item">
+                  <div className="bk-ch-icon">
+                    <ShieldCheck size={20} />
+                  </div>
+                  <div>
+                    <h4>Vérification Biométrique au Guichet</h4>
+                    <p>Vos dépôts et retraits sont authentifiés par empreinte digitale pour prévenir toute usurpation.</p>
+                  </div>
+                </div>
+
+                <div className="bk-channel-item">
+                  <div className="bk-ch-icon">
+                    <Phone size={20} />
+                  </div>
+                  <div>
+                    <h4>Alertes SMS & WhatsApp Instantanées</h4>
+                    <p>Recevez un accusé de réception officiel dès que votre versement est enregistré dans le système.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Mockup Espace Membre */}
+            <div className="bk-digital-preview">
+              <div className="bk-phone-frame">
+                <div className="bk-phone-screen">
+                  <div className="bk-screen-topbar">
+                    <span>9:41</span>
+                    <span>Mwangaza Mobile</span>
+                  </div>
+                  <div className="bk-screen-card">
+                    <div className="text-xs opacity-75">Solde Global Épargne</div>
+                    <div className="text-2xl font-bold mt-1">1,480.00 USD</div>
+                    <div className="text-xs text-emerald-300 mt-2">● Compte Actif & Garanti BCC</div>
+                  </div>
+                  <div className="bk-screen-actions">
+                    <div className="bk-screen-btn">Déposer</div>
+                    <div className="bk-screen-btn">Relevé</div>
+                    <div className="bk-screen-btn">Crédit</div>
+                  </div>
+                  <div className="bk-screen-history">
+                    <div className="text-xs font-bold text-slate-500 mb-2">DERNIÈRES TRANSACTIONS</div>
+                    <div className="bk-history-row">
+                      <span>Dépôt Kelasi</span>
+                      <strong className="text-emerald-600">+50.00 $</strong>
+                    </div>
+                    <div className="bk-history-row">
+                      <span>Cotisation Nyumba</span>
+                      <strong className="text-emerald-600">+100.00 $</strong>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ─────────────────────────────────────────────────────────────
+          11. AGENCES & CONTACT (Style Equity BCDC)
+         ───────────────────────────────────────────────────────────── */}
+      <section className="bk-section bk-contact-section" id="contact">
+        <div className="bk-container">
+          <div className="bk-section-header text-center">
+            <div className="bk-kicker">RÉSEAU DE PROXIMITÉ</div>
+            <h2 className="bk-section-title">Nos agences et points de service</h2>
+            <p className="bk-section-sub">
+              Rencontrez nos conseillers d'agence ou sollicitez un agent collecteur agréé pour vos versements.
+            </p>
+          </div>
+
+          <div className="bk-contact-grid">
+            <div className="bk-contact-card">
+              <div className="bk-contact-card-icon">
+                <Building2 size={24} />
+              </div>
+              <h3>Siège Social & Agence Principale</h3>
+              <p className="bk-contact-desc">
+                Kinshasa, République Démocratique du Congo.<br />
+                Ouvert du Lundi au Samedi dès 8h00.
+              </p>
+              <div className="bk-contact-detail">
+                <Phone size={15} /> <strong>+243 820 000 000</strong>
+              </div>
+              <div className="bk-contact-detail">
+                <Mail size={15} /> contact@mwangazawetu.cd
+              </div>
+            </div>
+
+            <div className="bk-contact-card">
+              <div className="bk-contact-card-icon">
+                <Users size={24} />
+              </div>
+              <h3>Réseau d’Agents Délégués</h3>
+              <p className="bk-contact-desc">
+                Des agents itinérants équipés de terminaux sécurisés collectent vos cotisations sur votre lieu de travail ou commerce.
+              </p>
+              <div className="bk-contact-badge">
+                Vérification d’identité par badge QR officiel
+              </div>
+            </div>
+
+            <div className="bk-contact-card">
+              <div className="bk-contact-card-icon">
+                <Landmark size={24} />
+              </div>
+              <h3>Gouvernance & Conformité</h3>
+              <p className="bk-contact-desc">
+                Institution agréée et contrôlée par les autorités monétaires compétentes en RDC.
+              </p>
+              <div className="bk-contact-detail">
+                <ShieldCheck size={15} /> Agrément n° 048/COOPEC
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ─────────────────────────────────────────────────────────────
+          12. FOOTER BANCAIRE COMPLET (Style Bank of Kigali / BOA)
+         ───────────────────────────────────────────────────────────── */}
+      <footer className="bk-footer">
+        <div className="bk-container">
+          <div className="bk-footer-top">
+            <div className="bk-footer-brand">
+              <div className="flex items-center gap-3 mb-3">
+                <img src="/logo.png" alt="Logo" className="w-10 h-10 object-contain rounded-full bg-white p-1" />
+                <span className="text-xl font-bold text-white tracking-wide">MWANGAZA WETU</span>
+              </div>
+              <p className="bk-footer-text">
+                Institution coopérative d’épargne et de crédit au service des familles, entrepreneurs et artisans congolais. Fonds garantis et gestion certifiée.
+              </p>
+              <div className="bk-footer-license">
+                Agrément Banque Centrale du Congo / COOPEC n° 048
+              </div>
+            </div>
+
+            <div className="bk-footer-col">
+              <h4>Comptes & Épargne</h4>
+              <ul>
+                <li><a href="#services">Compte Courant Principal</a></li>
+                <li><a href="#services">Épargne Scolaire Kelasi</a></li>
+                <li><a href="#services">Épargne Santé Hôpital</a></li>
+                <li><a href="#services">Épargne Habitat Nyumba</a></li>
+                <li><a href="#services">Épargne Commerce Biashara</a></li>
+              </ul>
+            </div>
+
+            <div className="bk-footer-col">
+              <h4>Outils & Services</h4>
+              <ul>
+                <li><a href="#simulateur">Simulateur de crédit</a></li>
+                <li><a href="#devises">Taux de change CDF / USD</a></li>
+                <li><Link href="/login">Accès Espace Membre</Link></li>
+                <li><a href="#securite">Sécurité biométrique</a></li>
+                <li><a href="#contact">Trouver une agence</a></li>
+              </ul>
+            </div>
+
+            <div className="bk-footer-col">
+              <h4>Assistance 24/7</h4>
+              <p className="text-xs text-slate-400 mb-2">Une question sur vos dépôts ou votre compte ?</p>
+              <div className="text-lg font-bold text-amber-400 mb-3">+243 820 000 000</div>
+              <p className="text-xs text-slate-400">Courriel officiel :</p>
+              <div className="text-sm text-white font-medium">contact@mwangazawetu.cd</div>
+            </div>
+          </div>
+
+          <div className="bk-footer-bottom">
+            <div className="text-xs text-slate-400">
+              © {new Date().getFullYear()} Mwangaza Wetu. Tous droits réservés. République Démocratique du Congo.
+            </div>
+            <div className="flex gap-6 text-xs text-slate-400">
+              <a href="#" className="hover:text-white">Statuts coopératifs</a>
+              <a href="#" className="hover:text-white">Règlement intérieur</a>
+              <a href="#" className="hover:text-white">Protection des données</a>
+              <a href="#" className="hover:text-white">Sécurité anti-fraude</a>
+            </div>
+          </div>
+        </div>
+      </footer>
+
+      {/* ─────────────────────────────────────────────────────────────
+          13. MODALE D'ADHÉSION "DEVENIR MEMBRE" (Style Banque Pro)
+         ───────────────────────────────────────────────────────────── */}
+      {modalOpen && (
+        <div className="bk-modal-backdrop" onClick={() => setModalOpen(false)}>
+          <div className="bk-modal-dialog" onClick={(e) => e.stopPropagation()}>
+            <div className="bk-modal-header">
+              <div>
+                <h3 className="text-xl font-bold text-slate-900">
+                  Devenir Membre Mwangaza Wetu
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Rejoignez notre communauté financière solidaire en quelques étapes simples.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="bk-modal-close"
+                onClick={() => setModalOpen(false)}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="bk-modal-body">
+              <div className="bk-doc-checklist">
+                <h4 className="text-sm font-bold text-slate-800 mb-3">
+                  📋 Documents requis pour l'adhésion :
+                </h4>
+                <div className="space-y-2 text-xs text-slate-600">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 size={16} className="text-emerald-500 flex-shrink-0" />
+                    <span>Une pièce d'identité en cours de validité (Carte d'électeur ou Passeport).</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 size={16} className="text-emerald-500 flex-shrink-0" />
+                    <span>Deux photos passeport récentes (ou prise de photo sur place).</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 size={16} className="text-emerald-500 flex-shrink-0" />
+                    <span>Un numéro de téléphone actif (pour la réception des SMS de confirmation).</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 size={16} className="text-emerald-500 flex-shrink-0" />
+                    <span>Dépôt initial de souscription selon la formule choisie.</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bk-modal-options mt-5">
+                <a
+                  href="#contact"
+                  onClick={() => setModalOpen(false)}
+                  className="bk-modal-btn-primary"
+                >
+                  <MapPin size={18} />
+                  <span>Se rendre dans l'agence la plus proche</span>
+                </a>
+                <Link
+                  href="/login"
+                  onClick={() => setModalOpen(false)}
+                  className="bk-modal-btn-secondary"
+                >
+                  <Lock size={16} />
+                  <span>J'ai déjà un compte : Me connecter</span>
                 </Link>
               </div>
             </div>
           </div>
         </div>
-      </section>
-
-      {/* ─────────────────────────────────────────────────────────────
-          6. COMMENT ÇA MARCHE
-         ───────────────────────────────────────────────────────────── */}
-      <section className="v-section v-section-alt" id="comment-ca-marche">
-        <div className="v-section-inner">
-          <div className="v-label">{t.howItWorks.label}</div>
-          <h2 className="v-heading">{t.howItWorks.heading}</h2>
-          <p className="v-sub">{t.howItWorks.sub}</p>
-
-          <div className="v-steps">
-            {t.howItWorks.steps.map((s) => (
-              <div className="v-step" key={s.num}>
-                <div className="v-step-num">{s.num}</div>
-                <h3 className="v-step-title">{s.title}</h3>
-                <p className="v-step-desc">{s.desc}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ─────────────────────────────────────────────────────────────
-          7. MISSION & VISION
-         ───────────────────────────────────────────────────────────── */}
-      <section className="v-section" id="a-propos">
-        <div className="v-section-inner">
-          <div className="v-label">{t.about.label}</div>
-          <h2 className="v-heading">{t.about.heading}</h2>
-          <p className="v-sub">{t.about.sub}</p>
-
-          <div className="v-mission-grid">
-            <div className="v-mission-card">
-              <div className="v-mission-card-icon">
-                <IconTarget size={24} />
-              </div>
-              <h3 className="v-mission-card-title">{t.about.mission.title}</h3>
-              <p className="v-mission-card-text">{t.about.mission.text}</p>
-            </div>
-            <div className="v-mission-card">
-              <div className="v-mission-card-icon">
-                <IconEye size={24} />
-              </div>
-              <h3 className="v-mission-card-title">{t.about.vision.title}</h3>
-              <p className="v-mission-card-text">{t.about.vision.text}</p>
-            </div>
-          </div>
-
-          {/* Valeurs institutionnelles */}
-          <div style={{ marginTop: 32, display: 'flex', flexWrap: 'wrap', gap: 10 }}>
-            {t.about.values.map((v) => (
-              <span key={v} style={{
-                display: 'inline-flex', alignItems: 'center', gap: 6,
-                padding: '7px 16px',
-                background: '#EBF3FA',
-                color: '#074780',
-                borderRadius: 20,
-                fontSize: 13,
-                fontWeight: 700,
-              }}>
-                <IconCircleCheckFilled size={14} /> {v}
-              </span>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ─────────────────────────────────────────────────────────────
-          8. TÉMOIGNAGES
-         ───────────────────────────────────────────────────────────── */}
-      <section className="v-section v-section-alt" id="temoignages">
-        <div className="v-section-inner">
-          <div className="v-label">{t.testimonials.label}</div>
-          <h2 className="v-heading">{t.testimonials.heading}</h2>
-          <p className="v-sub">{t.testimonials.sub}</p>
-
-          <div className="v-testimonials-grid">
-            {t.testimonials.items.map((item) => (
-              <div className="v-testimonial-card" key={item.name}>
-                <div className="v-testimonial-stars">
-                  {[...Array(5)].map((_, i) => <IconStar key={i} size={15} color="#F59E0B" />)}
-                </div>
-                <p className="v-testimonial-text">{item.text}</p>
-                <div className="v-testimonial-author">
-                  <div className="v-testimonial-avatar" style={{ background: item.color }}>
-                    {item.initials}
-                  </div>
-                  <div>
-                    <div className="v-testimonial-name">{item.name}</div>
-                    <div className="v-testimonial-role">{item.role}</div>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ─────────────────────────────────────────────────────────────
-          9. ACTUALITÉS
-         ───────────────────────────────────────────────────────────── */}
-      <section className="v-section" id="actualites">
-        <div className="v-section-inner">
-          <div className="v-label">{t.news.label}</div>
-          <h2 className="v-heading">{t.news.heading}</h2>
-          <p className="v-sub">{t.news.sub}</p>
-
-          <div className="v-news-grid">
-            {t.news.items.map((n) => (
-              <div className="v-news-card" key={n.title}>
-                <div className="v-news-img">
-                  <span role="img" aria-hidden style={{ fontSize: 44 }}>{n.icon}</span>
-                </div>
-                <div className="v-news-body">
-                  <span className="v-news-tag">{n.tag}</span>
-                  <h3 className="v-news-title">{n.title}</h3>
-                  <p className="v-news-date">{n.date}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ─────────────────────────────────────────────────────────────
-          10. BANNIÈRE CTA
-         ───────────────────────────────────────────────────────────── */}
-      <section className="v-cta-banner">
-        <div className="v-cta-banner-inner">
-          <h2 className="v-cta-banner-title">{t.cta.title}</h2>
-          <p className="v-cta-banner-sub">{t.cta.sub}</p>
-          <Link href="/login" className="v-btn-cta-white">
-            {t.cta.btn} <IconArrowRight size={16} />
-          </Link>
-        </div>
-      </section>
-
-      {/* ─────────────────────────────────────────────────────────────
-          11. CONTACT & LOCALISATION
-         ───────────────────────────────────────────────────────────── */}
-      <section className="v-section" id="contact">
-        <div className="v-section-inner">
-          <div className="v-label">{t.contact.label}</div>
-          <h2 className="v-heading">{t.contact.heading}</h2>
-          <p className="v-sub">{t.contact.sub}</p>
-
-          <div className="v-contact-grid">
-            <div className="v-contact-info">
-              {[
-                { icon: <IconMapPin size={22} />, ...t.contact.address },
-                { icon: <IconPhone size={22} />, ...t.contact.phone },
-                { icon: <IconMail size={22} />, ...t.contact.email },
-                { icon: <IconClock size={22} />, ...t.contact.hours },
-              ].map((item) => (
-                <div className="v-contact-item" key={item.label}>
-                  <div className="v-contact-icon">{item.icon}</div>
-                  <div>
-                    <p className="v-contact-item-title">{item.label}</p>
-                    <p className="v-contact-item-val" style={{ whiteSpace: 'pre-line' }}>{item.val}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {/* Carte / Plan d'accès */}
-            <div className="v-contact-map">
-              <IconMapPin size={42} stroke={1.5} />
-              <span className="v-contact-map-lbl">{t.contact.mapLabel}</span>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ─────────────────────────────────────────────────────────────
-          12. PIED DE PAGE
-         ───────────────────────────────────────────────────────────── */}
-      <footer className="v-footer">
-        <div className="v-footer-inner">
-          <div className="v-footer-top">
-            <div>
-              <p className="v-footer-brand-name">Mwangaza Wetu</p>
-              <p className="v-footer-brand-desc">{t.footer.desc}</p>
-              <Link href="/login" className="v-btn-hero-primary" style={{ width: 'fit-content', padding: '10px 20px', fontSize: 13 }}>
-                {t.nav.login} <IconArrowRight size={14} />
-              </Link>
-            </div>
-
-            {(['services', 'useful', 'legal'] as const).map((col) => (
-              <div key={col}>
-                <p className="v-footer-col-title">{t.footer.links[col].title}</p>
-                <ul className="v-footer-links">
-                  {t.footer.links[col].items.map(([label, href]) => (
-                    <li key={label}>
-                      {href.startsWith('/') ? (
-                        <Link href={href}>{label}</Link>
-                      ) : (
-                        <a href={href}>{label}</a>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-          </div>
-
-          <div className="v-footer-bottom">
-            <span>{t.footer.copy}</span>
-            <div className="v-footer-legal">
-              {t.footer.legal.map(([label, href]) => (
-                <a key={label} href={href}>{label}</a>
-              ))}
-            </div>
-          </div>
-        </div>
-      </footer>
+      )}
     </div>
   );
 }
