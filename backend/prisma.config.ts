@@ -23,7 +23,7 @@ export default defineConfig({
   schema: "prisma/schema.prisma",
   migrations: {
     path: "prisma/migrations",
-    seed: "ts-node prisma/seed.ts",
+    seed: "bun run prisma/seed.ts",
   },
   datasource: {
     // Les commandes migrate nécessitent la connexion PostgreSQL directe ;

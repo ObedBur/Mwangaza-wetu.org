@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+
 /* ==========================================================================
    MWANGAZA WETU — DESIGN SYSTEM BANCAIRE MODERNE
    Inspiré de : Bank of Kigali (BK), Equity BCDC, Bank of Africa (BOA), Rawbank
@@ -18,7 +20,7 @@
   --bk-slate-300: #CBD5E1;
   --bk-slate-700: #334155;
   --bk-slate-900: #0F172A;
-  --bk-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --bk-font: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --bk-shadow-sm: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
   --bk-shadow-md: 0 4px 14px rgba(4, 36, 66, 0.08);
   --bk-shadow-lg: 0 12px 32px rgba(4, 36, 66, 0.12);
@@ -40,262 +42,243 @@
   padding: 0 24px;
 }
 
-/* ─────────────────────────────────────────────────────────────
-   1. TOPBAR INSTITUTIONNELLE
-   ───────────────────────────────────────────────────────────── */
+/* =========================================================
+   1. TOPBAR BLEU NUIT â€” SEGMENTS + OUTILS
+   Inspiration : TMB Bank, Equity BCDC, Rawbank
+   ========================================================= */
 .bk-topbar {
-  background: var(--bk-navy-dark);
+  background: #07192F;
   color: #94A3B8;
-  font-size: 11.5px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  position: sticky;
+  top: 0;
+  z-index: 200;
 }
 
 .bk-topbar-inner {
-  height: 38px;
+  height: 40px;
   display: flex;
   align-items: center;
   justify-content: space-between;
 }
 
-.bk-topbar-left {
+.bk-topbar-segments {
   display: flex;
-  align-items: center;
-  gap: 14px;
+  align-items: stretch;
+  height: 100%;
 }
 
-.bk-topbar-tag {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
+.bk-seg-tab-new {
+  background: none;
+  border: none;
+  border-bottom: 3px solid transparent;
+  color: #94A3B8;
+  font-size: 12.5px;
+  font-weight: 500;
+  padding: 0 18px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+.bk-seg-tab-new:hover { color: #FFFFFF; }
+.bk-seg-tab-new.active {
+  color: #FFFFFF;
   font-weight: 700;
-  color: #F8FAFC;
-  letter-spacing: 0.3px;
-}
-
-.bk-topbar-divider {
-  color: rgba(255, 255, 255, 0.15);
-}
-
-.bk-topbar-link,
-.bk-topbar-hours {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: #CBD5E1;
-}
-
-.bk-topbar-link strong {
-  color: #F8FAFC;
+  border-bottom-color: #C05615;
 }
 
 .bk-topbar-right {
   display: flex;
   align-items: center;
-  gap: 18px;
+  gap: 14px;
 }
 
-.bk-fx-pill {
+.bk-topbar-contact {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  background: rgba(255, 255, 255, 0.08);
-  padding: 3px 10px;
-  border-radius: 20px;
-  color: #E2E8F0;
-  font-size: 11px;
+  color: #CBD5E1;
+  text-decoration: none;
+  font-size: 12px;
+  transition: color 0.15s;
 }
+.bk-topbar-contact:hover { color: #fff; }
 
-.bk-fx-pill strong {
-  color: #FDE047;
-}
+.bk-topbar-rate { font-size: 12px; color: #CBD5E1; }
+.bk-topbar-rate strong { color: #FFFFFF; font-weight: 700; }
 
-.bk-lang-switch {
-  display: flex;
+.bk-topbar-divider { color: rgba(255,255,255,0.18); }
+
+.bk-topbar-login-link {
+  display: inline-flex;
   align-items: center;
-  gap: 5px;
-  font-size: 11px;
+  gap: 6px;
+  color: #FFFFFF;
+  font-weight: 600;
+  font-size: 12px;
+  text-decoration: none;
 }
+.bk-topbar-login-link:hover { opacity: 0.8; }
 
-.bk-lang-switch button {
+.bk-topbar-icon-btn {
   background: none;
   border: none;
   color: #94A3B8;
-  font-weight: 700;
   cursor: pointer;
-  padding: 2px 4px;
-  border-radius: 4px;
-  transition: all 0.15s;
-}
-
-.bk-lang-switch button.active {
-  color: #ffffff;
-  background: rgba(255, 255, 255, 0.18);
-}
-
-/* ─────────────────────────────────────────────────────────────
-   2. BANDEAU DE SEGMENTATION (Style BOA & Equity BCDC)
-   ───────────────────────────────────────────────────────────── */
-.bk-segment-strip {
-  background: #063560;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.bk-segment-inner {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  height: 42px;
+  padding: 4px;
 }
+.bk-topbar-icon-btn:hover { color: #fff; }
 
-.bk-segment-tabs {
-  display: flex;
-  align-items: stretch;
-  height: 100%;
-  gap: 4px;
-}
-
-.bk-seg-tab {
+.bk-lang-pill {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 0 16px;
-  font-size: 12.5px;
-  font-weight: 600;
-  color: #CBD5E1;
-  background: transparent;
-  border: none;
-  border-bottom: 2px solid transparent;
+  gap: 4px;
+  background: rgba(255,255,255,0.09);
+  border: 1px solid rgba(255,255,255,0.16);
+  border-radius: 5px;
+  padding: 3px 9px;
+  color: #FFFFFF;
+  font-size: 11.5px;
+  font-weight: 700;
   cursor: pointer;
-  transition: all 0.2s;
 }
+.bk-lang-pill:hover { background: rgba(255,255,255,0.16); }
 
-.bk-seg-tab:hover {
-  color: #ffffff;
-  background: rgba(255, 255, 255, 0.06);
-}
-
-.bk-seg-tab.active {
-  color: #ffffff;
-  background: rgba(255, 255, 255, 0.12);
-  border-bottom-color: var(--bk-accent-gold-light);
-}
-
-.bk-segment-help {
-  font-size: 12px;
-  color: #94A3B8;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.bk-link-help {
-  color: var(--bk-accent-gold-light);
-  font-weight: 600;
-  text-decoration: none;
-}
-
-.bk-link-help:hover {
-  text-decoration: underline;
-}
-
-/* ─────────────────────────────────────────────────────────────
-   3. HEADER / NAVBAR PRINCIPALE
-   ───────────────────────────────────────────────────────────── */
+/* =========================================================
+   2. NAVBAR PRINCIPALE BLANCHE (sticky juste sous la topbar)
+   ========================================================= */
 .bk-header {
   position: sticky;
-  top: 0;
+  top: 40px;
   z-index: 100;
   background: #ffffff;
-  border-bottom: 1px solid var(--bk-slate-200);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
+  border-bottom: 1px solid #E2E8F0;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.05);
 }
 
 .bk-header-inner {
-  height: 76px;
+  height: 70px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 20px;
+  gap: 16px;
 }
 
 .bk-brand {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
   text-decoration: none;
+  flex-shrink: 0;
 }
 
-.bk-logo-frame {
-  width: 50px;
-  height: 50px;
-  border-radius: 12px;
-  background: #ffffff;
-  border: 1.5px solid var(--bk-slate-200);
+.bk-logo-box {
+  width: 52px;
+  height: 52px;
+  border-radius: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 4px;
-  box-shadow: var(--bk-shadow-sm);
+  overflow: hidden;
+  flex-shrink: 0;
 }
 
 .bk-logo-img {
-  width: 100%;
-  height: 100%;
+  width: 52px;
+  height: 52px;
   object-fit: contain;
+  border-radius: 10px;
+}
+.bk-logo-box-text {
+  color: #FFFFFF;
+  font-size: 16px;
+  font-weight: 900;
+  letter-spacing: -0.5px;
+  line-height: 1;
+  margin-bottom: 4px;
+}
+.bk-logo-box-accent {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 4px;
+  background: #C05615;
 }
 
 .bk-brand-titles {
   display: flex;
   flex-direction: column;
 }
-
-.bk-brand-name {
-  font-size: 19px;
-  font-weight: 900;
-  letter-spacing: -0.5px;
-  color: var(--bk-navy);
-  line-height: 1.1;
+.bk-brand-name-two-lines {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.05;
 }
-
+.bk-brand-name-two-lines span {
+  font-size: 15px;
+  font-weight: 900;
+  color: #07192F;
+  letter-spacing: -0.3px;
+}
 .bk-brand-motto {
-  font-size: 10.5px;
-  font-weight: 600;
+  font-size: 9.5px;
+  font-weight: 700;
   color: #64748B;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.6px;
   text-transform: uppercase;
-  margin-top: 2px;
+  margin-top: 3px;
 }
 
 .bk-nav-list {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 2px;
   list-style: none;
   margin: 0;
   padding: 0;
 }
-
 .bk-nav-item {
-  display: block;
-  padding: 8px 14px;
-  font-size: 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 12px;
+  font-size: 13.5px;
   font-weight: 600;
-  color: var(--bk-slate-700);
+  color: #1E293B;
   text-decoration: none;
-  border-radius: 8px;
-  transition: all 0.15s;
+  border-radius: 7px;
+  transition: color 0.15s, background 0.15s;
+  white-space: nowrap;
 }
-
-.bk-nav-item:hover {
-  color: var(--bk-blue);
-  background: var(--bk-slate-100);
-}
+.bk-nav-item:hover { color: #C05615; background: #FFF7ED; }
+.bk-nav-chev { color: #94A3B8; flex-shrink: 0; transition: transform 0.2s; }
+.bk-nav-item:hover .bk-nav-chev { color: #C05615; }
 
 .bk-header-actions {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
+  flex-shrink: 0;
 }
+
+.bk-btn-devenir-membre {
+  background: #C05615;
+  color: #FFFFFF;
+  border: none;
+  border-radius: 10px;
+  padding: 10px 22px;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+  line-height: 1.2;
+  text-align: center;
+  transition: background 0.18s, transform 0.1s;
+  box-shadow: 0 3px 8px rgba(192,86,21,0.28);
+}
+.bk-btn-devenir-membre:hover { background: #A44811; transform: translateY(-1px); }
 
 .bk-btn-login {
   display: inline-flex;
@@ -312,41 +295,13 @@
   cursor: pointer;
   transition: all 0.18s;
 }
-
-.bk-btn-login:hover {
-  background: #EBF3FA;
-}
-
-.bk-lock-icon {
-  color: var(--bk-blue);
-}
-
-.bk-btn-open-account {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 11px 22px;
-  font-size: 13.5px;
-  font-weight: 750;
-  color: #ffffff;
-  background: linear-gradient(135deg, var(--bk-accent-gold) 0%, #B45309 100%);
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: all 0.18s;
-  box-shadow: 0 4px 12px rgba(217, 119, 6, 0.28);
-}
-
-.bk-btn-open-account:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 6px 18px rgba(217, 119, 6, 0.38);
-}
+.bk-btn-login:hover { background: #EBF3FA; }
 
 .bk-mobile-toggle {
   display: none;
   background: none;
   border: none;
-  color: var(--bk-navy);
+  color: #07192F;
   cursor: pointer;
   padding: 6px;
 }
@@ -355,21 +310,19 @@
   display: flex;
   flex-direction: column;
   background: #ffffff;
-  border-top: 1px solid var(--bk-slate-200);
+  border-top: 1px solid #E2E8F0;
   padding: 20px 24px;
   gap: 16px;
 }
-
 .bk-mobile-drawer-links a {
   display: block;
   padding: 10px 0;
   font-size: 15px;
   font-weight: 600;
-  color: var(--bk-slate-900);
+  color: #0F172A;
   text-decoration: none;
-  border-bottom: 1px solid var(--bk-slate-100);
+  border-bottom: 1px solid #F1F5F9;
 }
-
 .bk-mobile-drawer-actions {
   display: flex;
   flex-direction: column;
@@ -377,98 +330,282 @@
   padding-top: 10px;
 }
 
-/* ─────────────────────────────────────────────────────────────
-   4. BANDEAU DE SÉCURITÉ OFFICIEL & ANTI-FRAUDE (Style Equity BCDC)
-   ───────────────────────────────────────────────────────────── */
-.bk-fraud-alert {
+/* =========================================================
+   3. BANDEAU SECURITE AMBRE PALE (fond creme)
+   ========================================================= */
+.bk-security-bar {
   background: #FFFBEB;
-  border-bottom: 1px solid #FDE68A;
-  padding: 10px 0;
+  border-bottom: 1px solid #FDE8C7;
+  padding: 7px 0;
 }
-
-.bk-fraud-inner {
+.bk-security-inner {
   display: flex;
   align-items: center;
-  gap: 12px;
+  justify-content: space-between;
+  gap: 16px;
 }
-
-.bk-fraud-icon {
-  color: #D97706;
+.bk-security-left {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.bk-security-icon { color: #D97706; flex-shrink: 0; }
+.bk-security-text {
+  font-size: 12px;
+  color: #451A03;
+  margin: 0;
+  line-height: 1.4;
+}
+.bk-security-text strong { font-weight: 700; }
+.bk-security-link { color: #78350F; font-weight: 700; text-decoration: underline; margin-left: 4px; }
+.bk-security-right {
+  display: flex;
+  align-items: center;
+  gap: 14px;
   flex-shrink: 0;
 }
-
-.bk-fraud-text {
-  font-size: 12.5px;
-  color: #92400E;
-  line-height: 1.45;
+.bk-security-bcc { font-size: 11.5px; color: #78716C; font-weight: 500; white-space: nowrap; }
+.bk-security-close {
+  background: none;
+  border: none;
+  color: #78716C;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  padding: 2px;
 }
+.bk-security-close:hover { color: #000; }
 
-.bk-fraud-text strong {
-  color: #78350F;
-}
-
+/* Ancien bandeau fraud - masque */
+.bk-fraud-alert { display: none; }
+.bk-segment-strip { display: none; }
 /* ─────────────────────────────────────────────────────────────
    5. HERO BANCAIRE RICHE
    ───────────────────────────────────────────────────────────── */
 .bk-hero {
   position: relative;
-  background: linear-gradient(135deg, #031E38 0%, #063866 50%, #0A5294 100%);
+  background-color: #07192F;
   color: #ffffff;
-  padding: 72px 0 110px;
-  overflow: visible;
+  padding: 72px 0 130px;
+  overflow: hidden;
+  min-height: 560px;
 }
 
-.bk-hero-bg-overlay {
+/* Slides photo */
+.bk-hero-slides {
   position: absolute;
   inset: 0;
-  background-image: 
-    radial-gradient(circle at 80% 20%, rgba(217, 119, 6, 0.15) 0%, transparent 45%),
-    radial-gradient(circle at 10% 80%, rgba(11, 94, 168, 0.25) 0%, transparent 50%),
-    linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
-  background-size: 100% 100%, 100% 100%, 40px 40px, 40px 40px;
-  pointer-events: none;
+  overflow: hidden;
+  z-index: 1;
 }
 
+.bk-hero-slide {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center right;
+  opacity: 0;
+  transition: opacity 0.8s ease-in-out;
+}
+
+.bk-hero-slide.active {
+  opacity: 1;
+}
+
+/* Overlay degrade gauche vers droite */
+.bk-hero-bg-overlay {
+  display: none;
+}
+
+/* Contenu hero au-dessus de l'overlay */
 .bk-hero-inner {
   position: relative;
-  z-index: 2;
-  display: grid;
-  grid-template-columns: 1.2fr 0.8fr;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+/* Contenu textuel */
+.bk-hero-content {
+  max-width: 660px;
+  animation: heroContentFade 0.5s ease-out;
+}
+
+@keyframes heroContentFade {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Flèches latérales du slider (gauche et droite, style TMB Bank) */
+.bk-hero-arrow {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 6;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.32);
+  color: #ffffff;
+  display: flex;
   align-items: center;
-  gap: 52px;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.25s;
+  backdrop-filter: blur(8px);
+}
+
+.bk-hero-arrow.prev {
+  left: 24px;
+}
+
+.bk-hero-arrow.next {
+  right: 24px;
+}
+
+.bk-hero-arrow:hover {
+  background: #C05615;
+  border-color: #C05615;
+  transform: translateY(-50%) scale(1.1);
+}
+
+/* Puces horizontales avec bon espacement */
+.bk-hero-dots {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  margin-top: 34px;
+}
+
+.bk-hero-dot {
+  width: 32px;
+  height: 7px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.40);
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  transition: all 0.25s;
+}
+
+.bk-hero-dot.active {
+  width: 58px;
+  background: #C05615;
+}
+
+/* Profils et Témoignages agrandis avec espacements aérés (Style Bank of Kigali) */
+.bk-hero-testimonials {
+  margin-top: 36px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.bk-testimonials-label {
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  color: #ffffff;
+  text-transform: uppercase;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+}
+
+.bk-avatar-stack {
+  display: flex;
+  align-items: center;
+  padding: 4px 0;
+}
+
+.bk-avatar {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  border: 2.5px solid #ffffff;
+  object-fit: cover;
+  margin-left: -14px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.40);
+  transition: transform 0.2s, z-index 0.2s;
+}
+
+.bk-avatar:first-child {
+  margin-left: 0;
+}
+
+.bk-avatar:hover {
+  transform: translateY(-4px) scale(1.15);
+  z-index: 10;
+}
+
+.bk-avatar-arrow {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: #ffffff;
+  color: #07192F;
+  border: 2.5px solid #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: -14px;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.40);
+  z-index: 5;
+}
+
+.bk-avatar-arrow:hover {
+  background: #C05615;
+  color: #ffffff;
+  border-color: #C05615;
+  transform: translateY(-4px) scale(1.15);
 }
 
 .bk-badge-pill {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 14px;
-  background: rgba(255, 255, 255, 0.12);
-  border: 1px solid rgba(255, 255, 255, 0.22);
-  border-radius: 20px;
+  padding: 7px 20px 7px 14px;
+  background: rgba(7, 25, 47, 0.80);
+  border: 1.5px solid rgba(255, 255, 255, 0.50);
+  border-radius: 0;
+  transform: skewX(-12deg);
   font-size: 11.5px;
   font-weight: 700;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.6px;
   color: #ffffff;
   margin-bottom: 24px;
-  backdrop-filter: blur(6px);
+  backdrop-filter: blur(4px);
+  text-shadow: 0 1px 3px rgba(0,0,0,0.6);
+}
+
+.bk-badge-pill > * {
+  transform: skewX(12deg);
+}
+
+.bk-badge-logo {
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+  border-radius: 3px;
+  flex-shrink: 0;
 }
 
 .bk-hero-title {
   font-size: clamp(34px, 4.2vw, 54px);
-  font-weight: 850;
+  font-weight: 800;
   line-height: 1.1;
   letter-spacing: -1.2px;
   margin: 0 0 20px;
   color: #ffffff;
+  text-shadow: none;
 }
 
 .bk-highlight {
-  color: #FDE047;
-  text-decoration: underline;
-  text-decoration-color: rgba(217, 119, 6, 0.5);
-  text-underline-offset: 6px;
+  color: #ffffff;
+  text-decoration: none;
 }
 
 .bk-hero-lead {
@@ -477,6 +614,7 @@
   color: #E2E8F0;
   max-width: 560px;
   margin: 0 0 34px;
+  text-shadow: none;
 }
 
 .bk-hero-cta-group {
@@ -699,93 +837,116 @@
 /* ─────────────────────────────────────────────────────────────
    6. QUICK-ACTION TRAY FLOTTANT (Style Bank of Kigali)
    ───────────────────────────────────────────────────────────── */
-.bk-quick-tray-container {
-  margin-top: 50px;
-  margin-bottom: -50px;
+.bk-tray-overlap-wrapper {
   position: relative;
-  z-index: 10;
+  z-index: 20;
+  margin-top: -65px;
+  margin-bottom: 30px;
 }
 
-.bk-quick-tray {
+.bk-quick-tray-card {
   background: #ffffff;
-  border-radius: 16px;
-  box-shadow: 0 16px 48px rgba(4, 36, 66, 0.16);
-  border: 1px solid var(--bk-slate-200);
+  border-radius: 20px;
+  box-shadow: 0 16px 48px rgba(7, 25, 47, 0.12), 0 2px 8px rgba(7, 25, 47, 0.04);
+  border: 1px solid #E2E8F0;
+  padding: 24px 32px 34px;
+  position: relative;
+}
+
+.bk-tray-header-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  background: #EFF6FF;
+  border: 1px solid #DBEAFE;
+  border-radius: 20px;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: #1D4ED8;
+  margin-bottom: 20px;
+}
+
+.bk-quick-tray-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  overflow: hidden;
+  gap: 0;
 }
 
-.bk-tray-card {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 22px 24px;
+.bk-tray-col {
+  padding: 0 24px;
+  border-right: 1px solid #E2E8F0;
   text-decoration: none;
   color: inherit;
-  border-right: 1px solid var(--bk-slate-200);
+  transition: transform 0.2s;
   cursor: pointer;
-  transition: all 0.2s;
-  background: #ffffff;
 }
 
-.bk-tray-card:last-child {
+.bk-tray-col:first-child {
+  padding-left: 0;
+}
+
+.bk-tray-col:last-child {
   border-right: none;
+  padding-right: 0;
 }
 
-.bk-tray-card:hover {
-  background: #F8FAFC;
+.bk-tray-col:hover {
   transform: translateY(-2px);
 }
 
-.bk-tray-icon {
-  width: 50px;
-  height: 50px;
-  border-radius: 12px;
+.bk-tray-col-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 15px;
+  font-weight: 800;
+  color: #07192F;
+  margin-bottom: 6px;
+}
+
+.bk-tray-col-desc {
+  font-size: 12.5px;
+  color: #64748B;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.bk-tray-floating-btn {
+  position: absolute;
+  bottom: -22px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: #0B5EA8;
+  color: #ffffff;
+  border: 3px solid #ffffff;
   display: flex;
   align-items: center;
   justify-content: center;
-  flex-shrink: 0;
+  box-shadow: 0 6px 16px rgba(11, 94, 168, 0.35);
+  cursor: pointer;
+  transition: all 0.25s;
 }
 
-.bk-tray-info {
-  flex: 1;
-}
-
-.bk-tray-info h3 {
-  font-size: 15px;
-  font-weight: 750;
-  color: var(--bk-navy);
-  margin: 0;
-  line-height: 1.2;
-}
-
-.bk-tray-info p {
-  font-size: 12px;
-  color: #64748B;
-  margin: 3px 0 0;
-}
-
-.bk-tray-arrow {
-  color: #CBD5E1;
-  transition: transform 0.2s, color 0.2s;
-}
-
-.bk-tray-card:hover .bk-tray-arrow {
-  color: var(--bk-blue);
-  transform: translateX(3px);
+.bk-tray-floating-btn:hover {
+  background: #C05615;
+  transform: translateX(-50%) scale(1.1);
 }
 
 /* ─────────────────────────────────────────────────────────────
    7. SECTION SIMULATEUR INTERACTIF (Style BK Loan Calculator)
    ───────────────────────────────────────────────────────────── */
 .bk-section {
-  padding: 96px 0;
+  padding: 72px 0;
 }
 
 .bk-calculator-section {
-  background: #F1F5F9;
-  padding-top: 130px;
+  background: #F8FAFC;
+  padding-top: 50px;
 }
 
 .bk-section-header {
@@ -804,7 +965,7 @@
 
 .bk-section-title {
   font-size: clamp(26px, 3.4vw, 38px);
-  font-weight: 850;
+  font-weight: 800;
   color: var(--bk-navy);
   line-height: 1.2;
   margin: 0 0 14px;
@@ -878,7 +1039,7 @@
 
 .bk-input-val {
   font-size: 18px;
-  font-weight: 850;
+  font-weight: 800;
   color: var(--bk-blue);
 }
 
@@ -1003,8 +1164,51 @@
 }
 
 /* ─────────────────────────────────────────────────────────────
-   8. SECTION DES FORMULES (Grid de produits)
+   8. SECTION DES FORMULES & COMPTES (Style UI/UX Pro)
    ───────────────────────────────────────────────────────────── */
+.bk-products-section {
+  background: #F8FAFC;
+  padding: 60px 0 90px;
+}
+
+.bk-category-tabs {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 24px;
+}
+
+.bk-cat-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  background: #ffffff;
+  border: 1px solid #E2E8F0;
+  border-radius: 30px;
+  font-size: 13.5px;
+  font-weight: 650;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.bk-cat-tab:hover {
+  background: #F1F5F9;
+  color: #07192F;
+  border-color: #CBD5E1;
+}
+
+.bk-cat-tab.active {
+  background: #07192F;
+  color: #ffffff;
+  border-color: #07192F;
+  box-shadow: 0 4px 12px rgba(7, 25, 47, 0.18);
+}
+
 .bk-cards-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -1013,19 +1217,20 @@
 
 .bk-product-card {
   background: #ffffff;
-  border: 1px solid var(--bk-slate-200);
-  border-radius: 16px;
-  padding: 30px 26px;
+  border: 1px solid #E2E8F0;
+  border-radius: 20px;
+  padding: 32px 28px;
   position: relative;
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  transition: all 0.25s;
+  transition: all 0.25s ease;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
 }
 
 .bk-product-card:hover {
-  transform: translateY(-4px);
-  box-shadow: var(--bk-shadow-lg);
+  transform: translateY(-6px);
+  box-shadow: 0 18px 40px rgba(7, 25, 47, 0.08);
   border-color: #CBD5E1;
 }
 
@@ -1034,76 +1239,183 @@
   top: 0;
   left: 0;
   right: 0;
-  height: 4px;
+  height: 5px;
 }
 
 .bk-prod-top {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 20px;
+  margin-bottom: 22px;
 }
 
 .bk-prod-icon {
-  width: 52px;
-  height: 52px;
-  border-radius: 14px;
+  width: 56px;
+  height: 56px;
+  border-radius: 16px;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
 .bk-prod-tag {
-  font-size: 11px;
+  font-size: 11.5px;
   font-weight: 750;
-  padding: 3px 10px;
+  padding: 4px 12px;
   border-radius: 20px;
   border: 1px solid;
 }
 
 .bk-prod-name {
-  font-size: 18px;
+  font-size: 20px;
   font-weight: 800;
-  color: var(--bk-navy);
+  color: #07192F;
   margin: 0;
+  letter-spacing: -0.3px;
 }
 
 .bk-prod-sub {
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 600;
   color: #64748B;
-  margin: 3px 0 14px;
+  margin: 4px 0 16px;
 }
 
 .bk-prod-desc {
   font-size: 14px;
   color: #475569;
   line-height: 1.6;
-  margin: 0 0 24px;
+  margin: 0 0 22px;
   flex: 1;
 }
 
-.bk-prod-action {
-  border-top: 1px solid var(--bk-slate-100);
-  padding-top: 16px;
+/* 3 Avantages concrets */
+.bk-prod-features {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 26px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border-top: 1px solid #F1F5F9;
+  padding-top: 18px;
 }
 
-.bk-prod-link {
+.bk-prod-features li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 13px;
+  color: #334155;
+  line-height: 1.45;
+}
+
+.bk-prod-action {
+  border-top: 1px solid #F1F5F9;
+  padding-top: 18px;
+}
+
+.bk-btn-subscribe {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 13px 20px;
+  font-size: 14px;
+  font-weight: 750;
+  color: #07192F;
+  background: #F8FAFC;
+  border: 1.5px solid #E2E8F0;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.bk-btn-subscribe:hover {
+  background: var(--accent-color, #07192F);
+  color: #ffffff;
+  border-color: var(--accent-color, #07192F);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
+}
+
+/* Bannière d'orientation en bas des produits */
+.bk-products-help-banner {
+  margin-top: 60px;
+  background: #ffffff;
+  border: 1px solid #E2E8F0;
+  border-radius: 18px;
+  padding: 28px 36px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 28px;
+  box-shadow: 0 6px 20px rgba(7, 25, 47, 0.04);
+}
+
+.bk-help-content {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.bk-help-content h4 {
+  font-size: 16px;
+  font-weight: 800;
+  color: #07192F;
+  margin: 0 0 4px;
+}
+
+.bk-help-content p {
+  font-size: 13.5px;
+  color: #64748B;
+  margin: 0;
+}
+
+.bk-help-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.bk-help-btn-outline {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  background: none;
-  border: none;
-  padding: 0;
-  font-size: 13.5px;
+  gap: 8px;
+  padding: 11px 18px;
+  border: 1.5px solid #CBD5E1;
+  border-radius: 10px;
+  font-size: 13px;
   font-weight: 700;
-  color: var(--bk-blue);
-  cursor: pointer;
-  transition: gap 0.2s;
+  color: #07192F;
+  text-decoration: none;
+  transition: all 0.2s;
 }
 
-.bk-prod-link:hover {
-  gap: 10px;
+.bk-help-btn-outline:hover {
+  border-color: #07192F;
+  background: #F8FAFC;
+}
+
+.bk-help-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 20px;
+  background: #C05615;
+  color: #ffffff;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 750;
+  text-decoration: none;
+  transition: all 0.2s;
+}
+
+.bk-help-btn-primary:hover {
+  background: #A0440E;
+  transform: translateY(-1px);
 }
 
 /* ─────────────────────────────────────────────────────────────
@@ -1173,7 +1485,7 @@
   width: 100%;
   padding: 12px 16px;
   font-size: 20px;
-  font-weight: 850;
+  font-weight: 800;
   color: var(--bk-emerald);
   background: #ffffff;
   border: 1px solid var(--bk-slate-300);
@@ -1544,15 +1856,15 @@
    14. RESPONSIVE BREAKPOINTS
    ───────────────────────────────────────────────────────────── */
 @media (max-width: 1080px) {
-  .bk-hero-inner {
-    grid-template-columns: 1fr;
-    gap: 40px;
-  }
-  .bk-quick-tray {
+  .bk-quick-tray-grid {
     grid-template-columns: repeat(2, 1fr);
+    row-gap: 24px;
   }
-  .bk-tray-card:nth-child(2) {
+  .bk-tray-col:nth-child(2) {
     border-right: none;
+  }
+  .bk-tray-col:nth-child(3) {
+    padding-left: 0;
   }
   .bk-calc-grid {
     grid-template-columns: 1fr;
@@ -1570,8 +1882,8 @@
 }
 
 @media (max-width: 860px) {
-  .bk-topbar-hours,
-  .bk-topbar-divider {
+  .bk-topbar-rate,
+  .bk-topbar-icon-btn {
     display: none;
   }
   .bk-nav {
@@ -1589,25 +1901,61 @@
 }
 
 @media (max-width: 640px) {
-  .bk-topbar {
+  .bk-topbar-contact,
+  .bk-topbar-rate,
+  .bk-topbar-divider,
+  .bk-topbar-icon-btn {
     display: none;
   }
-  .bk-segment-inner {
+  .bk-topbar-inner {
+    gap: 8px;
+    padding: 0 12px;
+  }
+  .bk-topbar-segments {
+    flex: 1;
     overflow-x: auto;
-    justify-content: flex-start;
+    white-space: nowrap;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
   }
-  .bk-segment-help {
+  .bk-topbar-segments::-webkit-scrollbar {
     display: none;
+  }
+  .bk-seg-tab-new {
+    font-size: 11.5px;
+    padding: 0 10px;
+    flex-shrink: 0;
+  }
+  .bk-topbar-login-link {
+    font-size: 11.5px;
+    white-space: nowrap;
+  }
+  .bk-btn-devenir-membre {
+    font-size: 11.5px;
+    padding: 8px 12px;
+    border-radius: 8px;
+    white-space: nowrap;
+  }
+  .bk-security-bcc {
+    display: none;
+  }
+  .bk-security-text {
+    font-size: 11px;
   }
   .bk-hero {
     padding: 40px 0 90px;
   }
-  .bk-quick-tray {
+  .bk-quick-tray-grid {
     grid-template-columns: 1fr;
+    row-gap: 16px;
   }
-  .bk-tray-card {
+  .bk-tray-col {
     border-right: none;
-    border-bottom: 1px solid var(--bk-slate-200);
+    border-bottom: 1px solid #E2E8F0;
+    padding: 0 0 14px 0 !important;
+  }
+  .bk-tray-col:last-child {
+    border-bottom: none;
   }
   .bk-cards-grid {
     grid-template-columns: 1fr;
@@ -1620,5 +1968,36 @@
   }
   .bk-header-actions .bk-btn-open-account {
     display: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .bk-header-inner {
+    height: 62px;
+    gap: 8px;
+  }
+  .bk-logo-box {
+    width: 38px;
+    height: 38px;
+  }
+  .bk-logo-box-text {
+    font-size: 14px;
+  }
+  .bk-brand-name-two-lines span {
+    font-size: 13.5px;
+  }
+  .bk-brand-motto {
+    display: none;
+  }
+  .bk-btn-devenir-membre {
+    font-size: 11px;
+    padding: 7px 10px;
+  }
+  .bk-security-inner {
+    gap: 8px;
+  }
+  .bk-security-text {
+    font-size: 10.5px;
+    line-height: 1.35;
   }
 }

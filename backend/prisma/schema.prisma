@@ -507,3 +507,140 @@ enum StatutProjet {
   TERMINE
   ANNULE
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// COMPTABILITÉ SYSCOHADA - GRAND LIVRE À PARTIE DOUBLE
+// ═══════════════════════════════════════════════════════════════════════════
+
+enum NatureCompte {
+  ACTIF
+  PASSIF
+  CHARGE
+  PRODUIT
+}
+
+enum SensEcriture {
+  DEBIT
+  CREDIT
+}
+
+enum TypeOperationComptable {
+  ADHESION
+  ABONNEMENT_EPARGNE
+  INTERET_CREDIT
+  DEPOT_EPARGNE
+  RETRAIT_EPARGNE
+  CONTREPASSATION
+  AJUSTEMENT
+}
+
+enum StatutOperation {
+  BROUILLON
+  VALIDEE
+  ANNULEE
+}
+
+enum ProprietaireType {
+  MEMBRE
+  AGENT
+  SECTION
+  SYSTEME
+}
+
+enum StatutCompte {
+  ACTIF
+  SUSPENDU
+  CLOTURE
+}
+
+model PlanComptable {
+  id            Int          @id @default(autoincrement())
+  numero        String       @unique // 101, 411, 462, 521, 571, 7061, 7062, 771x,...
+  libelle       String
+  nature        NatureCompte
+  estAuxiliaire Boolean      @default(false)
+  estActif      Boolean      @default(true)
+  comptes       Compte[]
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  @@map("plan_comptable")
+}
+
+model CodeAnalytique {
+  id         Int         @id @default(autoincrement())
+  code       String      @unique // MW-BIA, MW-KEL, MW-NYU, MW-HOP, MW-MUT, MW-GEN
+  libelle    String
+  actif      Boolean     @default(true)
+  operations Operation[]
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+
+  @@map("codes_analytiques")
+}
+
+model Compte {
+  id              Int              @id @default(autoincrement())
+  numeroCompte    String           @unique // Clé métier
+  planCompteId    Int
+  planCompte      PlanComptable    @relation(fields: [planCompteId], references: [id])
+  proprietaireType ProprietaireType @default(SYSTEME)
+  proprietaireId  Int?
+  devise          Devise           @default(FC)
+  estSysteme      Boolean          @default(false)
+  estAuxiliaire   Boolean          @default(true)
+  statut          StatutCompte     @default(ACTIF)
+  sectionId       Int?
+  ecritures       EcritureComptable[]
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  @@unique([planCompteId, proprietaireType, proprietaireId, devise])
+  @@map("comptes")
+}
+
+model Operation {
+  id                 String                  @id @default(cuid())
+  reference          String                  @unique // OP-2026-000001
+  typeOperation      TypeOperationComptable
+  montantTotal       Decimal                 @db.Decimal(18, 2)
+  devise             Devise
+  dateOperation      DateTime
+  tauxChange         Decimal?                @db.Decimal(18, 4) // 2500 si USD
+  montantFc          Decimal?                @db.Decimal(18, 2)
+  executeParId       Int?
+  executeParRole     String?
+  valideParId        Int?
+  valideParRole      String?
+  statut             StatutOperation         @default(VALIDEE)
+  idempotencyKey     String?                 @unique
+  motif              String?
+  pieceJustificative String?
+  correlationId      String?
+  ipAddress          String?
+  codeAnalytiqueId   Int?
+  codeAnalytique     CodeAnalytique?         @relation(fields: [codeAnalytiqueId], references: [id])
+  ecritures          EcritureComptable[]
+  createdAt          DateTime                @default(now())
+
+  @@index([dateOperation])
+  @@index([typeOperation])
+  @@map("operations")
+}
+
+model EcritureComptable {
+  id          BigInt    @id @default(autoincrement())
+  operationId String
+  operation   Operation @relation(fields: [operationId], references: [id], onDelete: Restrict)
+  compteId    Int
+  compte      Compte    @relation(fields: [compteId], references: [id], onDelete: Restrict)
+  sens        SensEcriture
+  montant     Decimal   @db.Decimal(18, 2)
+  devise      Devise
+  libelle     String
+  createdAt   DateTime  @default(now())
+
+  @@index([compteId, createdAt])
+  @@index([operationId])
+  @@map("ecritures_comptables")
+}

@@ -2,7 +2,7 @@
 
 import './vitrine.css';
 import Link from 'next/link';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import {
   Users,
   BarChart3,
@@ -32,6 +32,8 @@ import {
   Building2,
   AlertTriangle,
   ChevronRight,
+  ChevronLeft,
+  ChevronDown,
   Sparkles,
   Search,
   ExternalLink,
@@ -54,68 +56,163 @@ interface AccountFormula {
   segment: 'particuliers' | 'entrepreneurs' | 'all';
   icon: any;
   rateBonus: string;
+  features: string[];
 }
 
 const accountsList: AccountFormula[] = [
   {
     slug: 'principal',
     name: 'Compte Courant & Pivot',
-    sub: 'Épargne libre et quotidienne',
-    desc: 'Effectuez vos dépôts et retraits en toute liberté au guichet ou auprès des agents de proximité certifiés.',
+    sub: 'Dépôts & Retraits Quotidiens',
+    desc: 'Effectuez vos versements et retraits en toute liberté au guichet central ou auprès des agents de proximité certifiés.',
     color: '#074780',
     segment: 'all',
     icon: Wallet,
     rateBonus: 'Liquidité 100% immédiate',
+    features: [
+      'Dépôts et retraits sans frais au guichet',
+      'Validation biométrique par empreinte à chaque passage',
+      'Carte de membre délivrée immédiatement à l’adhésion',
+    ],
+  },
+  {
+    slug: 'biashara',
+    name: 'Épargne & Crédit Biashara',
+    sub: 'Commerce, Boutiques & Activités PME',
+    desc: 'Sécurisez vos recettes journalières sans risque, renforcez votre fonds de roulement et débloquez une ligne de crédit pour financer vos stocks.',
+    color: '#0D9488',
+    segment: 'entrepreneurs',
+    icon: Store,
+    rateBonus: 'Ligne de crédit stock incluse',
+    features: [
+      'Dépôt journalier de vos recettes auprès des agents mobiles',
+      'Accès prioritaire aux crédits de réapprovisionnement',
+      'Attestation de régularité financière pour vos fournisseurs',
+    ],
+  },
+  {
+    slug: 'nyumba',
+    name: 'Épargne Nyumba',
+    sub: 'Loyer & Sérénité Locative',
+    desc: 'Épargnez chaque mois et ne subissez plus la pression du loyer. Payez vos échéances locatives en avance et vivez sereinement chez vous.',
+    color: '#9333EA',
+    segment: 'particuliers',
+    icon: Home,
+    rateBonus: 'Sérénité locative garantie',
+    features: [
+      'Paiement anticipé de loyer sans stress de fin de mois',
+      'Facilité d’avance locative en cas de coup dur temporaire',
+      'Constitution progressive d’apport pour l’achat de parcelle',
+    ],
   },
   {
     slug: 'kelasi',
     name: 'Épargne Kelasi',
-    sub: 'Scolarité & Université',
-    desc: 'Planifiez sereinement les frais académiques de vos enfants et protégez leur avenir sans stress de rentrée.',
+    sub: 'Scolarité, Minerval & Université',
+    desc: 'Planifiez sereinement les frais académiques et le minerval de vos enfants et protégez leur avenir sans angoisse de rentrée scolaire.',
     color: '#D97706',
     segment: 'particuliers',
     icon: GraduationCap,
-    rateBonus: 'Bonus rentrée scolaire',
+    rateBonus: 'Rentrée scolaire garantie',
+    features: [
+      'Planification progressive sans charge financière brutale',
+      'Avances scolaires rapides débloquées sous 24h en cas d’imprévu',
+      'Bonus coopératif de rentrée scolaire versé chaque année',
+    ],
   },
   {
     slug: 'hopital',
-    name: 'Épargne Hôpital',
-    sub: 'Santé & Urgences médicales',
+    name: 'Épargne Santé & Hôpital',
+    sub: 'Santé & Urgences Médicales',
     desc: 'Un filet de sécurité indispensable pour parer aux imprévus de santé de toute votre famille avec décaissement prioritaire.',
     color: '#DC2626',
     segment: 'particuliers',
     icon: HeartPulse,
     rateBonus: 'Déblocage prioritaire 24h',
-  },
-  {
-    slug: 'nyumba',
-    name: 'Épargne Nyumba',
-    sub: 'Habitat & Construction',
-    desc: 'Constituez votre apport personnel pour l’achat de parcelle, les matériaux ou la construction de votre maison.',
-    color: '#9333EA',
-    segment: 'particuliers',
-    icon: Home,
-    rateBonus: 'Accès crédit immobilier',
-  },
-  {
-    slug: 'biashara',
-    name: 'Épargne Biashara',
-    sub: 'Commerce & Activités PME',
-    desc: 'Développez votre fonds de roulement commercial, sécurisez vos recettes journalières et accédez aux lignes de crédit.',
-    color: '#0D9488',
-    segment: 'entrepreneurs',
-    icon: Store,
-    rateBonus: 'Facilités de caisse & stock',
+    features: [
+      'Décaissement express sur simple présentation de facture médicale',
+      'Protection étendue à tous les membres de la famille',
+      'Fonds d’urgence 100% sécurisés et disponibles sans préavis',
+    ],
   },
   {
     slug: 'mutoto',
     name: 'Épargne Mutoto',
-    sub: 'Avenir des mineurs & enfants',
-    desc: 'Un compte bloqué au nom de votre enfant pour lui garantir un capital d’envol à sa majorité ou pour ses études.',
+    sub: 'Avenir des Enfants & Mineurs',
+    desc: 'Un compte bloqué au nom de votre enfant pour lui garantir un capital d’envol à sa majorité ou pour financer ses études supérieures.',
     color: '#2563EB',
     segment: 'particuliers',
     icon: Baby,
-    rateBonus: 'Intérêts capitalisés garantis',
+    rateBonus: 'Capital d’envol garanti',
+    features: [
+      'Compte nominatif bloqué et protégé jusqu’à la majorité',
+      'Rémunération par intérêts capitalisés garantis',
+      'Relevé annuel de progression remis aux parents',
+    ],
+  },
+];
+
+interface HeroSlide {
+  id: string;
+  image: string;
+  badge: string;
+  title: string;
+  highlight: string;
+  titleSuffix?: string;
+  subtitle: string;
+  primaryCta: string;
+  secondaryCta: string;
+  secondaryHref: string;
+}
+
+const heroSlides: HeroSlide[] = [
+  {
+    id: 'cooperative',
+    image: '/hero/banner-cooperative.jpg',
+    badge: 'Coopérative Agréée BCC N° 048/COOPEC',
+    title: '« Avec Mwangaza Wetu, ',
+    highlight: 'je sécurise l’avenir',
+    titleSuffix: ' de ma famille »',
+    subtitle: 'Déposez, épargnez et accédez à des crédits solidaires avec validation biométrique à chaque passage en agence.',
+    primaryCta: 'Devenir membre',
+    secondaryCta: 'Espace membre',
+    secondaryHref: '/login',
+  },
+  {
+    id: 'biashara',
+    image: '/hero/banner-biashara.jpg',
+    badge: '#CréditBiashara · PME & Commerçants',
+    title: '« Avec le crédit Biashara, ',
+    highlight: 'mon commerce grandit',
+    titleSuffix: ' chaque jour »',
+    subtitle: 'Épargnez vos recettes journalières en toute sécurité et débloquez une ligne de crédit pour financer vos stocks et agrandir votre activité.',
+    primaryCta: 'Demander un crédit Biashara',
+    secondaryCta: 'Calculer mes mensualités',
+    secondaryHref: '#simulateur',
+  },
+  {
+    id: 'nyumba',
+    image: '/hero/banner-nyumba.jpg',
+    badge: '#ÉpargneNyumba · Loyer & Logement',
+    title: '« Avec l’épargne Nyumba, ',
+    highlight: 'je paie mon loyer',
+    titleSuffix: ' en toute sérénité »',
+    subtitle: 'Épargnez chaque mois et ne subissez plus la pression du loyer. Notre formule Nyumba vous permet d’anticiper vos échéances locatives.',
+    primaryCta: 'Ouvrir mon compte Nyumba',
+    secondaryCta: 'Calculer mon épargne',
+    secondaryHref: '#simulateur',
+  },
+  {
+    id: 'kelasi',
+    image: '/hero/banner-kelasi.jpg',
+    badge: '#ÉpargneKelasi · Scolarité & Université',
+    title: '« Avec l’épargne Kelasi, ',
+    highlight: 'la rentrée de mes enfants',
+    titleSuffix: ' est garantie »',
+    subtitle: 'Anticipez les frais académiques et le minerval grâce à une épargne régulière et bénéficiez d’avances scolaires rapides.',
+    primaryCta: 'Souscrire à Kelasi',
+    secondaryCta: 'Simuler mon épargne',
+    secondaryHref: '#simulateur',
   },
 ];
 
@@ -124,6 +221,23 @@ export default function VitrinePage() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [activeSegment, setActiveSegment] = useState<Segment>('particuliers');
   const [modalOpen, setModalOpen] = useState(false);
+  const [showSecurityAlert, setShowSecurityAlert] = useState(true);
+  const [currentSlide, setCurrentSlide] = useState(0);
+  const [isPaused, setIsPaused] = useState(false);
+
+  const nextSlide = useCallback(() => {
+    setCurrentSlide((prev) => (prev + 1) % heroSlides.length);
+  }, []);
+
+  const prevSlide = useCallback(() => {
+    setCurrentSlide((prev) => (prev - 1 + heroSlides.length) % heroSlides.length);
+  }, []);
+
+  useEffect(() => {
+    if (isPaused) return;
+    const timer = setInterval(nextSlide, 6000);
+    return () => clearInterval(timer);
+  }, [isPaused, nextSlide]);
 
   // Simulateur State
   const [simType, setSimType] = useState<SimType>('credit');
@@ -176,151 +290,117 @@ export default function VitrinePage() {
 
   return (
     <div className="bk-portal">
-      {/* ─────────────────────────────────────────────────────────────
-          1. TOPBAR INSTITUTIONNELLE STYLE EQUITY BCDC / BANK OF KIGALI
-         ───────────────────────────────────────────────────────────── */}
+      {/* 1. TOPBAR BLEU NUIT */}
       <aside className="bk-topbar">
         <div className="bk-container bk-topbar-inner">
-          <div className="bk-topbar-left">
-            <span className="bk-topbar-tag">
-              <ShieldCheck size={13} className="text-emerald-400" />
-              COOPÉRATIVE AGRÉÉE BCC N° 048/COOPEC
-            </span>
-            <span className="bk-topbar-divider">|</span>
-            <span className="bk-topbar-link">
-              <Phone size={13} /> Hotline & WhatsApp : <strong>+243 820 000 000</strong>
-            </span>
-            <span className="bk-topbar-divider">|</span>
-            <span className="bk-topbar-hours">
-              <Clock size={13} /> Agences : Lun – Sam 8h00 – 16h30
-            </span>
+          <div className="bk-topbar-segments">
+            <button
+              type="button"
+              className={`bk-seg-tab-new ${activeSegment === 'particuliers' ? 'active' : ''}`}
+              onClick={() => setActiveSegment('particuliers')}
+            >
+              Particuliers
+            </button>
+            <button
+              type="button"
+              className={`bk-seg-tab-new ${activeSegment === 'entrepreneurs' ? 'active' : ''}`}
+              onClick={() => setActiveSegment('entrepreneurs')}
+            >
+              Entrepreneurs
+            </button>
+            <button
+              type="button"
+              className={`bk-seg-tab-new ${activeSegment === 'diaspora' ? 'active' : ''}`}
+              onClick={() => setActiveSegment('diaspora')}
+            >
+              Diaspora
+            </button>
           </div>
-
           <div className="bk-topbar-right">
-            <div className="bk-fx-pill">
-              <ArrowLeftRight size={12} />
+            <a href="tel:+243820000000" className="bk-topbar-contact">
+              <Phone size={13} />
+              <span>+243 820 000 000</span>
+            </a>
+            <div className="bk-topbar-rate">
               <span>Taux indicatif : <strong>1 USD = 2 850 CDF</strong></span>
             </div>
-            <div className="bk-lang-switch">
-              <button
-                type="button"
-                className={lang === 'FR' ? 'active' : ''}
-                onClick={() => setLang('FR')}
-              >
-                FR
-              </button>
-              <span>/</span>
-              <button
-                type="button"
-                className={lang === 'EN' ? 'active' : ''}
-                onClick={() => setLang('EN')}
-              >
-                EN
-              </button>
-            </div>
+            <span className="bk-topbar-divider">|</span>
+            <Link href="/login" className="bk-topbar-login-link">
+              <Lock size={13} />
+              <span>Espace membre</span>
+            </Link>
+            <button type="button" className="bk-topbar-icon-btn" aria-label="Recherche">
+              <Search size={14} />
+            </button>
+            <button
+              type="button"
+              className="bk-lang-pill"
+              onClick={() => setLang(lang === 'FR' ? 'EN' : 'FR')}
+            >
+              <span>{lang}</span>
+              <ChevronDown size={12} />
+            </button>
           </div>
         </div>
       </aside>
 
-      {/* ─────────────────────────────────────────────────────────────
-          2. BANDEAU DE SEGMENTATION (Style BOA & Equity BCDC)
-         ───────────────────────────────────────────────────────────── */}
-      <section className="bk-segment-strip">
-        <div className="bk-container bk-segment-inner">
-          <div className="bk-segment-tabs">
-            <button
-              type="button"
-              className={`bk-seg-tab ${activeSegment === 'particuliers' ? 'active' : ''}`}
-              onClick={() => setActiveSegment('particuliers')}
-            >
-              <Users size={14} /> Particuliers & Familles
-            </button>
-            <button
-              type="button"
-              className={`bk-seg-tab ${activeSegment === 'entrepreneurs' ? 'active' : ''}`}
-              onClick={() => setActiveSegment('entrepreneurs')}
-            >
-              <Store size={14} /> Commerçants & Entrepreneurs
-            </button>
-            <button
-              type="button"
-              className={`bk-seg-tab ${activeSegment === 'diaspora' ? 'active' : ''}`}
-              onClick={() => setActiveSegment('diaspora')}
-            >
-              <Landmark size={14} /> Diaspora & Investissement
-            </button>
-          </div>
-          <div className="bk-segment-help">
-            <span>Besoin d’un conseil personnalisé ?</span>
-            <a href="#contact" className="bk-link-help">Nos conseillers d’agence →</a>
-          </div>
-        </div>
-      </section>
-
-      {/* ─────────────────────────────────────────────────────────────
-          3. NAVBAR PRINCIPALE HAUTE-GAMME
-         ───────────────────────────────────────────────────────────── */}
+      {/* 2. NAVBAR BLANCHE HAUTE-GAMME */}
       <header className="bk-header">
         <div className="bk-container bk-header-inner">
-          {/* Logo officiel */}
           <Link href="/" className="bk-brand">
-            <div className="bk-logo-frame">
+            <div className="bk-logo-box">
               <img src="/logo.png" alt="Mwangaza Wetu" className="bk-logo-img" />
             </div>
             <div className="bk-brand-titles">
-              <span className="bk-brand-name">MWANGAZA WETU</span>
-              <span className="bk-brand-motto">Épargne • Crédit • Progrès Communautaire</span>
+              <div className="bk-brand-name-two-lines">
+                <span>MWANGAZA</span>
+                <span>WETU</span>
+              </div>
+              <span className="bk-brand-motto">ÉPARGNE · CRÉDIT · PROGRÈS</span>
             </div>
           </Link>
 
-          {/* Menus Desktop */}
           <nav className="bk-nav" aria-label="Menu principal">
             <ul className="bk-nav-list">
               <li>
                 <a href="#services" className="bk-nav-item">
-                  Comptes & Formules
+                  <span>Comptes &amp; Formules</span>
+                  <ChevronDown size={14} className="bk-nav-chev" />
                 </a>
               </li>
               <li>
                 <a href="#simulateur" className="bk-nav-item">
-                  Simulateur Express
+                  <span>Simulateur</span>
                 </a>
               </li>
               <li>
                 <a href="#securite" className="bk-nav-item">
-                  Sécurité & Biométrie
+                  <span>Sécurité &amp; Biométrie</span>
+                  <ChevronDown size={14} className="bk-nav-chev" />
                 </a>
               </li>
               <li>
                 <a href="#fonctionnement" className="bk-nav-item">
-                  Comment adhérer
+                  <span>Comment adhérer</span>
                 </a>
               </li>
               <li>
                 <a href="#contact" className="bk-nav-item">
-                  Nos Agences
+                  <span>Nos agences</span>
+                  <ChevronDown size={14} className="bk-nav-chev" />
                 </a>
               </li>
             </ul>
           </nav>
 
-          {/* Boutons d'accès directs */}
           <div className="bk-header-actions">
-            <Link href="/login" className="bk-btn-login">
-              <Lock size={15} className="bk-lock-icon" />
-              <span>Espace Membre</span>
-            </Link>
-
             <button
               type="button"
-              className="bk-btn-open-account"
+              className="bk-btn-devenir-membre"
               onClick={() => setModalOpen(true)}
             >
-              <span>Devenir membre</span>
-              <ArrowRight size={15} />
+              Devenir membre
             </button>
-
-            {/* Mobile Hamburger */}
             <button
               type="button"
               className="bk-mobile-toggle"
@@ -332,13 +412,13 @@ export default function VitrinePage() {
           </div>
         </div>
 
-        {/* Menu Mobile Accordéon */}
+        {/* Menu Mobile */}
         {mobileMenuOpen && (
           <div className="bk-mobile-drawer">
             <div className="bk-mobile-drawer-links">
-              <a href="#services" onClick={() => setMobileMenuOpen(false)}>Comptes & Formules</a>
-              <a href="#simulateur" onClick={() => setMobileMenuOpen(false)}>Simulateur de crédit / épargne</a>
-              <a href="#securite" onClick={() => setMobileMenuOpen(false)}>Sécurité & Biométrie</a>
+              <a href="#services" onClick={() => setMobileMenuOpen(false)}>Comptes &amp; Formules</a>
+              <a href="#simulateur" onClick={() => setMobileMenuOpen(false)}>Simulateur</a>
+              <a href="#securite" onClick={() => setMobileMenuOpen(false)}>Sécurité &amp; Biométrie</a>
               <a href="#fonctionnement" onClick={() => setMobileMenuOpen(false)}>Comment adhérer</a>
               <a href="#contact" onClick={() => setMobileMenuOpen(false)}>Nos Agences</a>
             </div>
@@ -348,53 +428,77 @@ export default function VitrinePage() {
               </Link>
               <button
                 type="button"
-                className="bk-btn-open-account w-full justify-center"
+                className="bk-btn-devenir-membre w-full justify-center"
                 onClick={() => {
                   setMobileMenuOpen(false);
                   setModalOpen(true);
                 }}
               >
-                Devenir membre →
+                Devenir membre
               </button>
             </div>
           </div>
         )}
       </header>
 
-      {/* ─────────────────────────────────────────────────────────────
-          4. BANDEAU DE SÉCURITÉ OFFICIEL & ANTI-FRAUDE (Style Equity BCDC)
-         ───────────────────────────────────────────────────────────── */}
-      <section className="bk-fraud-alert" id="securite">
-        <div className="bk-container bk-fraud-inner">
-          <div className="bk-fraud-icon">
-            <ShieldAlert size={20} />
+      {/* 3. BANDEAU DE SÉCURITÉ DISMISSIBLE */}
+      {showSecurityAlert && (
+        <section className="bk-security-bar">
+          <div className="bk-container bk-security-inner">
+            <div className="bk-security-left">
+              <ShieldAlert size={17} className="bk-security-icon" />
+              <p className="bk-security-text">
+                <strong>Sécurité :</strong> nos agents ne vous demanderont <strong>jamais</strong> votre mot de passe ni votre code PIN par téléphone ou WhatsApp.{' '}
+                <a href="#securite" className="bk-security-link">Voir les règles</a>
+              </p>
+            </div>
+            <div className="bk-security-right">
+              <span className="bk-security-bcc">Coopérative agréée BCC N° 048/COOPEC</span>
+              <button
+                type="button"
+                className="bk-security-close"
+                onClick={() => setShowSecurityAlert(false)}
+                aria-label="Fermer"
+              >
+                <X size={15} />
+              </button>
+            </div>
           </div>
-          <div className="bk-fraud-text">
-            <strong>Avertissement Officiel de Sécurité :</strong> Les agents et guichetiers Mwangaza Wetu ne vous demanderont <u>JAMAIS</u> votre mot de passe, ni code PIN par téléphone ou WhatsApp. Toute opération en agence ou auprès d'un agent délégué fait l'objet d'une validation biométrique certifiée.
-          </div>
-        </div>
-      </section>
+        </section>
+      )}
 
-      {/* ─────────────────────────────────────────────────────────────
-          5. HERO BANCAIRE RICHE (Bank of Kigali + Equity BCDC)
-         ───────────────────────────────────────────────────────────── */}
-      <section className="bk-hero">
-        <div className="bk-hero-bg-overlay" />
+      {/* 4. HERO BANCAIRE CAROUSEL TMB STYLE */}
+      <section
+        className="bk-hero"
+        onMouseEnter={() => setIsPaused(true)}
+        onMouseLeave={() => setIsPaused(false)}
+      >
+        {/* Slides d'arrière-plan avec images style TMB Bank */}
+        <div className="bk-hero-slides" aria-hidden="true">
+          {heroSlides.map((slide, idx) => (
+            <div
+              key={slide.id}
+              className={`bk-hero-slide ${idx === currentSlide ? 'active' : ''}`}
+              style={{ backgroundImage: `url(${slide.image})` }}
+            />
+          ))}
+        </div>
+
         <div className="bk-container bk-hero-inner">
-          {/* Colonne gauche : Titre & Propositions de valeur */}
-          <div className="bk-hero-content">
+          <div className="bk-hero-content" key={heroSlides[currentSlide].id}>
             <div className="bk-badge-pill">
-              <Sparkles size={14} className="text-amber-400" />
-              <span>COOPÉRATIVE D’ÉPARGNE ET DE CRÉDIT DE RÉFÉRENCE EN RDC</span>
+              <img src="/logo.png" alt="MW" className="bk-badge-logo" />
+              <span>{heroSlides[currentSlide].badge}</span>
             </div>
 
             <h1 className="bk-hero-title">
-              La finance solidaire qui <br />
-              <span className="bk-highlight">sécurise vos ambitions</span> au quotidien.
+              {heroSlides[currentSlide].title}
+              <span className="bk-highlight">{heroSlides[currentSlide].highlight}</span>
+              {heroSlides[currentSlide].titleSuffix}
             </h1>
 
             <p className="bk-hero-lead">
-              Sécurisez votre épargne, planifiez les études de vos enfants avec <strong>Kelasi</strong>, financez votre stock avec <strong>Biashara</strong> et bâtissez votre logement avec des crédits responsables.
+              {heroSlides[currentSlide].subtitle}
             </p>
 
             <div className="bk-hero-cta-group">
@@ -403,284 +507,235 @@ export default function VitrinePage() {
                 onClick={() => setModalOpen(true)}
                 className="bk-cta-primary"
               >
-                <span>Ouvrir mon compte maintenant</span>
+                <span>{heroSlides[currentSlide].primaryCta}</span>
                 <ArrowRight size={18} />
               </button>
-              <Link href="/login" className="bk-cta-secondary">
+              <Link href={heroSlides[currentSlide].secondaryHref} className="bk-cta-secondary">
                 <Lock size={16} />
-                <span>Consulter mes comptes en direct</span>
+                <span>{heroSlides[currentSlide].secondaryCta}</span>
               </Link>
             </div>
 
-            {/* Social Proof certifié */}
-            <div className="bk-social-proof">
-              <div className="bk-rating-stars">
-                {[...Array(5)].map((_, i) => (
-                  <Star key={i} size={15} fill="#FBBF24" color="#FBBF24" />
-                ))}
-                <span className="bk-rating-score">4.9 / 5</span>
+            {/* Profils & Témoignages des Membres (Style Bank of Kigali) */}
+            <div className="bk-hero-testimonials">
+              <span className="bk-testimonials-label">TÉMOIGNAGES · +520 MEMBRES ACTIFS</span>
+              <div className="bk-avatar-stack">
+                <img
+                  src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=120&h=120&q=80"
+                  alt="Membre Mwangaza"
+                  className="bk-avatar"
+                />
+                <img
+                  src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=120&h=120&q=80"
+                  alt="Membre Mwangaza"
+                  className="bk-avatar"
+                />
+                <img
+                  src="https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?auto=format&fit=crop&w=120&h=120&q=80"
+                  alt="Membre Mwangaza"
+                  className="bk-avatar"
+                />
+                <img
+                  src="https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=120&h=120&q=80"
+                  alt="Membre Mwangaza"
+                  className="bk-avatar"
+                />
+                <img
+                  src="https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=120&h=120&q=80"
+                  alt="Membre Mwangaza"
+                  className="bk-avatar"
+                />
+                <button
+                  type="button"
+                  onClick={() => setModalOpen(true)}
+                  className="bk-avatar-arrow"
+                  aria-label="Rejoindre les membres"
+                >
+                  <ArrowRight size={20} />
+                </button>
               </div>
-              <p className="bk-social-text">
-                Plus de <strong>520 familles et commerçants actifs</strong> nous confient leur avenir financier.
-              </p>
             </div>
-          </div>
 
-          {/* Colonne droite : Carte bancaire prestige & Passbook digital */}
-          <div className="bk-hero-showcase">
-            {/* Carte de Membre Digitale Mwangaza Gold */}
-            <div className="bk-virtual-card">
-              <div className="bk-card-header">
-                <div className="bk-card-chip" />
-                <span className="bk-card-tier">MEMBRE PRIVILÈGE</span>
-              </div>
-              <div className="bk-card-number">•••• •••• •••• 5824</div>
-              <div className="bk-card-footer">
-                <div>
-                  <div className="bk-card-label">TITULAIRE DU COMPTE</div>
-                  <div className="bk-card-name">MEMBRE ACTIF CERTIFIÉ</div>
-                </div>
-                <div className="bk-card-brand">
-                  <span className="bk-card-tag">MWANGAZA GOLD</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Widget transactionnel en temps réel */}
-            <div className="bk-hero-widget">
-              <div className="bk-widget-top">
-                <div className="bk-widget-badge">
-                  <CheckCircle2 size={13} className="text-emerald-500" />
-                  <span>Dernière opération vérifiée</span>
-                </div>
-                <span className="bk-widget-time">Il y a 3 min</span>
-              </div>
-              <div className="bk-widget-body">
-                <div>
-                  <div className="bk-widget-acc">Épargne Scolaire Kelasi</div>
-                  <div className="bk-widget-amount">+ 150.00 USD</div>
-                </div>
-                <span className="bk-widget-status">Validé par biométrie</span>
-              </div>
+            {/* Puces (Dots) de navigation */}
+            <div className="bk-hero-dots">
+              {heroSlides.map((slide, idx) => (
+                <button
+                  key={slide.id}
+                  type="button"
+                  className={`bk-hero-dot ${idx === currentSlide ? 'active' : ''}`}
+                  onClick={() => setCurrentSlide(idx)}
+                  aria-label={`Bannière ${idx + 1} : ${slide.badge}`}
+                />
+              ))}
             </div>
           </div>
         </div>
 
-        {/* ─────────────────────────────────────────────────────────────
-            6. LE QUICK-ACTION TRAY FLOTTANT (Exactement comme Bank of Kigali)
-           ───────────────────────────────────────────────────────────── */}
-        <div className="bk-container bk-quick-tray-container">
-          <div className="bk-quick-tray">
-            <div
-              className="bk-tray-card"
-              role="button"
-              tabIndex={0}
-              onClick={() => setModalOpen(true)}
-            >
-              <div className="bk-tray-icon bg-blue-50 text-blue-700">
-                <CreditCard size={24} />
-              </div>
-              <div className="bk-tray-info">
-                <h3>Ouvrir un compte</h3>
-                <p>Adhésion simple en 3 étapes</p>
-              </div>
-              <ChevronRight size={18} className="bk-tray-arrow" />
-            </div>
+        {/* Flèches latérales du slider (gauche et droite, style TMB Bank) */}
+        <button
+          type="button"
+          className="bk-hero-arrow prev"
+          onClick={prevSlide}
+          aria-label="Bannière précédente"
+        >
+          <ChevronLeft size={22} />
+        </button>
 
-            <a href="#simulateur" className="bk-tray-card">
-              <div className="bk-tray-icon bg-amber-50 text-amber-600">
-                <Calculator size={24} />
-              </div>
-              <div className="bk-tray-info">
-                <h3>Simuler mon crédit</h3>
-                <p>Calcul des mensualités en direct</p>
-              </div>
-              <ChevronRight size={18} className="bk-tray-arrow" />
-            </a>
-
-            <a href="#devises" className="bk-tray-card">
-              <div className="bk-tray-icon bg-emerald-50 text-emerald-600">
-                <ArrowLeftRight size={24} />
-              </div>
-              <div className="bk-tray-info">
-                <h3>Taux de change</h3>
-                <p>1 USD = 2 850 CDF (Achat/Vente)</p>
-              </div>
-              <ChevronRight size={18} className="bk-tray-arrow" />
-            </a>
-
-            <a href="#contact" className="bk-tray-card">
-              <div className="bk-tray-icon bg-purple-50 text-purple-600">
-                <MapPin size={24} />
-              </div>
-              <div className="bk-tray-info">
-                <h3>Nos Agences</h3>
-                <p>Guichets & agents de quartier</p>
-              </div>
-              <ChevronRight size={18} className="bk-tray-arrow" />
-            </a>
-          </div>
-        </div>
+        <button
+          type="button"
+          className="bk-hero-arrow next"
+          onClick={nextSlide}
+          aria-label="Bannière suivante"
+        >
+          <ChevronRight size={22} />
+        </button>
       </section>
 
       {/* ─────────────────────────────────────────────────────────────
-          7. SECTION SIMULATEUR INTERACTIF (Style Loan Calculator de BK)
+          5. LE QUICK-ACTION TRAY FLOTTANT (Style Bank of Kigali)
+          Placé entre le Hero et la section suivante avec chevauchement
          ───────────────────────────────────────────────────────────── */}
-      <section className="bk-section bk-calculator-section" id="simulateur">
+      <div className="bk-tray-overlap-wrapper">
+        <div className="bk-container">
+          <div className="bk-quick-tray-card">
+            <div className="bk-tray-header-pill">
+              <span>DES SOLUTIONS ADAPTÉES À VOTRE PROFIL</span>
+            </div>
+
+            <div className="bk-quick-tray-grid">
+              <div
+                className="bk-tray-col"
+                role="button"
+                tabIndex={0}
+                onClick={() => {
+                  setActiveSegment('particuliers');
+                  const el = document.getElementById('services');
+                  el?.scrollIntoView({ behavior: 'smooth' });
+                }}
+              >
+                <div className="bk-tray-col-title">
+                  <span>Je suis un particulier</span>
+                  <ChevronRight size={16} />
+                </div>
+                <p className="bk-tray-col-desc">
+                  Épargne sécurisée, transferts et microcrédits du quotidien
+                </p>
+              </div>
+
+              <div
+                className="bk-tray-col"
+                role="button"
+                tabIndex={0}
+                onClick={() => {
+                  setActiveSegment('entrepreneurs');
+                  const el = document.getElementById('services');
+                  el?.scrollIntoView({ behavior: 'smooth' });
+                }}
+              >
+                <div className="bk-tray-col-title">
+                  <span>Je suis commerçant / PME</span>
+                  <ChevronRight size={16} />
+                </div>
+                <p className="bk-tray-col-desc">
+                  Lignes de crédit Biashara et financement de stock commercial
+                </p>
+              </div>
+
+              <div
+                className="bk-tray-col"
+                role="button"
+                tabIndex={0}
+                onClick={() => {
+                  setActiveSegment('diaspora');
+                  const el = document.getElementById('services');
+                  el?.scrollIntoView({ behavior: 'smooth' });
+                }}
+              >
+                <div className="bk-tray-col-title">
+                  <span>Je vis dans la diaspora</span>
+                  <ChevronRight size={16} />
+                </div>
+                <p className="bk-tray-col-desc">
+                  Épargnez et soutenez vos proches au pays en toute confiance
+                </p>
+              </div>
+
+              <div
+                className="bk-tray-col"
+                role="button"
+                tabIndex={0}
+                onClick={() => {
+                  const el = document.getElementById('simulateur');
+                  el?.scrollIntoView({ behavior: 'smooth' });
+                }}
+              >
+                <div className="bk-tray-col-title">
+                  <span>Je prépare l’avenir</span>
+                  <ChevronRight size={16} />
+                </div>
+                <p className="bk-tray-col-desc">
+                  Logement avec Nyumba et scolarité garantie avec Kelasi
+                </p>
+              </div>
+            </div>
+
+            {/* Bouton d'action flottant au centre bas (Style Bank of Kigali) */}
+            <button
+              type="button"
+              className="bk-tray-floating-btn"
+              onClick={() => setModalOpen(true)}
+              aria-label="Devenir membre"
+            >
+              <ArrowRight size={22} />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* ─────────────────────────────────────────────────────────────
+          2. SECTION DES FORMULES & COMPTES CONCRETS (Style UI/UX Pro)
+         ───────────────────────────────────────────────────────────── */}
+      <section className="bk-section bk-products-section" id="services">
         <div className="bk-container">
           <div className="bk-section-header text-center">
-            <div className="bk-kicker">OUTIL FINANCIER EN LIGNE</div>
+            <div className="bk-kicker">FORMULES DE COMPTES &amp; CRÉDITS ADAPTÉS</div>
             <h2 className="bk-section-title">
-              Planifiez votre avenir financier avec notre simulateur
+              Des solutions concrètes pour sécuriser et faire grandir votre argent
             </h2>
             <p className="bk-section-sub">
-              Ajustez le montant et la durée pour estimer immédiatement vos mensualités de crédit coopératif ou le rendement de votre épargne thématique.
+              Chaque compte répond à un besoin réel de votre quotidien : financer votre commerce, sécuriser votre loyer, garantir la scolarité de vos enfants ou épargner en toute liberté.
             </p>
-          </div>
 
-          <div className="bk-calculator-box">
-            {/* Toggle Épargne / Crédit */}
-            <div className="bk-calc-tabs">
+            {/* Onglets de filtrage par profil (Synchronisés avec le plateau flottant) */}
+            <div className="bk-category-tabs">
               <button
                 type="button"
-                className={`bk-calc-tab ${simType === 'credit' ? 'active' : ''}`}
-                onClick={() => setSimType('credit')}
+                className={`bk-cat-tab ${activeSegment === 'particuliers' ? 'active' : ''}`}
+                onClick={() => setActiveSegment('particuliers')}
               >
-                <Landmark size={18} /> Simuler un Crédit Coopératif
+                <Users size={16} />
+                <span>Particuliers &amp; Familles</span>
               </button>
               <button
                 type="button"
-                className={`bk-calc-tab ${simType === 'epargne' ? 'active' : ''}`}
-                onClick={() => setSimType('epargne')}
+                className={`bk-cat-tab ${activeSegment === 'entrepreneurs' ? 'active' : ''}`}
+                onClick={() => setActiveSegment('entrepreneurs')}
               >
-                <Wallet size={18} /> Simuler mon Épargne Progressive
+                <Store size={16} />
+                <span>Commerçants &amp; PME</span>
+              </button>
+              <button
+                type="button"
+                className={`bk-cat-tab ${activeSegment === 'diaspora' ? 'active' : ''}`}
+                onClick={() => setActiveSegment('diaspora')}
+              >
+                <Landmark size={16} />
+                <span>Diaspora &amp; Projets</span>
               </button>
             </div>
-
-            <div className="bk-calc-grid">
-              {/* Sliders de configuration */}
-              <div className="bk-calc-inputs">
-                {/* Choix devise */}
-                <div className="bk-input-group">
-                  <div className="flex justify-between items-center mb-2">
-                    <label className="bk-input-label">Devise de l'opération :</label>
-                    <div className="bk-currency-toggle">
-                      <button
-                        type="button"
-                        className={currency === 'USD' ? 'active' : ''}
-                        onClick={() => setCurrency('USD')}
-                      >
-                        USD ($)
-                      </button>
-                      <button
-                        type="button"
-                        className={currency === 'CDF' ? 'active' : ''}
-                        onClick={() => setCurrency('CDF')}
-                      >
-                        CDF (FC)
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Slider Montant */}
-                <div className="bk-input-group">
-                  <div className="flex justify-between items-center mb-2">
-                    <label className="bk-input-label">
-                      {simType === 'credit' ? 'Montant du financement souhaité :' : 'Capital initial à épargner :'}
-                    </label>
-                    <span className="bk-input-val">
-                      {amount.toLocaleString()} {currency}
-                    </span>
-                  </div>
-                  <input
-                    type="range"
-                    min={currency === 'USD' ? 100 : 250000}
-                    max={currency === 'USD' ? 10000 : 25000000}
-                    step={currency === 'USD' ? 50 : 100000}
-                    value={amount}
-                    onChange={(e) => setAmount(Number(e.target.value))}
-                    className="bk-slider"
-                  />
-                  <div className="bk-slider-bounds">
-                    <span>{currency === 'USD' ? '100 $' : '250 000 FC'}</span>
-                    <span>{currency === 'USD' ? '10 000 $' : '25 000 000 FC'}</span>
-                  </div>
-                </div>
-
-                {/* Slider Durée */}
-                <div className="bk-input-group mt-6">
-                  <div className="flex justify-between items-center mb-2">
-                    <label className="bk-input-label">Durée de l'engagement :</label>
-                    <span className="bk-input-val">{durationMonths} mois</span>
-                  </div>
-                  <input
-                    type="range"
-                    min={3}
-                    max={36}
-                    step={3}
-                    value={durationMonths}
-                    onChange={(e) => setDurationMonths(Number(e.target.value))}
-                    className="bk-slider"
-                  />
-                  <div className="bk-slider-bounds">
-                    <span>3 mois</span>
-                    <span>12 mois</span>
-                    <span>24 mois</span>
-                    <span>36 mois</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Panneau de résultats chiffrés */}
-              <div className="bk-calc-result-card">
-                <div className="bk-result-badge">
-                  {simType === 'credit' ? 'PROPOSITION DE CRÉDIT ESTIMÉE' : 'PROJECTION D’ÉPARGNE'}
-                </div>
-
-                <div className="bk-result-main">
-                  <span className="bk-result-sublabel">{simResults.label1}</span>
-                  <div className="bk-result-big">{simResults.val1}</div>
-                </div>
-
-                <div className="bk-result-secondary">
-                  <span>{simResults.label2}</span>
-                  <strong>{simResults.val2}</strong>
-                </div>
-
-                <p className="bk-result-disclaimer">{simResults.info}</p>
-
-                <div className="bk-result-actions">
-                  <button
-                    type="button"
-                    onClick={() => setModalOpen(true)}
-                    className="bk-btn-apply"
-                  >
-                    <span>Faire ma demande en agence</span>
-                    <ArrowRight size={16} />
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ─────────────────────────────────────────────────────────────
-          8. SECTION DES FORMULES ADAPTÉES PAR SEGMENT
-         ───────────────────────────────────────────────────────────── */}
-      <section className="bk-section" id="services">
-        <div className="bk-container">
-          <div className="bk-section-header">
-            <div className="bk-kicker">NOS SOLUTIONS PAR ÉTAPE DE VIE</div>
-            <h2 className="bk-section-title">
-              Des comptes adaptés à votre situation réelle
-            </h2>
-            <p className="bk-section-sub">
-              Chaque formule répond à un objectif concret : protéger la famille, scolariser vos enfants ou investir dans votre commerce.
-            </p>
           </div>
 
+          {/* Grille des 6 Comptes Phares Mwangaza */}
           <div className="bk-cards-grid">
             {filteredAccounts.map((acc) => {
               const IconComp = acc.icon;
@@ -692,9 +747,12 @@ export default function VitrinePage() {
                       className="bk-prod-icon"
                       style={{ background: `${acc.color}15`, color: acc.color }}
                     >
-                      <IconComp size={24} />
+                      <IconComp size={26} />
                     </div>
-                    <span className="bk-prod-tag" style={{ color: acc.color, borderColor: `${acc.color}40` }}>
+                    <span
+                      className="bk-prod-tag"
+                      style={{ color: acc.color, borderColor: `${acc.color}40`, background: `${acc.color}08` }}
+                    >
                       {acc.rateBonus}
                     </span>
                   </div>
@@ -703,19 +761,51 @@ export default function VitrinePage() {
                   <div className="bk-prod-sub">{acc.sub}</div>
                   <p className="bk-prod-desc">{acc.desc}</p>
 
+                  {/* 3 Avantages clés concrets avec checkmarks */}
+                  <ul className="bk-prod-features">
+                    {acc.features.map((feat, fIdx) => (
+                      <li key={fIdx}>
+                        <CheckCircle2 size={16} className="text-emerald-500 flex-shrink-0" />
+                        <span>{feat}</span>
+                      </li>
+                    ))}
+                  </ul>
+
                   <div className="bk-prod-action">
                     <button
                       type="button"
                       onClick={() => setModalOpen(true)}
-                      className="bk-prod-link"
+                      className="bk-btn-subscribe"
+                      style={{ '--accent-color': acc.color } as React.CSSProperties}
                     >
                       <span>Souscrire à ce compte</span>
-                      <ChevronRight size={16} />
+                      <ArrowRight size={16} />
                     </button>
                   </div>
                 </div>
               );
             })}
+          </div>
+
+          {/* Bannière de Réassurance & Orientation en bas de section */}
+          <div className="bk-products-help-banner">
+            <div className="bk-help-content">
+              <ShieldCheck size={28} className="text-emerald-500 flex-shrink-0" />
+              <div>
+                <h4>Besoin d'un accompagnement personnalisé pour choisir votre formule ?</h4>
+                <p>Nos conseillers vous reçoivent en agence ou répondent directement à vos questions par téléphone et WhatsApp.</p>
+              </div>
+            </div>
+            <div className="bk-help-actions">
+              <a href="tel:+243820000000" className="bk-help-btn-outline">
+                <Phone size={15} />
+                <span>+243 820 000 000</span>
+              </a>
+              <a href="#contact" className="bk-help-btn-primary">
+                <span>Trouver mon agence</span>
+                <ChevronRight size={16} />
+              </a>
+            </div>
           </div>
         </div>
       </section>
