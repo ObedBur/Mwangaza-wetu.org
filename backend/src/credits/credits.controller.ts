@@ -66,6 +66,14 @@ export class CreditsController {
     return this.creditsService.findOne(id);
   }
 
+  @Post(':id/relancer')
+  async relancer(
+    @Param('id', ParseIntPipe) id: number,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.creditsService.relancerEcheance(id, req.user);
+  }
+
   @Post()
   async create(@Body() createDto: CreateCreditDto) {
     return this.creditsService.create(createDto);

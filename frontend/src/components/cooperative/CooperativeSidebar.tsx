@@ -9,8 +9,6 @@ import {
   IconArrowUp,
   IconArrowsExchange,
   IconBuildingCommunity,
-  IconCalculator,
-  IconChartPie,
   IconChevronDown,
   IconClock,
   IconCreditCard,
@@ -60,7 +58,7 @@ const navigationGroups: NavigationGroup[] = [
   {
     title: "Membres",
     items: [
-      { label: "Membres", href: "/membres", icon: IconUsers, count: "1 248" },
+      { label: "Membres", href: "/membres", icon: IconUsers },
     ],
   },
   {
@@ -81,7 +79,7 @@ const navigationGroups: NavigationGroup[] = [
     title: "Opérations",
     items: [
       {
-        label: "Dépôts & cotisations",
+        label: "Dépôts & Epargnes",
         href: "/operations/depots-cotisations",
         icon: IconArrowDown,
       },
@@ -95,21 +93,9 @@ const navigationGroups: NavigationGroup[] = [
     ],
   },
   {
-    title: "Comptabilité",
-    items: [
-      {
-        label: "Caisse & comptabilité",
-        href: "/comptabilite",
-        icon: IconCalculator,
-      },
-    ],
-  },
-  {
     title: "Outils",
     items: [
       { label: "Assistance", href: "/support", icon: IconMessageCircle },
-      { label: "Rapports", href: "/rapports", icon: IconChartPie },
-      { label: "Paramètres", href: "/parametres", icon: IconSettings },
     ],
   },
   {
@@ -134,7 +120,7 @@ export function CooperativeSidebar({
   active: string;
   onNavigate?: (label: string, href: string) => void;
   close?: () => void;
-  membersCount?: number;
+  membersCount?: number | null;
   t: SidebarCopy;
   isCollapsed?: boolean;
   onToggleCollapse?: () => void;
@@ -145,11 +131,11 @@ export function CooperativeSidebar({
   const authUser = getAuthUser();
   const initials = authUser?.fullName
     ? authUser.fullName
-        .split(" ")
-        .filter(Boolean)
-        .slice(0, 2)
-        .map((p: string) => p[0].toUpperCase())
-        .join("")
+      .split(" ")
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((p: string) => p[0].toUpperCase())
+      .join("")
     : "SA";
   const userName = authUser?.fullName || "Super Admin";
   const userRole = authUser?.role
@@ -232,67 +218,69 @@ export function CooperativeSidebar({
             return true;
           })
           .map((group) => (
-          <section className="mw-nav-group" key={group.title}>
-            {group.collapsible ? (
-              <button
-                type="button"
-                className="mw-nav-group-title mw-nav-group-toggle"
-                aria-expanded={savingsOpen}
-                aria-controls="mw-savings-links"
-                onClick={() => setSavingsOpen((open) => !open)}
-              >
-                <span>{group.title}</span>
-                <IconChevronDown
-                  aria-hidden="true"
-                  className={savingsOpen ? "" : "is-collapsed"}
-                />
-              </button>
-            ) : (
-              <h2 className="mw-nav-group-title">{group.title}</h2>
-            )}
-            <div
-              className="mw-nav-group-links"
-              id={group.collapsible ? "mw-savings-links" : undefined}
-              hidden={!isCollapsed && group.collapsible && !savingsOpen}
-            >
-              {group.items.map(
-                ({ label, href, icon: Icon, count, color, tooltip }) => {
-                  const isActive =
-                    pathname === href ||
-                    (href !== "/dashboard" && pathname.startsWith(href));
-                  const itemTooltip = isCollapsed
-                    ? (tooltip ? `${label} — ${tooltip}` : label)
-                    : tooltip;
-
-                  return (
-                    <Link
-                      key={href}
-                      href={href}
-                      className={`mw-nav-item mw-nav-link${isActive ? " is-active" : ""}${color ? ` mw-account-${color}` : ""}`}
-                      title={itemTooltip}
-                      aria-label={label}
-                      aria-current={isActive ? "page" : undefined}
-                      onClick={() => {
-                        close?.();
-                        onNavigate?.(label, href);
-                      }}
-                    >
-                      <Icon aria-hidden="true" />
-                      <span>{label}</span>
-                      {count && (
-                        <small className="mw-nav-count">
-                          {label === "Membres" && membersCount !== undefined
-                            ? membersCount.toLocaleString("fr-FR")
-                            : count}
-                        </small>
-                      )}
-                    </Link>
-                  );
-                },
+            <section className="mw-nav-group" key={group.title}>
+              {group.collapsible ? (
+                <button
+                  type="button"
+                  className="mw-nav-group-title mw-nav-group-toggle"
+                  aria-expanded={savingsOpen}
+                  aria-controls="mw-savings-links"
+                  onClick={() => setSavingsOpen((open) => !open)}
+                >
+                  <span>{group.title}</span>
+                  <IconChevronDown
+                    aria-hidden="true"
+                    className={savingsOpen ? "" : "is-collapsed"}
+                  />
+                </button>
+              ) : (
+                <h2 className="mw-nav-group-title">{group.title}</h2>
               )}
-            </div>
-          </section>
-        ))}
+              <div
+                className="mw-nav-group-links"
+                id={group.collapsible ? "mw-savings-links" : undefined}
+                hidden={!isCollapsed && group.collapsible && !savingsOpen}
+              >
+                {group.items.map(
+                  ({ label, href, icon: Icon, count, color, tooltip }) => {
+                    const isActive =
+                      pathname === href ||
+                      (href !== "/dashboard" && pathname.startsWith(href));
+                    const itemTooltip = isCollapsed
+                      ? (tooltip ? `${label} — ${tooltip}` : label)
+                      : tooltip;
+
+                    return (
+                      <Link
+                        key={href}
+                        href={href}
+                        className={`mw-nav-item mw-nav-link${isActive ? " is-active" : ""}${color ? ` mw-account-${color}` : ""}`}
+                        title={itemTooltip}
+                        aria-label={label}
+                        aria-current={isActive ? "page" : undefined}
+                        onClick={() => {
+                          close?.();
+                          onNavigate?.(label, href);
+                        }}
+                      >
+                        <Icon aria-hidden="true" />
+                        <span>{label}</span>
+                        {(label === "Membres"
+                          ? membersCount != null
+                          : Boolean(count)) && (
+                          <small className="mw-nav-count">
+                            {label === "Membres" && membersCount !== undefined
+                              ? membersCount?.toLocaleString("fr-FR") ?? count
+                              : count}
+                          </small>
+                        )}
+                      </Link>
+                    );
+                  },
+                )}
+              </div>
+            </section>
+          ))}
       </nav>
       <div className="mw-side-bottom">
         <div className="mw-profile">

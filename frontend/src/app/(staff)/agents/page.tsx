@@ -159,6 +159,10 @@ function AgentsManagementPage() {
 
   async function saveAgent(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!editing && !fingerprintId) {
+      setFormError('Capturez l’empreinte digitale avant de créer l’agent.');
+      return;
+    }
     setSaving(true);
     setFormError('');
     const payload: Record<string, unknown> = {
@@ -326,11 +330,11 @@ function AgentsManagementPage() {
               <div className="coop-agent-section-title"><span>03</span><div><strong>Accès au compte</strong><small>{editing ? 'Vérifiez l’identifiant biométrique et l’état du compte.' : 'Un mot de passe temporaire sera généré automatiquement et affiché après la création.'}</small></div></div>
               {!editing && <p className="coop-agent-auto-password-note">Le mot de passe sera affiché une seule fois après la création. L’agent pourra ensuite le modifier depuis son espace.</p>}
               <div className="coop-agent-fingerprint-field">
-                <span>Empreinte digitale <small>(facultative)</small></span>
+                <span>Empreinte digitale <small>{editing ? '(requise à la création)' : '(obligatoire)'}</small></span>
                 <button type="button" className={`coop-agent-capture-button${fingerprintId ? ' is-captured' : ''}`} onClick={() => void captureAgentFingerprint()} disabled={capturingFingerprint}>
                   <IconFingerprint size={17} />{capturingFingerprint ? 'Placez le doigt sur le lecteur…' : fingerprintId ? 'Capturer à nouveau' : 'Capturer l’empreinte'}
                 </button>
-                {fingerprintId ? <p className="coop-agent-fingerprint-success" role="status">✓ Empreinte capturée · ID {fingerprintId}</p> : fingerprintError ? <p className="coop-agent-fingerprint-error" role="alert">✕ {fingerprintError}</p> : <p>L’identifiant biométrique sera associé à cet agent.</p>}
+                {fingerprintId ? <p className="coop-agent-fingerprint-success" role="status">✓ Empreinte capturée · ID {fingerprintId}</p> : fingerprintError ? <p className="coop-agent-fingerprint-error" role="alert">✕ {fingerprintError}</p> : <p>{editing ? 'L’identifiant biométrique sera associé à cet agent.' : 'La capture est nécessaire pour créer le compte agent.'}</p>}
               </div>
             </section>
             {editing && <section className="coop-agent-form-section coop-agent-access-section"><div className="coop-agent-section-title"><span>03</span><div><strong>Accès au compte</strong><small>L’agent pourra changer son mot de passe depuis son compte.</small></div></div><label className="coop-agent-checkbox"><input type="checkbox" checked={draft.actif} onChange={(e) => setDraft({ ...draft, actif: e.target.checked })} /> <span><strong>Compte actif</strong><small>L’agent peut se connecter et utiliser son guichet.</small></span></label></section>}

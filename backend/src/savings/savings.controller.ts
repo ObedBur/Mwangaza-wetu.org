@@ -105,6 +105,11 @@ export class SavingsController {
     return this.savingsService.getPrincipalDashboard();
   }
 
+  @Get('compte-type/:type/dashboard')
+  async getAccountTypeDashboard(@Param('type') type: string) {
+    return this.savingsService.getAccountTypeDashboard(type);
+  }
+
   @Get('by-type/:type')
   async getByType(@Param('type') type: string) {
     return this.savingsService.getSoldeByTypeCompte(type);

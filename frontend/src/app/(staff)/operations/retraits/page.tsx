@@ -5,19 +5,20 @@ import {
   IconArrowUp,
   IconCheck,
   IconClock,
+  IconFileSpreadsheet,
+  IconFileText,
+  IconPrinter,
   IconSearch,
   IconWallet,
   IconX,
 } from "@tabler/icons-react";
-import { useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 
 import { CooperativeDataState } from "@/components/cooperative/CooperativeDataState";
 import { CooperativePagination } from "@/components/cooperative/CooperativePagination";
 import {
-  AccountPills,
   CooperativeBreadcrumb,
   CooperativeStatCard,
-  CooperativeStatus,
   formatCurrency,
   formatDate,
 } from "@/components/cooperative/CooperativePrimitives";
@@ -30,227 +31,543 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
+import { apiClient, getAuthUser } from "@/lib/auth";
 import {
-  accountConfigs,
-  accountSlugs,
-  type AccountSlug,
-} from "@/lib/account-config";
-import { mockAccounts } from "@/mocks/cooperative-data";
-import {
-  getMemberForOperation,
-  getWithdrawalChecks,
-  mockWithdrawals,
-  paymentMethods,
-  type PaymentMethod,
-  type WithdrawalRecord,
-  type WithdrawalStatus,
-} from "@/mocks/operations-data";
+  downloadReportCsv,
+  downloadReportPdf,
+} from "@/lib/cooperative-report-export";
+import { formatMixedCurrency } from "@/lib/format-currency";
+import { MWANGAZA_BRAND } from "@/lib/theme-constants";
 
-const statuses: WithdrawalStatus[] = [
-  "En attente",
-  "Approuvé",
-  "Payé",
-  "Rejeté",
-];
-const statusOrder: (WithdrawalStatus | "Tous")[] = [
-  "En attente",
-  "Approuvé",
-  "Payé",
-  "Rejeté",
+type Currency = "USD" | "FC";
+type BadgeTone = "valid" | "pending" | "rejected";
+
+/** Ligne renvoyée par GET /api/withdrawals (mapRetraitToResponse). */
+type BackendWithdrawal = {
+  id: number;
+  reference: string;
+  dateISO: string;
+  time: string;
+  accountNumber: string;
+  memberName: string;
+  amount: number;
+  currency: Currency;
+  reason: string;
+  status: "pending" | "completed" | "failed" | "cancelled";
+  frais: number;
+  soldeAvant: number;
+  soldeApres: number;
+  executedBy: { id: number; role: string } | null;
+  cancelledAt: string | null;
+  cancelledBy: { id: number; role: string } | null;
+  cancellationReason: string | null;
+};
+
+type WithdrawalsResponse = {
+  data: BackendWithdrawal[];
+  meta: { total: number; totalPages: number };
+};
+
+/** Mouvement de caisse d'agent — GET /api/withdrawals/caisse/moi/mouvements. */
+type CashMovement = {
+  id: number;
+  type: string;
+  devise: Currency;
+  montant: number;
+  soldeAvant: number;
+  soldeApres: number;
+  motif: string | null;
+  referenceRetrait: string | null;
+  acteur: { id: number; role: string } | null;
+  createdAt: string;
+};
+
+type Cashbox = {
+  agentId: number;
+  agentName: string;
+  guichet: string | null;
+  balances: { devise: Currency; solde: number }[];
+};
+
+type Row = {
+  key: string;
+  reference: string;
+  memberName: string | null;
+  accountNumber: string | null;
+  amount: number;
+  currency: Currency;
+  balanceBefore: number | null;
+  reason: string;
+  date: string;
+  dateKey: string;
+  badge: string;
+  tone: BadgeTone;
+  tab: string;
+  withdrawal?: BackendWithdrawal;
+  movement?: CashMovement;
+};
+
+const withdrawalStatus: Record<
+  string,
+  { label: string; tone: BadgeTone; tab: string }
+> = {
+  pending: { label: "En attente", tone: "pending", tab: "En attente" },
+  completed: { label: "Payé", tone: "valid", tab: "Payé" },
+  cancelled: { label: "Annulé", tone: "rejected", tab: "Annulé" },
+  failed: { label: "Échoué", tone: "rejected", tab: "Échoué" },
+};
+
+const movementMeta: Record<
+  string,
+  { label: string; tone: BadgeTone; tab: string }
+> = {
+  RETRAIT: { label: "Retrait", tone: "valid", tab: "Retraits" },
+  REMBOURSEMENT_CREDIT: {
+    label: "Remboursement",
+    tone: "valid",
+    tab: "Remboursements",
+  },
+  ANNULATION: { label: "Annulation", tone: "rejected", tab: "Annulations" },
+  APPROVISIONNEMENT: {
+    label: "Approvisionnement",
+    tone: "pending",
+    tab: "Approvisionnements",
+  },
+};
+
+const adminTabs = ["Tous", "En attente", "Payé", "Annulé", "Échoué"] as const;
+const agentTabs = [
   "Tous",
-];
-const periods = [
-  "Toutes les périodes",
-  "Ce mois",
-  "30 derniers jours",
+  "Retraits",
+  "Remboursements",
+  "Annulations",
+  "Approvisionnements",
 ] as const;
+const periods = ["Toutes les périodes", "Ce mois", "30 derniers jours"] as const;
+
+const withdrawalExportHeaders = [
+  "Référence",
+  "Date",
+  "Heure",
+  "Numéro Compte",
+  "Nom Membre",
+  "Montant",
+  "Devise",
+  "Frais",
+  "Solde Avant",
+  "Solde Après",
+  "Statut",
+  "Motif",
+  "Exécuté Par",
+];
 
 export function meta() {
   return [{ title: "Retraits — Mwangaza Wetu" }];
 }
 
+function apiErrorMessage(error: unknown, fallback: string): string {
+  const message = (
+    error as { response?: { data?: { message?: string | string[] } } }
+  )?.response?.data?.message;
+  if (Array.isArray(message)) return message.filter(Boolean).join(" ");
+  if (typeof message === "string" && message) return message;
+  return fallback;
+}
+
+function monthKeyOf(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function todayKeyOf(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function StatusBadge({ label, tone }: { label: string; tone: BadgeTone }) {
+  return <span className={`coop-status coop-status--${tone}`}>{label}</span>;
+}
+
+function initialsOf(name: string) {
+  return name
+    .split(" ")
+    .map((part) => part[0])
+    .filter(Boolean)
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+}
+
 export default function WithdrawalsRoute() {
   const dark = useCooperativeDarkTheme();
-  const [records, setRecords] = useState(mockWithdrawals);
-  const [activeStatus, setActiveStatus] = useState<WithdrawalStatus | "Tous">(
-    "En attente",
-  );
+  const [role, setRole] = useState<string | null>(null);
+  const [records, setRecords] = useState<BackendWithdrawal[]>([]);
+  const [movements, setMovements] = useState<CashMovement[]>([]);
+  const [cashbox, setCashbox] = useState<Cashbox | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const [activeTab, setActiveTab] = useState<string>("Tous");
   const [query, setQuery] = useState("");
-  const [account, setAccount] = useState<AccountSlug | "">("");
-  const [urgency, setUrgency] = useState(false);
-  const [period, setPeriod] = useState<(typeof periods)[number]>(periods[1]);
+  const [period, setPeriod] = useState<(typeof periods)[number]>(
+    periods[0],
+  );
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [createOpen, setCreateOpen] = useState(false);
-  const [rejectReason, setRejectReason] = useState("");
-  const [rejectOpen, setRejectOpen] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("M-Pesa");
-  const [formError, setFormError] = useState("");
   const [success, setSuccess] = useState("");
+  const [bannerError, setBannerError] = useState("");
 
-  const selected = records.find((request) => request.id === selectedId) ?? null;
+  // Reçu de caisse à imprimer
+  const [receiptTarget, setReceiptTarget] = useState<BackendWithdrawal | null>(null);
+
+  // Création (agent uniquement — POST /withdrawals est réservé au guichet)
+  const [createOpen, setCreateOpen] = useState(false);
+  const [compteInput, setCompteInput] = useState("");
+  const [memberCheck, setMemberCheck] = useState<{
+    compte: string;
+    nomComplet: string;
+    soldeUSD: number;
+    soldeFC: number;
+  } | null>(null);
+  const [checking, setChecking] = useState(false);
+  const [createBusy, setCreateBusy] = useState(false);
+  const [formError, setFormError] = useState("");
+
+  // Annulation (admin — POST /withdrawals/:id/annuler)
+  const [cancelTarget, setCancelTarget] = useState<BackendWithdrawal | null>(
+    null,
+  );
+  const [cancelMotif, setCancelMotif] = useState("");
+  const [cancelCash, setCancelCash] = useState(false);
+  const [cancelBusy, setCancelBusy] = useState(false);
+  const [cancelError, setCancelError] = useState("");
+
+  const isAgent = role === "agent";
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setLoadError("");
+    try {
+      if (isAgent) {
+        const [caisse, mouvements] = await Promise.all([
+          apiClient.get<Cashbox>("/withdrawals/caisse/moi"),
+          apiClient.get<CashMovement[]>(
+            "/withdrawals/caisse/moi/mouvements",
+            { params: { limit: 100 } },
+          ),
+        ]);
+        setCashbox(caisse.data);
+        setMovements(mouvements.data);
+        setRecords([]);
+      } else {
+        const all: BackendWithdrawal[] = [];
+        let current = 1;
+        let totalPages = 1;
+        do {
+          const response = await apiClient.get<WithdrawalsResponse>(
+            "/withdrawals",
+            { params: { page: current, pageSize: 100 } },
+          );
+          all.push(...response.data.data);
+          totalPages = response.data.meta.totalPages || 1;
+          current += 1;
+        } while (current <= totalPages);
+        setRecords(all);
+        setMovements([]);
+        setCashbox(null);
+      }
+    } catch (error) {
+      setRecords([]);
+      setMovements([]);
+      setCashbox(null);
+      setLoadError(
+        apiErrorMessage(
+          error,
+          "Impossible de charger les retraits depuis le backend.",
+        ),
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, [isAgent]);
+
+  useEffect(() => {
+    setRole(getAuthUser()?.role ?? "admin");
+  }, []);
+
+  useEffect(() => {
+    if (role) void load();
+  }, [role, load]);
+
+  const rows: Row[] = useMemo(() => {
+    if (isAgent) {
+      return movements.map((movement) => {
+        const meta =
+          movementMeta[movement.type] ?? {
+            label: movement.type,
+            tone: "pending" as BadgeTone,
+            tab: "Tous",
+          };
+        return {
+          key: `m-${movement.id}`,
+          reference:
+            movement.referenceRetrait ||
+            `${movement.type}-${String(movement.id).padStart(4, "0")}`,
+          memberName: null,
+          accountNumber: null,
+          amount: movement.montant,
+          currency: movement.devise,
+          balanceBefore: movement.soldeAvant,
+          reason: movement.motif || meta.label,
+          date: movement.createdAt,
+          dateKey: movement.createdAt.slice(0, 10),
+          badge: meta.label,
+          tone: meta.tone,
+          tab: meta.tab,
+          movement,
+        };
+      });
+    }
+    return records.map((withdrawal) => {
+      const meta = withdrawalStatus[withdrawal.status] ?? {
+        label: withdrawal.status,
+        tone: "pending" as BadgeTone,
+        tab: "Tous",
+      };
+      return {
+        key: `w-${withdrawal.id}`,
+        reference: withdrawal.reference,
+        memberName: withdrawal.memberName,
+        accountNumber: withdrawal.accountNumber,
+        amount: withdrawal.amount,
+        currency: withdrawal.currency,
+        balanceBefore: withdrawal.soldeAvant,
+        reason: withdrawal.reason,
+        date: `${withdrawal.dateISO}T${withdrawal.time || "00:00"}`,
+        dateKey: withdrawal.dateISO,
+        badge: meta.label,
+        tone: meta.tone,
+        tab: meta.tab,
+        withdrawal,
+      };
+    });
+  }, [isAgent, movements, records]);
+
+  const tabs = isAgent ? [...agentTabs] : [...adminTabs];
+
   const filtered = useMemo(() => {
     const search = query.trim().toLocaleLowerCase("fr-FR");
-    return records
-      .filter(
-        (request) => activeStatus === "Tous" || request.status === activeStatus,
-      )
-      .filter((request) => {
-        const member = getMemberForOperation(request.memberId);
-        return `${member.name} ${member.memberNumber} ${request.reference}`
+    const now = new Date();
+    const monthKey = monthKeyOf(now);
+    const thirtyDaysAgo = new Date(now);
+    thirtyDaysAgo.setDate(now.getDate() - 29);
+    const thirtyDaysKey = todayKeyOf(thirtyDaysAgo);
+    const todayKey = todayKeyOf(now);
+    return rows
+      .filter((row) => activeTab === "Tous" || row.tab === activeTab)
+      .filter((row) =>
+        `${row.reference} ${row.memberName ?? ""} ${row.accountNumber ?? ""} ${row.reason}`
           .toLocaleLowerCase("fr-FR")
-          .includes(search);
-      })
-      .filter((request) => !account || request.account === account)
-      .filter((request) => !urgency || request.urgent)
-      .filter(
-        (request) =>
-          period === periods[0] ||
-          (period === periods[1]
-            ? request.requestedAt.startsWith("2025-06")
-            : request.requestedAt >= "2025-05-26"),
-      );
-  }, [account, activeStatus, period, query, records, urgency]);
+          .includes(search),
+      )
+      .filter((row) => {
+        if (period === periods[0]) return true;
+        if (period === periods[1]) return row.dateKey.startsWith(monthKey);
+        return row.dateKey >= thirtyDaysKey && row.dateKey <= todayKey;
+      });
+  }, [activeTab, period, query, rows]);
+
   const visible = filtered.slice((page - 1) * pageSize, page * pageSize);
-  const pending = records.filter((request) => request.status === "En attente");
-  const pendingAmount = pending.reduce(
-    (sum, request) => sum + request.amount,
-    0,
+  const selected = rows.find((row) => row.key === selectedId) ?? null;
+
+  const now = new Date();
+  const monthKey = monthKeyOf(now);
+  const pendingRows = rows.filter((row) => row.tab === "En attente");
+  const paidThisMonth = rows.filter(
+    (row) => row.tab === "Payé" && row.dateKey.startsWith(monthKey),
   );
-  const month = records.filter((request) =>
-    request.requestedAt.startsWith("2025-06"),
+  const cancelledThisMonth = rows.filter(
+    (row) => row.tab === "Annulé" && row.dateKey.startsWith(monthKey),
   );
-  const approvedCount = month.filter(
-    (request) => request.status === "Approuvé",
-  ).length;
-  const paidCount = month.filter((request) => request.status === "Payé").length;
-  const rejectedCount = month.filter(
-    (request) => request.status === "Rejeté",
-  ).length;
+  const retraitMovements = rows.filter((row) => row.badge === "Retrait");
+  const remboursementMovements = rows.filter(
+    (row) => row.badge === "Remboursement",
+  );
+
+  // Données prêtes pour l'export comptable (PDF / CSV)
+  const withdrawalExportRows = useMemo(() => {
+    return filtered
+      .map((row) => {
+        if (row.withdrawal) {
+          const w = row.withdrawal;
+          return [
+            w.reference,
+            w.dateISO,
+            w.time || "—",
+            w.accountNumber,
+            w.memberName || "—",
+            w.amount,
+            w.currency,
+            w.frais,
+            w.soldeAvant,
+            w.soldeApres,
+            withdrawalStatus[w.status]?.label || w.status,
+            w.reason || "—",
+            w.executedBy ? `${w.executedBy.role} #${w.executedBy.id}` : "—",
+          ];
+        }
+        if (row.movement) {
+          const m = row.movement;
+          return [
+            row.reference,
+            m.createdAt.slice(0, 10),
+            m.createdAt.slice(11, 16) || "—",
+            "—",
+            "Mouvement Caisse",
+            m.montant,
+            m.devise,
+            0,
+            m.soldeAvant,
+            m.soldeApres,
+            movementMeta[m.type]?.label || m.type,
+            m.motif || "—",
+            m.acteur ? `${m.acteur.role} #${m.acteur.id}` : "—",
+          ];
+        }
+        return null;
+      })
+      .filter(Boolean) as (string | number)[][];
+  }, [filtered]);
+
+  function exportWithdrawalsCsv() {
+    downloadReportCsv(
+      "journal-retraits",
+      withdrawalExportHeaders,
+      withdrawalExportRows,
+    );
+  }
+
+  async function exportWithdrawalsPdf() {
+    await downloadReportPdf(
+      "Journal des retraits & décaissements — Mwangaza Wetu",
+      "journal-retraits",
+      withdrawalExportHeaders,
+      withdrawalExportRows,
+    );
+  }
 
   function changeFilter(action: () => void) {
     action();
     setPage(1);
   }
 
-  function changeStatus(request: WithdrawalRecord, next: WithdrawalStatus) {
-    setRecords((current) =>
-      current.map((item) =>
-        item.id === request.id ? { ...item, status: next } : item,
-      ),
-    );
+  async function verifyMember() {
+    const compte = compteInput.trim();
+    if (!compte) {
+      setFormError("Saisissez le numéro de compte du membre.");
+      return;
+    }
+    setChecking(true);
+    setMemberCheck(null);
+    setFormError("");
+    try {
+      const response = await apiClient.get<{
+        exists: boolean;
+        membre?: { numeroCompte: string; nomComplet: string; statut: string };
+      }>(`/membres/by-numero/${encodeURIComponent(compte)}`);
+      const membre = response.data.exists ? response.data.membre : null;
+      if (!membre) {
+        setFormError("Aucun membre trouvé pour ce numéro de compte.");
+        return;
+      }
+      if (membre.statut !== "actif") {
+        setFormError("Ce membre est inactif : opération refusée.");
+        return;
+      }
+      const soldes = await apiClient.get<{ soldeUSD: number; soldeFC: number }>(
+        `/epargnes/soldes/${encodeURIComponent(membre.numeroCompte)}`,
+      );
+      setMemberCheck({
+        compte: membre.numeroCompte,
+        nomComplet: membre.nomComplet,
+        soldeUSD: Number(soldes.data.soldeUSD || 0),
+        soldeFC: Number(soldes.data.soldeFC || 0),
+      });
+    } catch (error) {
+      setFormError(apiErrorMessage(error, "Impossible de vérifier ce compte."));
+    } finally {
+      setChecking(false);
+    }
   }
 
-  function createRequest(event: FormEvent<HTMLFormElement>) {
+  async function createRequest(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
-    const memberId = String(form.get("memberId"));
-    const slug = String(form.get("account")) as AccountSlug;
-    const amount = Number(form.get("amount"));
-    const reason = String(form.get("reason")).trim();
-    const proofProvided = form.get("proofProvided") === "on";
-    const urgent = form.get("urgent") === "on";
-    if (!memberId || !accountSlugs.includes(slug) || !(amount > 0) || !reason) {
-      setFormError(
-        "Renseignez le membre, le compte, un motif et un montant supérieur à zéro.",
-      );
+    const devise = String(form.get("devise")) as Currency;
+    const montant = Number(form.get("montant"));
+    const description = String(form.get("description") || "").trim();
+    const compte = compteInput.trim();
+    if (!memberCheck || memberCheck.compte !== compte) {
+      setFormError("Vérifiez d’abord le compte du membre.");
       return;
     }
-    const member = getMemberForOperation(memberId);
-    const balance = member.balances[slug];
-    const rules = mockAccounts[slug].rules;
-    const minRemainingApplies = !["principal", "hopital"].includes(slug);
-    const remainingValid =
-      !minRemainingApplies || balance - amount >= rules.minimumDeposit;
-    const goalBlocked =
-      slug === "nyumba" &&
-      rules.targetAmount !== null &&
-      balance < rules.targetAmount;
-    const proofRequired = ["kelasi", "mutoto"].includes(slug);
-    if (amount > balance) {
-      setFormError(
-        `Solde insuffisant : ${formatCurrency(balance)} disponibles sur ce compte.`,
-      );
+    if (!(montant > 0)) {
+      setFormError("Indiquez un montant supérieur à zéro.");
       return;
     }
-    if (!remainingValid) {
-      setFormError(
-        `Le retrait doit laisser au moins ${formatCurrency(rules.minimumDeposit)} sur ce compte.`,
-      );
-      return;
-    }
-    if (goalBlocked) {
-      setFormError(
-        `Le compte NYUMBA reste bloqué jusqu’à l’objectif de ${formatCurrency(rules.targetAmount ?? 0)}.`,
-      );
-      return;
-    }
-    if (proofRequired && !proofProvided) {
-      setFormError(
-        `Un justificatif est requis pour le compte ${accountConfigs[slug].shortLabel}.`,
-      );
-      return;
-    }
-    const newRequest: WithdrawalRecord = {
-      id: `withdrawal-local-${Date.now()}`,
-      reference: `RET-2025-${String(records.length + 1).padStart(4, "0")}`,
-      memberId,
-      account: slug,
-      amount,
-      reason,
-      requestedAt: "2025-06-25",
-      status: "En attente",
-      urgent: urgent && slug === "hopital",
-      proofProvided,
-      method: String(form.get("method")) as PaymentMethod,
-    };
-    setRecords((current) => [newRequest, ...current]);
-    setActiveStatus("En attente");
-    setPage(1);
-    setCreateOpen(false);
+    setCreateBusy(true);
     setFormError("");
-    setSuccess(
-      `Demande ${newRequest.reference} créée en attente de validation.`,
-    );
+    try {
+      const response = await apiClient.post<BackendWithdrawal>(
+        "/withdrawals",
+        {
+          compte,
+          devise,
+          montant,
+          description: description || undefined,
+          idempotencyKey: crypto.randomUUID(),
+        },
+      );
+      setCreateOpen(false);
+      setCompteInput("");
+      setMemberCheck(null);
+      setSuccess(
+        `Retrait ${response.data.reference} enregistré pour ${response.data.memberName}.`,
+      );
+      // Ouvre immédiatement le reçu de caisse prêt pour impression
+      setReceiptTarget(response.data);
+      await load();
+    } catch (error) {
+      setFormError(
+        apiErrorMessage(error, "Le retrait n’a pas pu être enregistré."),
+      );
+    } finally {
+      setCreateBusy(false);
+    }
   }
 
-  function approveRequest() {
-    if (!selected || getWithdrawalChecks(selected).some((check) => !check.ok))
-      return;
-    changeStatus(selected, "Approuvé");
-    setSuccess(`Demande ${selected.reference} approuvée.`);
-  }
-
-  function rejectRequest(event: FormEvent<HTMLFormElement>) {
+  async function submitCancel(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!selected || !rejectReason.trim()) return;
-    const id = selected.id;
-    setRecords((current) =>
-      current.map((item) =>
-        item.id === id
-          ? { ...item, status: "Rejeté", rejectionReason: rejectReason.trim() }
-          : item,
-      ),
-    );
-    setRejectOpen(false);
-    setRejectReason("");
-    setSuccess(`Demande ${selected.reference} rejetée avec motif.`);
+    if (!cancelTarget || cancelMotif.trim().length < 5 || !cancelCash) return;
+    setCancelBusy(true);
+    setCancelError("");
+    try {
+      await apiClient.post(`/withdrawals/${cancelTarget.id}/annuler`, {
+        motif: cancelMotif.trim(),
+        cashRecupere: true,
+      });
+      setSuccess(`Retrait ${cancelTarget.reference} annulé et contrepassé.`);
+      setCancelTarget(null);
+      setCancelMotif("");
+      setCancelCash(false);
+      setSelectedId(null);
+      await load();
+    } catch (error) {
+      setCancelError(apiErrorMessage(error, "L’annulation a échoué."));
+    } finally {
+      setCancelBusy(false);
+    }
   }
 
-  function markPaid() {
-    if (!selected || selected.status !== "Approuvé") return;
-    setRecords((current) =>
-      current.map((item) =>
-        item.id === selected.id
-          ? { ...item, status: "Payé", method: paymentMethod }
-          : item,
-      ),
-    );
-    setSuccess(
-      `Retrait ${selected.reference} marqué payé par ${paymentMethod}.`,
-    );
-  }
+  const isAdmin = role === "admin" || role === "superadmin";
 
   return (
     <div className="coop-operations-page">
@@ -258,22 +575,51 @@ export default function WithdrawalsRoute() {
         <div>
           <CooperativeBreadcrumb section="Opérations" current="Retraits" />
           <h1>Retraits</h1>
-          <p>Examen et approbation des demandes de retrait des membres.</p>
+          <p>
+            {isAgent
+              ? "Mouvements de votre caisse d’agent et décaissements au guichet."
+              : "Suivi des décaissements enregistrés par les agents et des annulations."}
+          </p>
         </div>
-        <div className="coop-page-actions">
+        <div className="coop-page-actions coop-export-actions">
+          {/* Boutons d'export comptable (PDF et CSV) */}
           <button
-            className="mw-primary"
+            className="mw-secondary"
             type="button"
-            onClick={() => {
-              setCreateOpen(true);
-              setFormError("");
-            }}
+            onClick={exportWithdrawalsPdf}
+            disabled={loading || Boolean(loadError) || filtered.length === 0}
+            title="Exporter le journal des retraits en PDF"
           >
-            <IconArrowUp aria-hidden="true" />
-            Nouveau retrait
+            <IconFileText aria-hidden="true" />
+            Exporter PDF
           </button>
+          <button
+            className="mw-secondary"
+            type="button"
+            onClick={exportWithdrawalsCsv}
+            disabled={loading || Boolean(loadError) || filtered.length === 0}
+            title="Exporter le journal des retraits en format CSV / Excel"
+          >
+            <IconFileSpreadsheet aria-hidden="true" />
+            Exporter CSV
+          </button>
+
+          {isAgent && (
+            <button
+              className="mw-primary"
+              type="button"
+              onClick={() => {
+                setCreateOpen(true);
+                setFormError("");
+              }}
+            >
+              <IconArrowUp aria-hidden="true" />
+              Nouveau retrait
+            </button>
+          )}
         </div>
       </div>
+
       {success && (
         <div className="coop-inline-success" role="status">
           <IconCheck aria-hidden="true" />
@@ -287,45 +633,121 @@ export default function WithdrawalsRoute() {
           </button>
         </div>
       )}
+      {bannerError && (
+        <p className="coop-form-error" role="alert">
+          {bannerError}
+          <button
+            type="button"
+            aria-label="Fermer le message"
+            onClick={() => setBannerError("")}
+          >
+            <IconX aria-hidden="true" />
+          </button>
+        </p>
+      )}
 
-      <CooperativeDataState
-        loading={false}
-        error={false}
-        empty={records.length === 0}
-      >
-        <section
-          className="coop-stat-grid"
-          aria-label="Indicateurs des retraits"
-        >
-          <CooperativeStatCard
-            label="Demandes en attente"
-            value={pending.length}
-            detail={formatCurrency(pendingAmount)}
-            icon={IconClock}
-            accent="#c18c2d"
-          />
-          <CooperativeStatCard
-            label="Approuvées ce mois"
-            value={approvedCount}
-            detail="En juin 2025"
-            icon={IconCheck}
-          />
-          <CooperativeStatCard
-            label="Payées ce mois"
-            value={paidCount}
-            detail="En juin 2025"
-            icon={IconWallet}
-            accent="#4384b5"
-          />
-          <CooperativeStatCard
-            label="Rejetées ce mois"
-            value={rejectedCount}
-            detail="En juin 2025"
-            icon={IconX}
-            accent="#c95151"
-          />
+      {loadError && (
+        <p className="coop-form-error" role="alert">
+          {loadError}{" "}
+          <button type="button" onClick={() => void load()}>
+            Réessayer
+          </button>
+        </p>
+      )}
+
+      {!loading && !loadError && (
+        <section className="coop-stat-grid" aria-label="Indicateurs des retraits">
+          {isAgent ? (
+            <>
+              <CooperativeStatCard
+                label="Ma caisse"
+                value={formatMixedCurrency(
+                  cashbox?.balances.map((balance) => ({
+                    amount: balance.solde,
+                    currency: balance.devise,
+                  })) ?? [],
+                )}
+                detail={`Guichet ${cashbox?.guichet ?? "—"}`}
+                icon={IconWallet}
+              />
+              <CooperativeStatCard
+                label="Retraits décaissés"
+                value={retraitMovements.length}
+                detail={formatMixedCurrency(
+                  retraitMovements.map((row) => ({
+                    amount: row.amount,
+                    currency: row.currency,
+                  })),
+                )}
+                icon={IconArrowUp}
+              />
+              <CooperativeStatCard
+                label="Remboursements reçus"
+                value={remboursementMovements.length}
+                detail={formatMixedCurrency(
+                  remboursementMovements.map((row) => ({
+                    amount: row.amount,
+                    currency: row.currency,
+                  })),
+                )}
+                icon={IconCheck}
+                accent="#4384b5"
+              />
+              <CooperativeStatCard
+                label="Mouvements enregistrés"
+                value={movements.length}
+                detail="100 derniers mouvements"
+                icon={IconClock}
+              />
+            </>
+          ) : (
+            <>
+              <CooperativeStatCard
+                label="Demandes en attente"
+                value={pendingRows.length}
+                detail={formatMixedCurrency(
+                  pendingRows.map((row) => ({
+                    amount: row.amount,
+                    currency: row.currency,
+                  })),
+                )}
+                icon={IconClock}
+                accent="#c18c2d"
+              />
+              <CooperativeStatCard
+                label="Payés ce mois"
+                value={paidThisMonth.length}
+                detail={formatMixedCurrency(
+                  paidThisMonth.map((row) => ({
+                    amount: row.amount,
+                    currency: row.currency,
+                  })),
+                )}
+                icon={IconWallet}
+                accent="#4384b5"
+              />
+              <CooperativeStatCard
+                label="Annulés ce mois"
+                value={cancelledThisMonth.length}
+                detail={formatMixedCurrency(
+                  cancelledThisMonth.map((row) => ({
+                    amount: row.amount,
+                    currency: row.currency,
+                  })),
+                )}
+                icon={IconX}
+                accent="#c95151"
+              />
+              <CooperativeStatCard
+                label="Retraits enregistrés"
+                value={records.length}
+                detail="Toutes périodes"
+                icon={IconCheck}
+              />
+            </>
+          )}
         </section>
-      </CooperativeDataState>
+      )}
 
       <section
         className="mw-panel coop-operations-panel"
@@ -334,21 +756,21 @@ export default function WithdrawalsRoute() {
         <div
           className="coop-withdrawal-tabs"
           role="tablist"
-          aria-label="Filtrer les demandes par statut"
+          aria-label="Filtrer les retraits"
         >
-          {statusOrder.map((tab) => {
+          {tabs.map((tab) => {
             const count =
               tab === "Tous"
-                ? records.length
-                : records.filter((request) => request.status === tab).length;
+                ? rows.length
+                : rows.filter((row) => row.tab === tab).length;
             return (
               <button
                 type="button"
                 role="tab"
-                aria-selected={activeStatus === tab}
-                className={activeStatus === tab ? "is-active" : ""}
+                aria-selected={activeTab === tab}
+                className={activeTab === tab ? "is-active" : ""}
                 key={tab}
-                onClick={() => changeFilter(() => setActiveStatus(tab))}
+                onClick={() => changeFilter(() => setActiveTab(tab))}
               >
                 {tab}
                 <span>{count}</span>
@@ -363,41 +785,11 @@ export default function WithdrawalsRoute() {
               type="search"
               value={query}
               aria-label="Rechercher un membre ou une référence"
-              placeholder="Membre ou référence…"
+              placeholder="Membre, compte ou référence…"
               onChange={(event) =>
                 changeFilter(() => setQuery(event.target.value))
               }
             />
-          </label>
-          <label className="coop-filter-select">
-            <span className="sr-only">Compte d’épargne</span>
-            <select
-              value={account}
-              onChange={(event) =>
-                changeFilter(() =>
-                  setAccount(event.target.value as AccountSlug | ""),
-                )
-              }
-            >
-              <option value="">Tous les comptes</option>
-              {accountSlugs.map((slug) => (
-                <option key={slug} value={slug}>
-                  {accountConfigs[slug].shortLabel}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="coop-filter-select">
-            <span className="sr-only">Urgence</span>
-            <select
-              value={urgency ? "urgent" : "all"}
-              onChange={(event) =>
-                changeFilter(() => setUrgency(event.target.value === "urgent"))
-              }
-            >
-              <option value="all">Urgence : toutes</option>
-              <option value="urgent">Urgentes uniquement</option>
-            </select>
           </label>
           <label className="coop-filter-select">
             <span className="sr-only">Période</span>
@@ -405,7 +797,9 @@ export default function WithdrawalsRoute() {
               value={period}
               onChange={(event) =>
                 changeFilter(() =>
-                  setPeriod(event.target.value as (typeof periods)[number]),
+                  setPeriod(
+                    event.target.value as (typeof periods)[number],
+                  ),
                 )
               }
             >
@@ -415,11 +809,18 @@ export default function WithdrawalsRoute() {
             </select>
           </label>
         </div>
+
         <CooperativeDataState
-          loading={false}
-          error={false}
-          empty={visible.length === 0}
-          emptyMessage="Aucune demande ne correspond à ces filtres."
+          loading={loading}
+          error={Boolean(loadError)}
+          empty={filtered.length === 0}
+          emptyMessage={
+            rows.length === 0
+              ? isAgent
+                ? "Aucun mouvement de caisse enregistré pour le moment."
+                : "Aucun retrait enregistré pour le moment."
+              : "Aucune demande ne correspond à ces filtres."
+          }
         >
           <div className="coop-table-scroll">
             <table className="mw-table coop-operation-table coop-withdrawal-table">
@@ -427,109 +828,91 @@ export default function WithdrawalsRoute() {
                 <tr>
                   <th>Référence</th>
                   <th>Membre</th>
-                  <th>Compte</th>
-                  <th>Montant demandé</th>
-                  <th>Solde disponible</th>
+                  <th>Montant</th>
+                  <th>Solde avant</th>
                   <th>Motif</th>
-                  <th>Demandé le</th>
-                  <th>Urgence</th>
+                  <th>Date</th>
                   <th>Statut</th>
                   <th>Action</th>
                 </tr>
               </thead>
               <tbody>
-                {visible.map((request) => {
-                  const member = getMemberForOperation(request.memberId);
-                  return (
-                    <tr key={request.id}>
-                      <td>
-                        <strong>{request.reference}</strong>
-                      </td>
-                      <td>
+                {visible.map((row) => (
+                  <tr key={row.key}>
+                    <td>
+                      <strong>{row.reference}</strong>
+                    </td>
+                    <td>
+                      {row.memberName ? (
                         <span className="mw-member">
                           <span className="mw-member-avatar">
-                            {member.name
-                              .split(" ")
-                              .map((part) => part[0])
-                              .slice(0, 2)
-                              .join("")}
+                            {initialsOf(row.memberName)}
                           </span>
-                          <span>{member.name}</span>
-                        </span>
-                      </td>
-                      <td>
-                        <span
-                          className="coop-account-cell"
-                          style={
-                            {
-                              "--coop-accent":
-                                accountConfigs[request.account].color,
-                            } as React.CSSProperties
-                          }
-                        >
-                          <AccountPills accounts={[request.account]} />
-                          {accountConfigs[request.account].shortLabel}
-                        </span>
-                      </td>
-                      <td className="coop-amount-cell">
-                        {formatCurrency(request.amount)}
-                      </td>
-                      <td>
-                        {formatCurrency(member.balances[request.account])}
-                      </td>
-                      <td className="coop-reason-cell">{request.reason}</td>
-                      <td>{formatDate(request.requestedAt)}</td>
-                      <td>
-                        {request.urgent ? (
-                          <span className="coop-urgent-badge">
-                            <IconAlertTriangle aria-hidden="true" />
-                            Urgent
+                          <span>
+                            {row.memberName}
+                            <small>{row.accountNumber}</small>
                           </span>
-                        ) : (
-                          <span className="coop-no-goal">—</span>
-                        )}
-                      </td>
-                      <td>
-                        <CooperativeStatus
-                          status={
-                            request.status === "Approuvé" ||
-                            request.status === "Payé"
-                              ? "Validé"
-                              : request.status === "Rejeté"
-                                ? "Rejeté"
-                                : "En attente"
-                          }
-                        />
-                      </td>
-                      <td>
+                        </span>
+                      ) : (
+                        <span className="coop-no-goal">—</span>
+                      )}
+                    </td>
+                    <td className="coop-amount-cell">
+                      {formatCurrency(row.amount, row.currency)}
+                    </td>
+                    <td>
+                      {row.balanceBefore !== null
+                        ? formatCurrency(row.balanceBefore, row.currency)
+                        : "—"}
+                    </td>
+                    <td className="coop-reason-cell">{row.reason}</td>
+                    <td>{formatDate(row.dateKey)}</td>
+                    <td>
+                      <StatusBadge label={row.badge} tone={row.tone} />
+                    </td>
+                    <td>
+                      <div style={{ display: "inline-flex", gap: "6px", alignItems: "center" }}>
                         <button
                           className="mw-secondary coop-examine-button"
                           type="button"
-                          onClick={() => {
-                            setSelectedId(request.id);
-                            setRejectOpen(false);
-                          }}
+                          onClick={() => setSelectedId(row.key)}
                         >
                           Examiner
                         </button>
-                      </td>
-                    </tr>
-                  );
-                })}
+                        {row.withdrawal && (
+                          <button
+                            className="mw-ghost coop-icon-btn"
+                            type="button"
+                            title="Imprimer le reçu de caisse"
+                            aria-label={`Imprimer le reçu de retrait ${row.reference}`}
+                            onClick={() => setReceiptTarget(row.withdrawal!)}
+                          >
+                            <IconPrinter aria-hidden="true" size={16} />
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
         </CooperativeDataState>
+
         <CooperativePagination
           totalItems={filtered.length}
           page={page}
           pageSize={pageSize}
           onPageChange={setPage}
-          onPageSizeChange={(value) => { setPageSize(value); setPage(1); }}
+          onPageSizeChange={(value) => {
+            setPageSize(value);
+            setPage(1);
+          }}
           itemLabel="demandes"
         />
       </section>
 
+      {/* Volet latéral d'examen détaillé */}
       <Sheet
         open={selected !== null}
         onOpenChange={(open) => !open && setSelectedId(null)}
@@ -540,150 +923,343 @@ export default function WithdrawalsRoute() {
           side="right"
         >
           <SheetTitle className="coop-drawer-title">
-            Détail de la demande
+            {selected?.withdrawal
+              ? "Détail du retrait"
+              : "Détail du mouvement"}
           </SheetTitle>
-          {selected && (
+          {selected?.withdrawal && (
             <WithdrawalDetails
-              request={selected}
-              onApprove={approveRequest}
-              onReject={() => setRejectOpen(true)}
-              onPaid={markPaid}
-              paymentMethod={paymentMethod}
-              setPaymentMethod={setPaymentMethod}
+              withdrawal={selected.withdrawal}
+              canCancel={
+                isAdmin && selected.withdrawal.status === "completed"
+              }
+              onCancel={() => {
+                if (!selected?.withdrawal) return;
+                setCancelTarget(selected.withdrawal);
+                setCancelMotif("");
+                setCancelCash(false);
+                setCancelError("");
+              }}
+              onPrintReceipt={(w) => setReceiptTarget(w)}
             />
+          )}
+          {selected?.movement && (
+            <MovementDetails movement={selected.movement} />
           )}
         </SheetContent>
       </Sheet>
 
-      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+      {/* Modal Reçu de Caisse Officiel (Impression) */}
+      <Dialog
+        open={receiptTarget !== null}
+        onOpenChange={(open) => !open && setReceiptTarget(null)}
+      >
+        <DialogContent
+          data-theme={dark ? "dark" : "light"}
+          className="coop-receipt-dialog"
+        >
+          <DialogHeader>
+            <DialogTitle>Bordereau de retrait de caisse</DialogTitle>
+            <DialogDescription>
+              Reçu officiel de décaissement pour le membre et les archives de caisse.
+            </DialogDescription>
+          </DialogHeader>
+
+          {receiptTarget && (
+            <div className="coop-print-receipt">
+              <div className="coop-receipt-brand">
+                <div className="coop-receipt-mark">MW</div>
+                <div>
+                  <strong>{MWANGAZA_BRAND.name.toUpperCase()}</strong>
+                  <small>{MWANGAZA_BRAND.subtitle}</small>
+                  <small>{MWANGAZA_BRAND.pillars}</small>
+                </div>
+              </div>
+
+              <div className="coop-receipt-rule" />
+
+              <h3>BORDEREAU DE DÉCAISSEMENT D’ESPÈCES</h3>
+
+              <div className="coop-receipt-total">
+                - {formatCurrency(receiptTarget.amount, receiptTarget.currency)}
+              </div>
+
+              <dl>
+                <div>
+                  <dt>Réf. opération</dt>
+                  <dd><strong>{receiptTarget.reference}</strong></dd>
+                </div>
+                <div>
+                  <dt>Date & Heure</dt>
+                  <dd>
+                    {formatDate(receiptTarget.dateISO)} {receiptTarget.time ? `à ${receiptTarget.time}` : ""}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Compte membre</dt>
+                  <dd><strong>{receiptTarget.accountNumber}</strong></dd>
+                </div>
+                <div>
+                  <dt>Titulaire</dt>
+                  <dd>{receiptTarget.memberName}</dd>
+                </div>
+                <div>
+                  <dt>Montant décaissé</dt>
+                  <dd>
+                    <strong>{formatCurrency(receiptTarget.amount, receiptTarget.currency)}</strong>
+                  </dd>
+                </div>
+                {receiptTarget.frais > 0 && (
+                  <div>
+                    <dt>Frais de retrait</dt>
+                    <dd>{formatCurrency(receiptTarget.frais, receiptTarget.currency)}</dd>
+                  </div>
+                )}
+                <div>
+                  <dt>Nouveau solde</dt>
+                  <dd>{formatCurrency(receiptTarget.soldeApres, receiptTarget.currency)}</dd>
+                </div>
+                <div>
+                  <dt>Motif</dt>
+                  <dd>{receiptTarget.reason || "Retrait au guichet"}</dd>
+                </div>
+                <div>
+                  <dt>Exécuté par</dt>
+                  <dd>
+                    {receiptTarget.executedBy
+                      ? `${receiptTarget.executedBy.role.toUpperCase()} #${receiptTarget.executedBy.id}`
+                      : "Guichetier"}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Statut</dt>
+                  <dd>
+                    <span style={{ textTransform: "uppercase", fontWeight: 700 }}>
+                      {receiptTarget.status === "completed" ? "Payé / Décaissé" : receiptTarget.status}
+                    </span>
+                  </dd>
+                </div>
+              </dl>
+
+              <div className="coop-receipt-rule" />
+
+              {/* Cadre de double émargement */}
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1fr",
+                  gap: "14px",
+                  marginTop: "12px",
+                  fontSize: "10px",
+                }}
+              >
+                <div style={{ textAlign: "center", border: "1px dashed #cbd5e1", borderRadius: "8px", padding: "8px" }}>
+                  <p style={{ fontWeight: 700, margin: "0 0 24px 0", color: "#334155" }}>
+                    Signature du Membre
+                  </p>
+                  <small style={{ color: "#64748b", fontSize: "9px" }}>
+                    Bon pour décharge
+                  </small>
+                </div>
+                <div style={{ textAlign: "center", border: "1px dashed #cbd5e1", borderRadius: "8px", padding: "8px" }}>
+                  <p style={{ fontWeight: 700, margin: "0 0 24px 0", color: "#334155" }}>
+                    Visa du Guichetier
+                  </p>
+                  <small style={{ color: "#64748b", fontSize: "9px" }}>
+                    Cachet de la caisse
+                  </small>
+                </div>
+              </div>
+
+              <p style={{ marginTop: "10px", fontSize: "9px", color: "#64748b" }}>
+                Conservez ce reçu. Document certifié conforme émis par {MWANGAZA_BRAND.name}.
+              </p>
+            </div>
+          )}
+
+          <div className="coop-form-actions">
+            <button
+              className="mw-secondary"
+              type="button"
+              onClick={() => setReceiptTarget(null)}
+            >
+              Fermer
+            </button>
+            <button
+              className="mw-primary"
+              type="button"
+              onClick={() => window.print()}
+            >
+              <IconPrinter aria-hidden="true" />
+              Imprimer le reçu
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal Nouveau Retrait (Agent) */}
+      {isAgent && (
+        <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+          <DialogContent
+            data-theme={dark ? "dark" : "light"}
+            className="mw-dialog-content coop-action-dialog coop-operation-dialog"
+          >
+            <DialogHeader>
+              <DialogTitle>Nouveau retrait</DialogTitle>
+              <DialogDescription>
+                Le décaissement est enregistré au guichet : les limites, les
+                frais et le solde sont vérifiés par le serveur, puis le
+                lecteur biométrique du membre est déclenché.
+              </DialogDescription>
+            </DialogHeader>
+            <form className="coop-operation-form" onSubmit={createRequest}>
+              <div className="coop-form-field">
+                <label htmlFor="retrait-compte">Compte du membre</label>
+                <span className="coop-form-grid">
+                  <input
+                    id="retrait-compte"
+                    value={compteInput}
+                    onChange={(event) => {
+                      setCompteInput(event.target.value);
+                      setMemberCheck(null);
+                    }}
+                    placeholder="Ex. MW-2025-0001"
+                    required
+                  />
+                  <button
+                    className="mw-secondary"
+                    type="button"
+                    onClick={() => void verifyMember()}
+                    disabled={checking}
+                  >
+                    {checking ? "Vérification…" : "Vérifier"}
+                  </button>
+                </span>
+              </div>
+              {memberCheck && (
+                <div className="coop-credit-eligibility">
+                  <span>Membre</span>
+                  <strong>{memberCheck.nomComplet}</strong>
+                  <span>Solde principal</span>
+                  <strong>
+                    {formatCurrency(memberCheck.soldeUSD, "USD")} ·{" "}
+                    {formatCurrency(memberCheck.soldeFC, "FC")}
+                  </strong>
+                </div>
+              )}
+              <div className="coop-form-grid">
+                <label className="coop-form-field">
+                  Montant
+                  <input
+                    name="montant"
+                    type="number"
+                    min="0.01"
+                    step="0.01"
+                    required
+                  />
+                </label>
+                <label className="coop-form-field">
+                  Devise
+                  <select name="devise" defaultValue="USD" required>
+                    <option value="USD">USD</option>
+                    <option value="FC">FC</option>
+                  </select>
+                </label>
+              </div>
+              <label className="coop-form-field">
+                Motif
+                <textarea
+                  name="description"
+                  rows={2}
+                  placeholder="Précisez la raison du retrait"
+                />
+              </label>
+              {formError && (
+                <p className="coop-form-error" role="alert">
+                  {formError}
+                </p>
+              )}
+              <div className="coop-form-actions">
+                <button
+                  className="mw-secondary"
+                  type="button"
+                  onClick={() => setCreateOpen(false)}
+                >
+                  Annuler
+                </button>
+                <button
+                  className="mw-primary"
+                  type="submit"
+                  disabled={createBusy || !memberCheck}
+                >
+                  {createBusy ? "Enregistrement…" : "Décaisser le retrait"}
+                </button>
+              </div>
+            </form>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* Modal Annulation (Admin) */}
+      <Dialog
+        open={cancelTarget !== null}
+        onOpenChange={(open) => !open && setCancelTarget(null)}
+      >
         <DialogContent
           data-theme={dark ? "dark" : "light"}
           className="mw-dialog-content coop-action-dialog coop-operation-dialog"
         >
           <DialogHeader>
-            <DialogTitle>Nouveau retrait</DialogTitle>
+            <DialogTitle>Annuler le retrait {cancelTarget?.reference}</DialogTitle>
             <DialogDescription>
-              La demande est ajoutée localement au workflow de démonstration.
+              L’annulation contrepasse l’opération et restitue les fonds à la
+              caisse de l’agent. Elle est définitive.
             </DialogDescription>
           </DialogHeader>
-          <form className="coop-operation-form" onSubmit={createRequest}>
+          <form className="coop-operation-form" onSubmit={submitCancel}>
             <label className="coop-form-field">
-              Membre
-              <select
-                name="memberId"
-                required
-                defaultValue={mockAccounts.principal.holders[0].member.id}
-              >
-                {mockAccounts.principal.holders.map(({ member }) => (
-                  <option value={member.id} key={member.id}>
-                    {member.name} · {member.memberNumber}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="coop-form-field">
-              Compte d’épargne
-              <select name="account" required defaultValue="principal">
-                {accountSlugs.map((slug) => (
-                  <option key={slug} value={slug}>
-                    {accountConfigs[slug].shortLabel}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="coop-form-field">
-              Montant demandé (USD)
-              <input
-                name="amount"
-                type="number"
-                min="0.01"
-                step="0.01"
-                required
-              />
-            </label>
-            <label className="coop-form-field">
-              Motif
+              Motif de l’annulation
               <textarea
-                name="reason"
-                rows={2}
                 required
-                placeholder="Précisez la raison du retrait"
+                minLength={5}
+                rows={3}
+                value={cancelMotif}
+                onChange={(event) => setCancelMotif(event.target.value)}
+                placeholder="Expliquez la décision"
               />
             </label>
-            <label className="coop-form-field">
-              Mode de paiement souhaité
-              <select name="method" required>
-                {paymentMethods.map((method) => (
-                  <option key={method}>{method}</option>
-                ))}
-              </select>
-            </label>
             <label className="coop-check-field">
-              <input name="proofProvided" type="checkbox" />
-              Justificatif joint (simulation)
+              <input
+                type="checkbox"
+                checked={cancelCash}
+                onChange={(event) => setCancelCash(event.target.checked)}
+              />
+              Je confirme que le montant payé a été rendu physiquement à la
+              caisse.
             </label>
-            <label className="coop-check-field">
-              <input name="urgent" type="checkbox" />
-              Marquer comme urgent (compte HOPITAL)
-            </label>
-            {formError && (
+            {cancelError && (
               <p className="coop-form-error" role="alert">
-                {formError}
+                {cancelError}
               </p>
             )}
             <div className="coop-form-actions">
               <button
                 className="mw-secondary"
                 type="button"
-                onClick={() => setCreateOpen(false)}
-              >
-                Annuler
-              </button>
-              <button className="mw-primary" type="submit">
-                Créer la demande
-              </button>
-            </div>
-          </form>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={rejectOpen} onOpenChange={setRejectOpen}>
-        <DialogContent
-          data-theme={dark ? "dark" : "light"}
-          className="mw-dialog-content coop-action-dialog coop-operation-dialog"
-        >
-          <DialogHeader>
-            <DialogTitle>Rejeter la demande</DialogTitle>
-            <DialogDescription>
-              Un motif de rejet est obligatoire et sera ajouté à l’historique.
-            </DialogDescription>
-          </DialogHeader>
-          <form className="coop-operation-form" onSubmit={rejectRequest}>
-            <label className="coop-form-field">
-              Motif du rejet
-              <textarea
-                required
-                minLength={5}
-                value={rejectReason}
-                onChange={(event) => setRejectReason(event.target.value)}
-                rows={3}
-                placeholder="Expliquez la décision au membre"
-              />
-            </label>
-            <div className="coop-form-actions">
-              <button
-                className="mw-secondary"
-                type="button"
-                onClick={() => setRejectOpen(false)}
+                onClick={() => setCancelTarget(null)}
               >
                 Annuler
               </button>
               <button
                 className="mw-danger"
                 type="submit"
-                disabled={rejectReason.trim().length < 5}
+                disabled={
+                  cancelBusy ||
+                  cancelMotif.trim().length < 5 ||
+                  !cancelCash
+                }
               >
-                Confirmer le rejet
+                {cancelBusy ? "Annulation…" : "Confirmer l’annulation"}
               </button>
             </div>
           </form>
@@ -694,217 +1270,209 @@ export default function WithdrawalsRoute() {
 }
 
 function WithdrawalDetails({
-  request,
-  onApprove,
-  onReject,
-  onPaid,
-  paymentMethod,
-  setPaymentMethod,
+  withdrawal,
+  canCancel,
+  onCancel,
+  onPrintReceipt,
 }: {
-  request: WithdrawalRecord;
-  onApprove: () => void;
-  onReject: () => void;
-  onPaid: () => void;
-  paymentMethod: PaymentMethod;
-  setPaymentMethod: (method: PaymentMethod) => void;
+  withdrawal: BackendWithdrawal;
+  canCancel: boolean;
+  onCancel: () => void;
+  onPrintReceipt: (w: BackendWithdrawal) => void;
 }) {
-  const member = getMemberForOperation(request.memberId);
-  const account = accountConfigs[request.account];
-  const rules = mockAccounts[request.account].rules;
-  const balance = member.balances[request.account];
-  const checks = getWithdrawalChecks(request);
-  const canApprove =
-    request.status === "En attente" && checks.every((check) => check.ok);
+  const status = withdrawalStatus[withdrawal.status] ?? {
+    label: withdrawal.status,
+    tone: "pending" as BadgeTone,
+    tab: "Tous",
+  };
   return (
     <div className="coop-drawer-content coop-withdrawal-detail">
       <div className="coop-drawer-member">
         <span className="mw-member-avatar">
-          {member.name
-            .split(" ")
-            .map((part) => part[0])
-            .slice(0, 2)
-            .join("")}
+          {initialsOf(withdrawal.memberName || "?")}
         </span>
         <div>
-          <strong>{member.name}</strong>
-          <span>
-            {member.memberNumber} · {member.phone}
-          </span>
+          <strong>{withdrawal.memberName}</strong>
+          <span>{withdrawal.accountNumber}</span>
         </div>
-        <CooperativeStatus status={member.status} />
+        <StatusBadge label={status.label} tone={status.tone} />
       </div>
+
       <section className="coop-drawer-section">
-        <h3>Demande {request.reference}</h3>
+        <h3>Retrait {withdrawal.reference}</h3>
         <dl className="coop-detail-list">
           <div>
-            <dt>Compte</dt>
-            <dd>
-              <span
-                className="coop-account-cell"
-                style={
-                  { "--coop-accent": account.color } as React.CSSProperties
-                }
-              >
-                <AccountPills accounts={[request.account]} />
-                {account.shortLabel}
-              </span>
-            </dd>
-          </div>
-          <div>
-            <dt>Montant demandé</dt>
+            <dt>Montant</dt>
             <dd className="coop-amount-cell">
-              {formatCurrency(request.amount)}
+              {formatCurrency(withdrawal.amount, withdrawal.currency)}
             </dd>
           </div>
           <div>
-            <dt>Solde disponible</dt>
-            <dd>{formatCurrency(balance)}</dd>
+            <dt>Frais</dt>
+            <dd>{formatCurrency(withdrawal.frais, withdrawal.currency)}</dd>
+          </div>
+          <div>
+            <dt>Solde avant</dt>
+            <dd>
+              {formatCurrency(withdrawal.soldeAvant, withdrawal.currency)}
+            </dd>
+          </div>
+          <div>
+            <dt>Solde après</dt>
+            <dd>
+              {formatCurrency(withdrawal.soldeApres, withdrawal.currency)}
+            </dd>
           </div>
           <div>
             <dt>Motif</dt>
-            <dd>{request.reason}</dd>
+            <dd>{withdrawal.reason}</dd>
           </div>
           <div>
-            <dt>Date de demande</dt>
-            <dd>{formatDate(request.requestedAt)}</dd>
-          </div>
-          <div>
-            <dt>Urgence</dt>
-            <dd>{request.urgent ? "Urgente · HOPITAL" : "Standard"}</dd>
-          </div>
-        </dl>
-      </section>
-      <section className="coop-drawer-section">
-        <h3>Règles applicables</h3>
-        <dl className="coop-detail-list">
-          <div>
-            <dt>Conditions</dt>
-            <dd>{rules.withdrawalConditions}</dd>
-          </div>
-          <div>
-            <dt>Blocage</dt>
-            <dd>{rules.blockingPeriod}</dd>
-          </div>
-          <div>
-            <dt>Minimum restant</dt>
+            <dt>Date</dt>
             <dd>
-              {["principal", "hopital"].includes(request.account)
-                ? "Aucun minimum imposé"
-                : formatCurrency(rules.minimumDeposit)}
+              {formatDate(withdrawal.dateISO)} {withdrawal.time}
             </dd>
           </div>
+          <div>
+            <dt>Exécuté par</dt>
+            <dd>
+              {withdrawal.executedBy
+                ? `${withdrawal.executedBy.role} #${withdrawal.executedBy.id}`
+                : "—"}
+            </dd>
+          </div>
+          {withdrawal.cancelledAt && (
+            <div>
+              <dt>Annulé le</dt>
+              <dd>
+                {formatDate(withdrawal.cancelledAt)}
+                {withdrawal.cancellationReason
+                  ? ` · ${withdrawal.cancellationReason}`
+                  : ""}
+              </dd>
+            </div>
+          )}
         </dl>
       </section>
+
       <section className="coop-drawer-section">
-        <h3>Vérifications automatiques</h3>
-        <ul className="coop-check-list">
-          {checks.map((check) => (
-            <li key={check.label} className={check.ok ? "is-ok" : "is-alert"}>
-              <span>
-                {check.ok ? (
-                  <IconCheck aria-hidden="true" />
-                ) : (
-                  <IconAlertTriangle aria-hidden="true" />
-                )}
-              </span>
-              <div>
-                <strong>{check.label}</strong>
-                <small>{check.detail}</small>
-              </div>
-            </li>
-          ))}
-        </ul>
-      </section>
-      <section className="coop-drawer-section">
-        <h3>Historique de la demande</h3>
+        <h3>Historique</h3>
         <ol className="coop-timeline">
           <li>
             <span className="coop-timeline-dot is-done" />
             <div>
-              <strong>Demande créée</strong>
-              <small>{formatDate(request.requestedAt)} · par le membre</small>
+              <strong>Retrait décaissé</strong>
+              <small>
+                {formatDate(withdrawal.dateISO)} · {withdrawal.time}
+              </small>
             </div>
           </li>
-          {request.status !== "En attente" && (
+          {withdrawal.cancelledAt && (
             <li>
-              <span
-                className={`coop-timeline-dot ${request.status === "Rejeté" ? "is-rejected" : "is-done"}`}
-              />
+              <span className="coop-timeline-dot is-rejected" />
               <div>
-                <strong>
-                  {request.status === "Rejeté"
-                    ? "Demande rejetée"
-                    : request.status === "Payé"
-                      ? "Retrait payé"
-                      : "Demande approuvée"}
-                </strong>
+                <strong>Annulation</strong>
                 <small>
-                  {formatDate(request.requestedAt)} ·{" "}
-                  {request.status === "Rejeté"
-                    ? request.rejectionReason
-                    : "Validation administrateur"}
+                  {formatDate(withdrawal.cancelledAt)} ·{" "}
+                  {withdrawal.cancellationReason || "Motif non renseigné"}
                 </small>
               </div>
             </li>
           )}
         </ol>
       </section>
-      {request.status === "Approuvé" && (
-        <section className="coop-drawer-section">
-          <label className="coop-form-field">
-            Mode de paiement
-            <select
-              value={paymentMethod}
-              onChange={(event) =>
-                setPaymentMethod(event.target.value as PaymentMethod)
-              }
-            >
-              {paymentMethods.map((method) => (
-                <option key={method}>{method}</option>
-              ))}
-            </select>
-          </label>
-        </section>
-      )}
-      <div className="coop-withdrawal-actions">
-        {request.status === "En attente" && (
-          <>
-            <button className="mw-danger" type="button" onClick={onReject}>
-              Rejeter
-            </button>
-            <button
-              className="mw-primary"
-              type="button"
-              disabled={!canApprove}
-              title={
-                !canApprove
-                  ? "Corrigez les vérifications en alerte avant approbation."
-                  : undefined
-              }
-              onClick={onApprove}
-            >
-              <IconCheck aria-hidden="true" />
-              Approuver
-            </button>
-          </>
-        )}
-        {request.status === "Approuvé" && (
-          <button className="mw-primary" type="button" onClick={onPaid}>
-            <IconWallet aria-hidden="true" />
-            Marquer comme payé
+
+      <div className="coop-withdrawal-actions" style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+        {/* Bouton d'impression directe du reçu de caisse */}
+        <button
+          className="mw-secondary"
+          type="button"
+          onClick={() => onPrintReceipt(withdrawal)}
+        >
+          <IconPrinter aria-hidden="true" />
+          Imprimer le reçu de caisse
+        </button>
+
+        {canCancel && (
+          <button className="mw-danger" type="button" onClick={onCancel}>
+            <IconAlertTriangle aria-hidden="true" />
+            Annuler ce retrait
           </button>
         )}
-        {request.status === "Payé" && (
+        {withdrawal.status === "cancelled" && (
           <span className="coop-inline-note">
-            Retrait payé · {request.method}
-          </span>
-        )}
-        {request.status === "Rejeté" && (
-          <span className="coop-inline-note">
-            Motif : {request.rejectionReason}
+            Motif : {withdrawal.cancellationReason || "—"}
           </span>
         )}
       </div>
+    </div>
+  );
+}
+
+function MovementDetails({ movement }: { movement: CashMovement }) {
+  const meta = movementMeta[movement.type] ?? {
+    label: movement.type,
+    tone: "pending" as BadgeTone,
+    tab: "Tous",
+  };
+  return (
+    <div className="coop-drawer-content coop-withdrawal-detail">
+      <div className="coop-drawer-member">
+        <span className="mw-member-avatar">
+          {initialsOf(movement.acteur?.role || "CA")}
+        </span>
+        <div>
+          <strong>{meta.label}</strong>
+          <span>Caisse d’agent</span>
+        </div>
+        <StatusBadge label={meta.label} tone={meta.tone} />
+      </div>
+
+      <section className="coop-drawer-section">
+        <h3>Mouvement n° {movement.id}</h3>
+        <dl className="coop-detail-list">
+          <div>
+            <dt>Type</dt>
+            <dd>{meta.label}</dd>
+          </div>
+          <div>
+            <dt>Montant</dt>
+            <dd className="coop-amount-cell">
+              {formatCurrency(movement.montant, movement.devise)}
+            </dd>
+          </div>
+          <div>
+            <dt>Solde caisse avant</dt>
+            <dd>{formatCurrency(movement.soldeAvant, movement.devise)}</dd>
+          </div>
+          <div>
+            <dt>Solde caisse après</dt>
+            <dd>{formatCurrency(movement.soldeApres, movement.devise)}</dd>
+          </div>
+          <div>
+            <dt>Motif</dt>
+            <dd>{movement.motif || "—"}</dd>
+          </div>
+          <div>
+            <dt>Date</dt>
+            <dd>{formatDate(movement.createdAt)}</dd>
+          </div>
+          {movement.referenceRetrait && (
+            <div>
+              <dt>Retrait lié</dt>
+              <dd>{movement.referenceRetrait}</dd>
+            </div>
+          )}
+          <div>
+            <dt>Effectué par</dt>
+            <dd>
+              {movement.acteur
+                ? `${movement.acteur.role} #${movement.acteur.id}`
+                : "—"}
+            </dd>
+          </div>
+        </dl>
+      </section>
     </div>
   );
 }

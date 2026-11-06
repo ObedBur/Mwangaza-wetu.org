@@ -2,7 +2,6 @@
 
 import {
   IconArrowDown,
-  IconPencil,
   IconArrowUp,
   IconCalendar,
   IconChartLine,
@@ -42,11 +41,19 @@ import {
 } from "@/lib/account-config";
 import { cooperativeCopy as t } from "@/lib/cooperative-copy";
 import { apiClient } from "@/lib/auth";
-import {
-  mockAccounts,
-  mockAccountSummary,
-  type AccountHolder,
-} from "@/mocks/cooperative-data";
+type AccountHolder = {
+  member: {
+    id: string;
+    memberNumber: string;
+    name: string;
+  };
+  balance: number;
+  balanceUSD: number;
+  balanceFC: number;
+  lastDeposit: string | null;
+  goalAmount: null;
+  status: "Actif" | "Suspendu";
+};
 
 type PrincipalDashboard = {
   overview: {
@@ -70,34 +77,25 @@ function formatDualCurrency(usd: number, fc: number) {
   return `${formatCurrency(usd, "USD")} · ${formatCurrency(fc, "CDF")}`;
 }
 
-function principalToAccountMock(
-  principal: PrincipalDashboard | null,
-  fallback: (typeof mockAccounts)["principal"],
-  chartCurrency: "USD" | "FC",
-): (typeof mockAccounts)["principal"] {
-  if (!principal) return { ...fallback, holders: [], operations: [], balanceHistory: { annual: [], monthly: [], weekly: [] } };
+function dashboardToAccountView(principal: PrincipalDashboard | null, chartCurrency: "USD" | "FC") {
+  if (!principal) return { holders: [] as AccountHolder[], operations: [], balanceHistory: { annual: [] as number[], monthly: [] as number[], weekly: [] as number[] } };
   return {
-    ...fallback,
     holders: principal.holders.map((item) => {
-      const balances = Object.fromEntries(accountSlugs.map((slug) => [slug, slug === "principal" ? item.balanceUSD + item.balanceFC : 0])) as AccountHolder["member"]["balances"];
+      const status = item.status === "actif" ? "Actif" as const : "Suspendu" as const;
       return {
-        member: {
-          id: String(item.memberId), memberNumber: item.accountNumber, name: item.name, phone: item.phone,
-          joinedAt: item.joinedAt, status: item.status === "actif" ? "Actif" : "Suspendu", balances,
-          savingsTotal: item.balanceUSD + item.balanceFC,
-        },
+        member: { id: String(item.memberId), memberNumber: item.accountNumber, name: item.name },
         balance: item.balanceUSD,
         balanceUSD: item.balanceUSD,
         balanceFC: item.balanceFC,
-        lastDeposit: item.lastDeposit || item.joinedAt,
+        lastDeposit: item.lastDeposit,
         goalAmount: null,
-        status: item.status === "actif" ? "Actif" : "Suspendu",
+        status,
       };
     }),
     operations: principal.operations.map((item) => ({
       id: item.id, memberId: String(item.memberId), memberName: item.memberName,
-      type: item.type === "depot" ? "Dépôt" : "Retrait", amount: item.amount, currency: item.currency,
-      date: item.date, status: ["completed", "valid", "valide"].includes(item.status.toLowerCase()) ? "Validé" : item.status.toLowerCase().includes("reject") ? "Rejeté" : "En attente",
+      type: item.type === "depot" ? "Dépôt" as const : "Retrait" as const, amount: item.amount, currency: item.currency,
+      date: item.date, status: ["completed", "valid", "valide"].includes(item.status.toLowerCase()) ? "Validé" as const : item.status.toLowerCase().includes("reject") ? "Rejeté" as const : "En attente" as const,
     })),
     balanceHistory: {
       annual: principal.history.monthly.map((item) => item[chartCurrency]),
@@ -119,11 +117,9 @@ export default function SavingsAccountRoute({
     "annual",
   );
   const [action, setAction] = useState<"deposit" | "withdrawal" | null>(null);
-  const [rulesOpen, setRulesOpen] = useState(false);
-  const [rulesDraft, setRulesDraft] = useState<import("@/mocks/cooperative-data").AccountRules | null>(null);
   const [principal, setPrincipal] = useState<PrincipalDashboard | null>(null);
   const [principalError, setPrincipalError] = useState("");
-  const [principalLoading, setPrincipalLoading] = useState(false);
+  const [principalLoading, setPrincipalLoading] = useState(true);
   const [chartCurrency, setChartCurrency] = useState<"USD" | "FC">("USD");
   const [operationDraft, setOperationDraft] = useState({ accountNumber: "", amount: "", currency: "USD" as "USD" | "FC", description: "" });
   const [operationSaving, setOperationSaving] = useState(false);
@@ -146,15 +142,15 @@ export default function SavingsAccountRoute({
   const [datStatusLoading, setDatStatusLoading] = useState(false);
   const accountSlug = accountSlugs.find((item) => item === slug);
 
-  async function loadPrincipal() {
+  async function loadAccountDashboard() {
     setPrincipalLoading(true);
     try {
-      const response = await apiClient.get<PrincipalDashboard>("/epargnes/compte-principal/dashboard");
+      const response = await apiClient.get<PrincipalDashboard>(`/epargnes/compte-type/${accountSlug?.toUpperCase()}/dashboard`);
       setPrincipal(response.data);
       setPrincipalError("");
     } catch (error: any) {
       const message = error?.response?.data?.message;
-      setPrincipalError(Array.isArray(message) ? message.join(" ") : message || "Impossible de charger le compte principal depuis le backend.");
+      setPrincipalError(Array.isArray(message) ? message.join(" ") : message || "Impossible de charger les données du compte depuis le backend.");
     } finally {
       setPrincipalLoading(false);
     }
@@ -177,10 +173,9 @@ export default function SavingsAccountRoute({
   }
 
   useEffect(() => {
-    if (slug === "principal") {
-      void loadPrincipal();
-      void loadActiveDatAccounts();
-    }
+    if (!accountSlug) return;
+    void loadAccountDashboard();
+    if (accountSlug === "principal") void loadActiveDatAccounts();
   }, [slug]);
 
   useEffect(() => {
@@ -199,19 +194,21 @@ export default function SavingsAccountRoute({
 
   const config = accountConfigs[accountSlug];
   const isPrincipal = accountSlug === "principal";
-  const mockData = mockAccounts[accountSlug];
-  const data = isPrincipal ? principalToAccountMock(principal, mockData, chartCurrency) : mockData;
-  const summary = isPrincipal
-    ? { totalBalance: (principal?.overview.balanceUSD || 0) + (principal?.overview.balanceFC || 0), holderCount: principal?.overview.holderCount || 0, depositsThisMonth: 0, withdrawalsThisMonth: 0 }
-    : mockAccountSummary(accountSlug);
-  const rules = rulesDraft ?? data.rules;
+  const data = dashboardToAccountView(principal, chartCurrency);
+  const summary = principal?.overview ?? {
+    balanceUSD: 0,
+    balanceFC: 0,
+    holderCount: 0,
+    depositsThisMonth: { USD: 0, FC: 0 },
+    withdrawalsThisMonth: { USD: 0, FC: 0 },
+  };
   const AccountIcon = config.icon;
   const chartValues = data.balanceHistory[period];
-  const chartLabels = isPrincipal && principal
+  const chartLabels = principal
     ? period === "annual"
       ? principal.history.monthly.map((item) => item.label)
       : (period === "weekly" ? principal.history.daily.slice(-7) : principal.history.daily).map((item) => item.label)
-    : t.chartMonths;
+    : [];
   const points = chartValues.map((value, index) => {
     const min = Math.min(...chartValues);
     const max = Math.max(...chartValues);
@@ -224,10 +221,6 @@ export default function SavingsAccountRoute({
     event.preventDefault();
     if (operationInFlight.current || captureDepositInFlight.current) return;
     if (!action || !operationDraft.accountNumber || Number(operationDraft.amount) <= 0) return;
-    if (action === "deposit" && !depositFingerprintToken) {
-      setDepositFingerprintError("Capturez une empreinte liée au membre ou à son délégué avant de valider.");
-      return;
-    }
     operationInFlight.current = true;
     setOperationSaving(true);
     setOperationError("");
@@ -239,7 +232,7 @@ export default function SavingsAccountRoute({
       description: operationDraft.description.trim() || (action === "deposit" ? "Dépôt sur compte principal" : "Retrait du compte principal"),
     };
     try {
-      if (action === "deposit") await apiClient.post("/epargnes", { ...payload, typeOperation: "depot", idempotencyKey: window.crypto.randomUUID(), biometricVerificationToken: depositFingerprintToken });
+      if (action === "deposit") await apiClient.post("/epargnes", { ...payload, typeOperation: "depot", idempotencyKey: window.crypto.randomUUID(), ...(depositFingerprintToken ? { biometricVerificationToken: depositFingerprintToken } : {}) });
       else await apiClient.post("/withdrawals", payload);
       const memberName = principal?.members.find((member) => member.accountNumber === operationDraft.accountNumber)?.name || operationDraft.accountNumber;
       const formattedAmount = formatCurrency(Number(operationDraft.amount), operationDraft.currency === "FC" ? "CDF" : "USD");
@@ -251,7 +244,7 @@ export default function SavingsAccountRoute({
       setDepositFingerprintToken("");
       setDepositFingerprintName("");
       setDepositFingerprintError("");
-      await loadPrincipal();
+      await loadAccountDashboard();
     } catch (error: any) {
       const message = error?.response?.data?.message;
       setOperationError(Array.isArray(message) ? message.join(" ") : message || "Opération impossible. Vérifiez le compte, le montant et le solde disponible.");
@@ -324,7 +317,7 @@ export default function SavingsAccountRoute({
         montant: Number(datAmount),
       });
       setDatTarget(null);
-      await loadPrincipal();
+      await loadAccountDashboard();
       await loadActiveDatAccounts();
     } catch (error: any) {
       const message = error?.response?.data?.message;
@@ -355,7 +348,7 @@ export default function SavingsAccountRoute({
             </div>
           </div>
         </div>
-        <div className="coop-page-actions">
+        {isPrincipal && <div className="coop-page-actions">
           <button
             className="mw-secondary"
             type="button"
@@ -372,7 +365,7 @@ export default function SavingsAccountRoute({
             <IconArrowDown aria-hidden="true" />
             {t.newDeposit}
           </button>
-        </div>
+        </div>}
       </div>
 
       {isPrincipal && operationSuccess && (
@@ -385,29 +378,30 @@ export default function SavingsAccountRoute({
         </div>
       )}
       {isPrincipal && principalError && <p className="coop-page-error" role="alert">{principalError}</p>}
+      {!isPrincipal && principalError && <p className="coop-page-error" role="alert">{principalError}</p>}
 
       <section className="coop-stat-grid" aria-label={config.shortLabel}>
           <CooperativeStatCard
             label={t.accountBalance}
-            value={isPrincipal ? formatDualCurrency(principal?.overview.balanceUSD || 0, principal?.overview.balanceFC || 0) : formatCurrency(summary.totalBalance)}
+            value={formatDualCurrency(summary.balanceUSD, summary.balanceFC)}
             icon={IconWallet}
             accent={config.color}
           />
           <CooperativeStatCard
             label={t.accountHolders}
-            value={isPrincipal && principalLoading ? "…" : summary.holderCount}
+            value={principalLoading ? "…" : summary.holderCount}
             icon={IconUsers}
             accent={config.color}
           />
           <CooperativeStatCard
             label={t.depositsMonth}
-            value={isPrincipal ? formatDualCurrency(principal?.overview.depositsThisMonth.USD || 0, principal?.overview.depositsThisMonth.FC || 0) : formatCurrency(summary.depositsThisMonth)}
+            value={formatDualCurrency(summary.depositsThisMonth.USD, summary.depositsThisMonth.FC)}
             icon={IconArrowDown}
             accent={config.color}
           />
           <CooperativeStatCard
             label={t.withdrawalsMonth}
-            value={isPrincipal ? formatDualCurrency(principal?.overview.withdrawalsThisMonth.USD || 0, principal?.overview.withdrawalsThisMonth.FC || 0) : formatCurrency(summary.withdrawalsThisMonth)}
+            value={formatDualCurrency(summary.withdrawalsThisMonth.USD, summary.withdrawalsThisMonth.FC)}
             icon={IconArrowUp}
             accent={config.color}
           />
@@ -442,16 +436,16 @@ export default function SavingsAccountRoute({
                   {label}
                 </button>
               ))}
-              {isPrincipal && <div className="coop-chart-currency-tabs" role="group" aria-label="Devise du graphique"><button type="button" aria-pressed={chartCurrency === "USD"} onClick={() => setChartCurrency("USD")}>USD</button><button type="button" aria-pressed={chartCurrency === "FC"} onClick={() => setChartCurrency("FC")}>FC</button></div>}
+              <div className="coop-chart-currency-tabs" role="group" aria-label="Devise du graphique"><button type="button" aria-pressed={chartCurrency === "USD"} onClick={() => setChartCurrency("USD")}>USD</button><button type="button" aria-pressed={chartCurrency === "FC"} onClick={() => setChartCurrency("FC")}>FC</button></div>
             </div>
           </div>
           <CooperativeDataState
-            loading={isPrincipal && principalLoading}
-            empty={isPrincipal ? !principal : chartValues.length === 0}
+            loading={principalLoading}
+            empty={!principal || chartValues.length === 0}
             skeletonRows={4}
           >
             <div className="coop-account-chart">
-              <strong>{isPrincipal ? formatCurrency(chartCurrency === "USD" ? principal?.overview.balanceUSD || 0 : principal?.overview.balanceFC || 0, chartCurrency === "USD" ? "USD" : "CDF") : formatCurrency(summary.totalBalance)}</strong>
+              <strong>{formatCurrency(chartCurrency === "USD" ? summary.balanceUSD : summary.balanceFC, chartCurrency === "USD" ? "USD" : "CDF")}</strong>
               <svg
                 viewBox="0 0 700 180"
                 role="img"
@@ -522,27 +516,8 @@ export default function SavingsAccountRoute({
         >
           <div className="mw-panel-header">
             <h2 id="coop-rules-title">{t.accountRules}</h2>
-            <button
-              className="coop-edit-rules"
-              type="button"
-              aria-label={t.editRules}
-              title={t.editRules}
-              onClick={() => setRulesOpen(true)}
-            >
-              <IconPencil aria-hidden="true" />
-            </button>
           </div>
-          <CooperativeDataState empty={!rules.objective}>
-            <dl className="coop-rules-list">
-              <div><dt>{t.objective}</dt><dd>{rules.objective}</dd></div>
-              {rules.targetAmount !== null && (
-                <div><dt>{t.targetAmount}</dt><dd>{formatCurrency(rules.targetAmount)}</dd></div>
-              )}
-              <div><dt>{t.minimumDeposit}</dt><dd>{formatCurrency(rules.minimumDeposit)}</dd></div>
-              <div><dt>{t.withdrawalConditions}</dt><dd>{rules.withdrawalConditions}</dd></div>
-              <div><dt>{t.blockingPeriod}</dt><dd>{rules.blockingPeriod}</dd></div>
-            </dl>
-          </CooperativeDataState>
+          <p className="coop-empty-state">Aucune règle de compte n’est configurée dans le backend.</p>
         </section>
       </div>
 
@@ -553,11 +528,11 @@ export default function SavingsAccountRoute({
         >
           <div className="mw-panel-header">
             <h2 id="coop-holders-title">{t.holderTable}</h2>
-            <span className="coop-panel-count">{isPrincipal ? principal?.overview.holderCount || 0 : data.holders.length}</span>
+            <span className="coop-panel-count">{summary.holderCount}</span>
           </div>
           <CooperativeDataState
-            loading={isPrincipal && principalLoading}
-            empty={isPrincipal ? Boolean(principal) && data.holders.length === 0 : data.holders.length === 0}
+            loading={principalLoading}
+            empty={Boolean(principal) && data.holders.length === 0}
             emptyMessage={t.empty}
             skeletonRows={6}
           >
@@ -606,8 +581,8 @@ export default function SavingsAccountRoute({
             <IconCalendar aria-hidden="true" />
           </div>
           <CooperativeDataState
-            loading={isPrincipal && principalLoading}
-            empty={isPrincipal ? Boolean(principal) && data.operations.length === 0 : data.operations.length === 0}
+            loading={principalLoading}
+            empty={Boolean(principal) && data.operations.length === 0}
             emptyMessage={t.noOperations}
             skeletonRows={5}
           >
@@ -642,45 +617,6 @@ export default function SavingsAccountRoute({
         </section>
       </div>
 
-      <Dialog open={rulesOpen} onOpenChange={setRulesOpen}>
-        <DialogContent
-          data-theme={dark ? "dark" : "light"}
-          className="mw-dialog-content coop-action-dialog"
-        >
-          <DialogHeader>
-            <DialogTitle>{t.editRules}</DialogTitle>
-            <DialogDescription>{config.shortLabel}</DialogDescription>
-          </DialogHeader>
-          <form
-            className="coop-rules-form"
-            onSubmit={(event) => {
-              event.preventDefault();
-              const formData = new FormData(event.currentTarget);
-              setRulesDraft({
-                objective: String(formData.get("objective")),
-                minimumDeposit: Number(formData.get("minimumDeposit")),
-                withdrawalConditions: String(formData.get("withdrawalConditions")),
-                blockingPeriod: String(formData.get("blockingPeriod")),
-                targetAmount: formData.get("targetAmount")
-                  ? Number(formData.get("targetAmount"))
-                  : null,
-              });
-              setRulesOpen(false);
-            }}
-          >
-            <label className="coop-rule-field">{t.objective}<input name="objective" defaultValue={rules.objective} required /></label>
-            {rules.targetAmount !== null && <label className="coop-rule-field">{t.targetAmount}<input name="targetAmount" type="number" min="1" defaultValue={rules.targetAmount} required /></label>}
-            <label className="coop-rule-field">{t.minimumDeposit}<input name="minimumDeposit" type="number" min="1" defaultValue={rules.minimumDeposit} required /></label>
-            <label className="coop-rule-field">{t.withdrawalConditions}<textarea name="withdrawalConditions" defaultValue={rules.withdrawalConditions} required /></label>
-            <label className="coop-rule-field">{t.blockingPeriod}<textarea name="blockingPeriod" defaultValue={rules.blockingPeriod} required /></label>
-            <div className="mw-dialog-actions">
-              <button type="button" className="mw-dialog-cancel" onClick={() => setRulesOpen(false)}>{t.cancel}</button>
-              <button type="submit" className="mw-primary">{t.save}</button>
-            </div>
-          </form>
-        </DialogContent>
-      </Dialog>
-
       <Dialog
         open={action !== null}
         onOpenChange={(open) => !open && setAction(null)}
@@ -693,7 +629,7 @@ export default function SavingsAccountRoute({
             <DialogTitle>
               {action === "deposit" ? t.depositAction : t.withdrawalAction}
             </DialogTitle>
-            <DialogDescription>{isPrincipal ? "Enregistrez l’opération sur le compte principal. Le solde sera recalculé à partir du journal." : t.actionPreview}</DialogDescription>
+            <DialogDescription>Enregistrez l’opération sur le compte principal. Le solde sera recalculé à partir du journal.</DialogDescription>
           </DialogHeader>
           {isPrincipal ? <form className="coop-rules-form" onSubmit={submitOperation}>
             <label className="coop-rule-field">Membre<select required disabled={capturingDepositFingerprint || operationSaving} value={operationDraft.accountNumber} onChange={(event) => { setOperationDraft({ ...operationDraft, accountNumber: event.target.value }); setDepositFingerprintToken(""); setDepositFingerprintName(""); setDepositFingerprintError(""); }}><option value="">Choisir un membre</option>{(principal?.members || []).map((member) => <option key={member.id} value={member.accountNumber}>{member.name} · {member.accountNumber}</option>)}</select></label>
@@ -703,8 +639,8 @@ export default function SavingsAccountRoute({
             {action === "deposit" && <div className="coop-deposit-biometric" aria-live="polite">
               <span className="coop-deposit-biometric-icon"><IconFingerprint size={19} aria-hidden="true" /></span>
               <div className="coop-deposit-biometric-content">
-                <strong>Empreinte du membre ou de son délégué</strong>
-                <p>Cliquez pour lancer la lecture. Une seule empreinte autorisée suffit.</p>
+                <strong>Empreinte du membre ou de son délégué <span>(facultative)</span></strong>
+                <p>Le numéro de compte du membre est obligatoire. La capture peut être utilisée en vérification complémentaire.</p>
                 <button type="button" className="coop-deposit-capture-button" onClick={() => void captureDepositFingerprint()} disabled={capturingDepositFingerprint || operationSaving || !operationDraft.accountNumber}>
                   <IconFingerprint size={17} aria-hidden="true" />
                   {capturingDepositFingerprint ? "Posez le doigt sur le lecteur…" : depositFingerprintToken ? "Capturer une autre empreinte" : "Lire l’empreinte"}
@@ -714,7 +650,7 @@ export default function SavingsAccountRoute({
               </div>
             </div>}
             {operationError && <p className="coop-page-error" role="alert">{operationError}</p>}
-            <div className="mw-dialog-actions"><button type="button" className="mw-dialog-cancel" onClick={() => setAction(null)} disabled={operationSaving || capturingDepositFingerprint}>{t.cancel}</button><button className="mw-primary" type="submit" disabled={operationSaving || capturingDepositFingerprint || !operationDraft.accountNumber || (action === "deposit" && !depositFingerprintToken)}>{operationSaving ? "Enregistrement…" : action === "deposit" ? "Valider le dépôt" : "Confirmer l’opération"}</button></div>
+            <div className="mw-dialog-actions"><button type="button" className="mw-dialog-cancel" onClick={() => setAction(null)} disabled={operationSaving || capturingDepositFingerprint}>{t.cancel}</button><button className="mw-primary" type="submit" disabled={operationSaving || capturingDepositFingerprint || !operationDraft.accountNumber}>{operationSaving ? "Enregistrement…" : action === "deposit" ? "Valider le dépôt" : "Confirmer l’opération"}</button></div>
           </form> : <button className="mw-primary" type="button" onClick={() => setAction(null)}>{t.close}</button>}
         </DialogContent>
       </Dialog>

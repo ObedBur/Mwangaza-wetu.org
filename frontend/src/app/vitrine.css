@@ -1171,48 +1171,160 @@
   padding: 60px 0 90px;
 }
 
-.bk-category-tabs {
+.bk-products-layout {
+  display: grid;
+  grid-template-columns: minmax(245px, 0.78fr) minmax(0, 2fr);
+  align-items: start;
+  gap: 24px;
+}
+
+.bk-account-types,
+.bk-formulas-panel {
+  min-width: 0;
+  background: #ffffff;
+  border: 1px solid #DCE5EF;
+  border-radius: 20px;
+  box-shadow: 0 12px 34px rgba(4, 36, 66, 0.055);
+}
+
+.bk-account-types {
+  padding: 25px 18px 20px;
+  border-top: 3px solid #D97706;
+}
+
+.bk-account-types-heading {
+  padding: 0 8px 18px;
+}
+
+.bk-account-types-heading > span,
+.bk-formulas-panel-heading > div > span {
+  color: #B45309;
+  font-size: 10px;
+  line-height: 1.2;
+  font-weight: 800;
+  letter-spacing: 1.1px;
+}
+
+.bk-account-types-heading h3,
+.bk-formulas-panel-heading h3 {
+  margin: 7px 0 0;
+  color: var(--bk-navy);
+  font-size: 19px;
+  line-height: 1.3;
+  font-weight: 800;
+  letter-spacing: -0.3px;
+}
+
+.bk-account-type-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.bk-account-type {
+  width: 100%;
+  min-height: 48px;
   display: flex;
   align-items: center;
-  justify-content: center;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin-top: 24px;
-}
-
-.bk-cat-tab {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 20px;
-  background: #ffffff;
-  border: 1px solid #E2E8F0;
-  border-radius: 30px;
-  font-size: 13.5px;
+  gap: 11px;
+  padding: 9px 10px;
+  border: 1px solid transparent;
+  border-radius: 11px;
+  color: #334155;
+  background: transparent;
+  text-align: left;
+  font-size: 13px;
   font-weight: 650;
-  color: #475569;
   cursor: pointer;
-  transition: all 0.2s;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  transition: color 0.18s ease, background 0.18s ease, border-color 0.18s ease;
 }
 
-.bk-cat-tab:hover {
+.bk-account-type > svg:last-child {
+  margin-left: auto;
+  color: #94A3B8;
+}
+
+.bk-account-type-icon {
+  width: 31px;
+  height: 31px;
+  flex: 0 0 31px;
+  display: grid;
+  place-items: center;
+  color: #64748B;
   background: #F1F5F9;
-  color: #07192F;
-  border-color: #CBD5E1;
+  border-radius: 9px;
 }
 
-.bk-cat-tab.active {
-  background: #07192F;
+.bk-account-type:hover {
+  color: var(--bk-navy);
+  background: #F8FAFC;
+  border-color: #E2E8F0;
+}
+
+.bk-account-type.active {
   color: #ffffff;
+  background: #07192F;
   border-color: #07192F;
-  box-shadow: 0 4px 12px rgba(7, 25, 47, 0.18);
+  box-shadow: 0 5px 14px rgba(7, 25, 47, 0.14);
+}
+
+.bk-account-type.active .bk-account-type-icon {
+  color: #FBBF24;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.bk-account-type.active > svg:last-child {
+  color: #FBBF24;
+}
+
+.bk-account-type:focus-visible,
+.bk-btn-subscribe:focus-visible,
+.bk-help-actions a:focus-visible {
+  outline: 3px solid #D97706;
+  outline-offset: 3px;
+}
+
+.bk-account-types-note {
+  margin: 17px 8px 0;
+  padding-top: 14px;
+  border-top: 1px solid #EEF2F6;
+  color: #64748B;
+  font-size: 11.5px;
+  line-height: 1.55;
+}
+
+.bk-formulas-panel {
+  padding: 25px;
+  border-top: 3px solid #074780;
+}
+
+.bk-formulas-panel-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.bk-formulas-panel-heading h3 {
+  font-size: 20px;
+}
+
+.bk-formula-count {
+  flex: 0 0 auto;
+  padding: 7px 11px;
+  color: #475569;
+  background: #F1F5F9;
+  border: 1px solid #E2E8F0;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
 }
 
 .bk-cards-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 28px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
 }
 
 .bk-product-card {
@@ -1224,7 +1336,7 @@
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  transition: all 0.25s ease;
+  transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
 }
 
@@ -1286,7 +1398,9 @@
   color: #475569;
   line-height: 1.6;
   margin: 0 0 22px;
-  flex: 1;
+  /* Keep the feature lists on a shared baseline across cards. */
+  min-height: 6.4em;
+  flex: 0 0 auto;
 }
 
 /* 3 Avantages concrets */
@@ -1313,6 +1427,7 @@
 .bk-prod-action {
   border-top: 1px solid #F1F5F9;
   padding-top: 18px;
+  margin-top: auto;
 }
 
 .bk-btn-subscribe {
@@ -1869,8 +1984,16 @@
   .bk-calc-grid {
     grid-template-columns: 1fr;
   }
+  .bk-products-layout {
+    grid-template-columns: minmax(215px, 0.72fr) minmax(0, 1.8fr);
+    gap: 16px;
+  }
+  .bk-formulas-panel {
+    padding: 20px;
+  }
   .bk-cards-grid {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
   }
   .bk-digital-grid {
     grid-template-columns: 1fr;
@@ -1897,6 +2020,16 @@
   }
   .bk-fx-converter-grid {
     grid-template-columns: 1fr;
+  }
+  .bk-products-layout {
+    grid-template-columns: 1fr;
+  }
+  .bk-account-type-list {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .bk-account-type {
+    justify-content: flex-start;
   }
 }
 
@@ -1959,6 +2092,41 @@
   }
   .bk-cards-grid {
     grid-template-columns: 1fr;
+  }
+  .bk-products-section {
+    padding: 48px 0 64px;
+  }
+  .bk-account-types {
+    padding: 19px 14px 15px;
+  }
+  .bk-account-type-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+  }
+  .bk-account-type {
+    min-height: 58px;
+    gap: 8px;
+    padding: 8px;
+    font-size: 11.5px;
+  }
+  .bk-account-type-icon {
+    width: 28px;
+    height: 28px;
+    flex-basis: 28px;
+  }
+  .bk-formulas-panel {
+    padding: 17px 14px;
+  }
+  .bk-formulas-panel-heading {
+    align-items: flex-start;
+    margin-bottom: 16px;
+  }
+  .bk-formulas-panel-heading h3 {
+    font-size: 17px;
+  }
+  .bk-formula-count {
+    padding: 6px 8px;
+    font-size: 10px;
   }
   .bk-footer-top {
     grid-template-columns: 1fr;

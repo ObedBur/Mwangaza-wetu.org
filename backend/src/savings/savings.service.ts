@@ -225,6 +225,11 @@ export class SavingsService {
   }
 
   async getPrincipalDashboard() {
+    return this.getAccountTypeDashboard('PRINCIPAL');
+  }
+
+  async getAccountTypeDashboard(type: string) {
+    const accountType = type.trim().toUpperCase();
     const now = new Date();
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
     const historyStart = new Date(now.getFullYear(), now.getMonth() - 11, 1);
@@ -235,34 +240,35 @@ export class SavingsService {
       { compte: { contains: 'CREDITS' } },
       { compte: { contains: 'TRESORERIE' } },
     ];
-    const principalFilter = { typeCompte: 'PRINCIPAL', NOT: systemAccounts };
+    const accountFilter = { membre: { typeCompte: accountType }, NOT: systemAccounts };
 
     const [totals, fees, thisMonth, historyEntries, historyFees, members, lastDeposits] = await Promise.all([
       this.prisma.epargne.groupBy({
         by: ['compte', 'devise', 'typeOperation'],
-        where: principalFilter,
+        where: accountFilter,
         _sum: { montant: true },
       }),
       this.prisma.retrait.groupBy({
         by: ['compte', 'devise'],
-        where: { NOT: systemAccounts, statut: 'COMPLETED' },
+        where: { membre: { typeCompte: accountType }, NOT: systemAccounts, statut: 'COMPLETED' },
         _sum: { frais: true },
       }),
       this.prisma.epargne.groupBy({
         by: ['devise', 'typeOperation'],
-        where: { ...principalFilter, dateOperation: { gte: monthStart } },
+        where: { ...accountFilter, dateOperation: { gte: monthStart } },
         _sum: { montant: true },
       }),
       this.prisma.epargne.findMany({
-        where: { ...principalFilter, dateOperation: { gte: historyStart } },
+        where: { ...accountFilter, dateOperation: { gte: historyStart } },
         select: { compte: true, devise: true, typeOperation: true, montant: true, dateOperation: true },
       }),
       this.prisma.retrait.findMany({
-        where: { dateOperation: { gte: historyStart }, NOT: systemAccounts, statut: 'COMPLETED' },
+        where: { dateOperation: { gte: historyStart }, membre: { typeCompte: accountType }, NOT: systemAccounts, statut: 'COMPLETED' },
         select: { compte: true, devise: true, frais: true, dateOperation: true },
       }),
       this.prisma.membre.findMany({
         where: {
+          typeCompte: accountType,
           NOT: [
             { numeroCompte: { contains: 'REVENUS' } },
             { numeroCompte: { contains: 'SECTION-0000' } },
@@ -273,7 +279,7 @@ export class SavingsService {
         select: { id: true, numeroCompte: true, nomComplet: true, telephone: true, dateAdhesion: true, statut: true },
       }),
       this.prisma.epargne.findMany({
-        where: { ...principalFilter, typeOperation: 'depot' },
+        where: { ...accountFilter, typeOperation: 'depot' },
         orderBy: { dateOperation: 'desc' },
         distinct: ['compte'],
         select: { compte: true, dateOperation: true },
@@ -326,8 +332,8 @@ export class SavingsService {
         .reduce((sum, entry) => sum + Number(entry.frais), 0);
       return savings - feesAfter;
     };
-    const currentUSD = [...balanceByAccount.values()].reduce((sum, item) => sum + item.USD, 0);
-    const currentFC = [...balanceByAccount.values()].reduce((sum, item) => sum + item.FC, 0);
+    const currentUSD = members.reduce((sum, member) => sum + (balanceByAccount.get(member.numeroCompte)?.USD ?? 0), 0);
+    const currentFC = members.reduce((sum, member) => sum + (balanceByAccount.get(member.numeroCompte)?.FC ?? 0), 0);
     const months = Array.from({ length: 12 }, (_, index) => {
       const date = new Date(now.getFullYear(), now.getMonth() - 11 + index, 1);
       const cutoff = new Date(date.getFullYear(), date.getMonth() + 1, 0, 23, 59, 59, 999);
@@ -349,13 +355,13 @@ export class SavingsService {
 
     const [deposits, withdrawals] = await Promise.all([
       this.prisma.epargne.findMany({
-        where: { ...principalFilter, typeOperation: 'depot' },
+        where: { ...accountFilter, typeOperation: 'depot' },
         include: { membre: { select: { id: true, nomComplet: true } } },
         orderBy: { dateOperation: 'desc' },
         take: 20,
       }),
       this.prisma.retrait.findMany({
-        where: { NOT: systemAccounts },
+        where: { membre: { typeCompte: accountType }, NOT: systemAccounts },
         include: { membre: { select: { id: true, nomComplet: true } } },
         orderBy: { dateOperation: 'desc' },
         take: 20,
@@ -551,23 +557,25 @@ export class SavingsService {
       const verification = verificationToken
         ? this.depositBiometricVerifications.get(verificationToken)
         : undefined;
-      if (!verification || verification.expiresAt <= Date.now()) {
+      if (verificationToken && (!verification || verification.expiresAt <= Date.now())) {
         if (verificationToken) this.depositBiometricVerifications.delete(verificationToken);
         throw new BadRequestException(
-          'Lisez l’empreinte du membre ou de son délégué avant de valider le dépôt.',
+          'La vérification biométrique a expiré ou est invalide. Relancez la capture.',
         );
       }
-      this.depositBiometricVerifications.delete(verificationToken!);
-      if (
+      if (verificationToken && verification) {
+        this.depositBiometricVerifications.delete(verificationToken);
+      }
+      if (verification && (
         verification.memberId !== member.id ||
         verification.actorUserId !== (actor.userId ?? null) ||
         verification.actorRole !== (actor.role ?? null)
-      ) {
+      )) {
         throw new ForbiddenException(
           'La vérification biométrique ne correspond pas au membre sélectionné ou à votre session.',
         );
       }
-      const scannedUserId = verification.userId;
+      const scannedUserId = verification?.userId;
 
       const operation = await this.prisma.$transaction(async (tx) => {
         await tx.$queryRaw<Array<{ id: number }>>`
@@ -583,7 +591,7 @@ export class SavingsService {
         if (!currentMember || currentMember.statut !== 'actif') {
           throw new NotFoundException('Compte membre introuvable ou inactif.');
         }
-        if (currentMember.userId !== scannedUserId && !currentMember.delegues.some((delegate) => delegate.userId === scannedUserId)) {
+        if (scannedUserId && currentMember.userId !== scannedUserId && !currentMember.delegues.some((delegate) => delegate.userId === scannedUserId)) {
           throw new ForbiddenException('L’autorisation biométrique du membre ou de son délégué a changé pendant la capture.');
         }
 
@@ -602,7 +610,7 @@ export class SavingsService {
         await tx.adminLog.create({
           data: {
             action: 'DEPOT_GUICHET',
-            details: `Dépôt ${operation.id}, compte ${currentMember.numeroCompte}, ${montant} ${devise}; acteur ${actor.role} #${actor.userId ?? 'inconnu'}; vérification biométrique membre/délégué validée.`,
+            details: `Dépôt ${operation.id}, compte ${currentMember.numeroCompte}, ${montant} ${devise}; acteur ${actor.role} #${actor.userId ?? 'inconnu'}; ${scannedUserId ? 'vérification biométrique membre/délégué validée' : 'dépôt enregistré sans vérification biométrique'}.`,
             success: true,
             userId: actor.userId ?? null,
           },

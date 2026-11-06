@@ -24,6 +24,7 @@ import {
   Prisma,
   StatutMembre as PrismaStatutMembre,
   Devise,
+  TypeOperationEpargne,
 } from '@prisma/client';
 
 type CloudinaryPhoto = { url: string; publicId: string };
@@ -68,10 +69,20 @@ export class MembersService {
   }
 
   async findAll(
-    params: { page?: number; pageSize?: number; userId?: string } = {},
+    params: {
+      page?: number;
+      pageSize?: number;
+      userId?: string;
+      search?: string;
+      status?: string;
+      account?: string;
+      sort?: string;
+    } = {},
   ) {
-    const { page = 1, pageSize = 10, userId } = params;
+    const page = Math.max(1, Math.floor(params.page || 1));
+    const pageSize = Math.min(1000, Math.max(1, Math.floor(params.pageSize || 10)));
     const skip = (page - 1) * pageSize;
+    const search = params.search?.trim();
 
     const where: Prisma.MembreWhereInput = {
       NOT: [
@@ -82,9 +93,34 @@ export class MembersService {
       ],
     };
 
-    if (userId) {
-      where.userId = userId;
+    if (params.userId) where.userId = params.userId;
+    if (search) {
+      where.OR = [
+        { nomComplet: { contains: search, mode: 'insensitive' } },
+        { numeroCompte: { contains: search, mode: 'insensitive' } },
+        { telephone: { contains: search, mode: 'insensitive' } },
+        { email: { contains: search, mode: 'insensitive' } },
+      ];
     }
+    if (params.status === PrismaStatutMembre.actif || params.status === PrismaStatutMembre.inactif) {
+      where.statut = params.status;
+    }
+    if (params.account?.trim()) {
+      const account = params.account.trim();
+      where.AND = [
+        {
+          OR: [
+            { typeCompte: { contains: account, mode: 'insensitive' } },
+            { comptesEpargne: { some: { typeCompte: { contains: account, mode: 'insensitive' } } } },
+          ],
+        },
+      ];
+    }
+
+    const orderBy: Prisma.MembreOrderByWithRelationInput =
+      params.sort === 'name'
+        ? { nomComplet: 'asc' }
+        : { dateAdhesion: 'desc' };
 
     const [total, data] = await Promise.all([
       this.prisma.membre.count({ where }),
@@ -92,13 +128,58 @@ export class MembersService {
         where,
         skip,
         take: pageSize,
-        orderBy: { dateAdhesion: 'desc' },
-        include: { delegues: true, comptesEpargne: true },
+        orderBy,
+        select: {
+          id: true,
+          numeroCompte: true,
+          nomComplet: true,
+          userId: true,
+          dateAdhesion: true,
+          telephone: true,
+          email: true,
+          adresse: true,
+          sexe: true,
+          typeCompte: true,
+          activite: true,
+          statut: true,
+          dateNaissance: true,
+          comptesEpargne: { select: { typeCompte: true, solde: true } },
+        },
       }),
     ]);
 
+    const accountNumbers = data.map((member) => member.numeroCompte);
+    const [savings, withdrawalFees] = await Promise.all([
+      this.prisma.epargne.groupBy({
+        by: ['compte', 'devise', 'typeOperation'],
+        where: { compte: { in: accountNumbers } },
+        _sum: { montant: true },
+      }),
+      this.prisma.retrait.groupBy({
+        by: ['compte', 'devise'],
+        where: { compte: { in: accountNumbers }, statut: 'COMPLETED' },
+        _sum: { frais: true },
+      }),
+    ]);
+
+    const dataWithBalances = data.map((member) => {
+      const sumOperations = (devise: Devise, typeOperation: TypeOperationEpargne) =>
+        Number(savings.find((row) => row.compte === member.numeroCompte && row.devise === devise && row.typeOperation === typeOperation)?._sum.montant ?? 0);
+      const sumFees = (devise: Devise) =>
+        Number(withdrawalFees.find((row) => row.compte === member.numeroCompte && row.devise === devise)?._sum.frais ?? 0);
+      const { userId, ...memberData } = member;
+      return {
+        ...memberData,
+        empreinteEnregistree: Boolean(userId),
+        soldes: {
+          FC: sumOperations(Devise.FC, TypeOperationEpargne.depot) - sumOperations(Devise.FC, TypeOperationEpargne.retrait) - sumFees(Devise.FC),
+          USD: sumOperations(Devise.USD, TypeOperationEpargne.depot) - sumOperations(Devise.USD, TypeOperationEpargne.retrait) - sumFees(Devise.USD),
+        },
+      };
+    });
+
     return {
-      data,
+      data: dataWithBalances,
       meta: {
         total,
         page,
@@ -249,6 +330,7 @@ export class MembersService {
   async create(createMemberDto: CreateMemberDto) {
     const { numeroCompte, typeCompte, dateAdhesion, delegue } =
       createMemberDto;
+    const userId = createMemberDto.userId?.trim() || undefined;
 
     const email = createMemberDto.email?.trim().toLowerCase();
     if (!email) throw new BadRequestException("L'adresse e-mail est requise");
@@ -304,8 +386,8 @@ export class MembersService {
     }
 
     // Vérifier l'unicité du userId (empreinte) pour le membre
-    if (createMemberDto.userId) {
-      const check = await this.checkUserId(createMemberDto.userId);
+    if (userId) {
+      const check = await this.checkUserId(userId);
       if (check.exists) {
         throw new BadRequestException(
           `Cette empreinte est déjà enregistrée pour un autre ${check.where}`,
@@ -359,7 +441,7 @@ export class MembersService {
           statut: createMemberDto.statut,
           photoProfil: memberPhoto?.url ?? null,
           photoProfilPublicId: memberPhoto?.publicId ?? null,
-          userId: createMemberDto.userId || null,
+          userId,
           dateAdhesion: new Date(dateAdhesion),
           motDePasse: hashedPassword,
           dateNaissance: createMemberDto.dateNaissance
@@ -684,8 +766,9 @@ export class MembersService {
     }
 
     // Vérifier l'unicité du userId pour le membre si modifié
-    if (updateDto.userId && updateDto.userId !== membre.userId) {
-      const check = await this.checkUserId(updateDto.userId, id);
+    const updatedUserId = updateDto.userId?.trim();
+    if (updatedUserId && updatedUserId !== membre.userId) {
+      const check = await this.checkUserId(updatedUserId, id);
       if (check.exists) {
         throw new BadRequestException(
           `Cette empreinte est déjà enregistrée pour un autre ${check.where}`,
@@ -707,6 +790,10 @@ export class MembersService {
     }
 
     const data: Prisma.MembreUpdateInput = {};
+
+    if (updateDto.userId !== undefined) {
+      data.userId = updatedUserId || null;
+    }
 
     if (updateDto.motDePasse) {
       if (!updateDto.motDePasse.startsWith('$2')) {
@@ -905,10 +992,18 @@ export class MembersService {
       ],
     };
 
-    const total = await this.prisma.membre.count({ where: filter });
-    const actifs = await this.prisma.membre.count({
-      where: { ...filter, statut: PrismaStatutMembre.actif },
-    });
+    const now = new Date();
+    const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+    const nextMonthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+    const [total, actifs, nouveauxCeMois] = await Promise.all([
+      this.prisma.membre.count({ where: filter }),
+      this.prisma.membre.count({
+        where: { ...filter, statut: PrismaStatutMembre.actif },
+      }),
+      this.prisma.membre.count({
+        where: { ...filter, dateAdhesion: { gte: monthStart, lt: nextMonthStart } },
+      }),
+    ]);
     const inactifs = total - actifs;
     const hommes = await this.prisma.membre.count({
       where: { ...filter, sexe: 'M' },
@@ -929,7 +1024,7 @@ export class MembersService {
       _count: { _all: true },
     });
 
-    return { total, actifs, inactifs, hommes, femmes, typeComptes, activites };
+    return { total, actifs, inactifs, nouveauxCeMois, hommes, femmes, typeComptes, activites };
   }
 
   async checkUserId(userId: string, excludeId?: number) {

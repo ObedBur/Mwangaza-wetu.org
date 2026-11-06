@@ -22,8 +22,7 @@ export function CooperativeBreadcrumb({
       aria-label={cooperativeCopy.breadcrumbLabel}
     >
       <span>{cooperativeCopy.breadcrumbAdmin}</span>
-      <span aria-hidden="true">/</span>
-      <span>{section}</span>
+      {section !== current && <><span aria-hidden="true">/</span><span>{section}</span></>}
       <span aria-hidden="true">/</span>
       <span aria-current="page">{current}</span>
     </nav>
@@ -70,19 +69,21 @@ export function CooperativeStatCard({
   );
 }
 
-const statusClass: Record<MemberStatus | OperationStatus, string> = {
+const statusClass: Record<MemberStatus | OperationStatus | "Enregistrée", string> = {
   Actif: "valid",
+  Inactif: "pending",
   "En retard": "pending",
   Suspendu: "rejected",
   Validé: "valid",
   "En attente": "pending",
   Rejeté: "rejected",
+  "Enregistrée": "valid",
 };
 
 export function CooperativeStatus({
   status,
 }: {
-  status: MemberStatus | OperationStatus;
+  status: MemberStatus | OperationStatus | "Enregistrée";
 }) {
   return (
     <span className={`coop-status coop-status--${statusClass[status]}`}>

@@ -47,7 +47,7 @@ const agentNavGroups = [
     label: "OPÉRATIONS",
     items: [
       {
-        label: "Dépôts & cotisations",
+        label: "Dépôts & Epargnes",
         href: "/agent/depots",
         icon: IconArrowDown,
       },
@@ -160,57 +160,57 @@ export function AgentPortalShell({ children }: { children: ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
-      <div className="agent-portal-shell">
-        <div className="agent-desktop-sidebar">
-          <AgentSidebar />
-        </div>
-        <div className="agent-workspace">
-          <header className="agent-topbar">
-            <div className="agent-mobile-nav">
-              <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
-                <SheetTrigger asChild>
-                  <button
-                    className="agent-icon-button"
-                    type="button"
-                    aria-label="Ouvrir la navigation agent"
-                  >
-                    <IconMenu2 size={19} aria-hidden="true" />
-                  </button>
-                </SheetTrigger>
-                <SheetContent
-                  side="left"
-                  className="agent-mobile-sidebar-sheet"
-                >
-                  <SheetTitle className="sr-only">Navigation agent</SheetTitle>
-                  <AgentSidebar onNavigate={() => setMobileOpen(false)} />
-                </SheetContent>
-              </Sheet>
-              <AgentBrand />
-            </div>
-            <label className="agent-global-search">
-              <IconSearch size={16} aria-hidden="true" />
-              <input
-                type="search"
-                aria-label="Recherche disponible après connexion des données"
-                placeholder="Recherche bientôt disponible"
-                disabled
-              />
-            </label>
-            <div className="agent-topbar-actions">
-              <button
-                className="agent-icon-button agent-notification-button"
-                type="button"
-                aria-label="Notifications bientôt disponibles"
-                disabled
-              >
-                <IconBell size={17} aria-hidden="true" />
-              </button>
-              <span className="agent-locale">FR</span>
-            </div>
-          </header>
-          <main className="agent-page-main">{children}</main>
-        </div>
+    <div className="agent-portal-shell">
+      <div className="agent-desktop-sidebar">
+        <AgentSidebar />
       </div>
+      <div className="agent-workspace">
+        <header className="agent-topbar">
+          <div className="agent-mobile-nav">
+            <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
+              <SheetTrigger asChild>
+                <button
+                  className="agent-icon-button"
+                  type="button"
+                  aria-label="Ouvrir la navigation agent"
+                >
+                  <IconMenu2 size={19} aria-hidden="true" />
+                </button>
+              </SheetTrigger>
+              <SheetContent
+                side="left"
+                className="agent-mobile-sidebar-sheet"
+              >
+                <SheetTitle className="sr-only">Navigation agent</SheetTitle>
+                <AgentSidebar onNavigate={() => setMobileOpen(false)} />
+              </SheetContent>
+            </Sheet>
+            <AgentBrand />
+          </div>
+          <label className="agent-global-search">
+            <IconSearch size={16} aria-hidden="true" />
+            <input
+              type="search"
+              aria-label="Recherche disponible après connexion des données"
+              placeholder="Recherche bientôt disponible"
+              disabled
+            />
+          </label>
+          <div className="agent-topbar-actions">
+            <button
+              className="agent-icon-button agent-notification-button"
+              type="button"
+              aria-label="Notifications bientôt disponibles"
+              disabled
+            >
+              <IconBell size={17} aria-hidden="true" />
+            </button>
+            <span className="agent-locale">FR</span>
+          </div>
+        </header>
+        <main className="agent-page-main">{children}</main>
+      </div>
+    </div>
   );
 }
 
@@ -317,7 +317,7 @@ export function AgentDashboard() {
         ))}
       </div>
       <div className="agent-dashboard-middle">
-        <PendingDataPanel title="Cotisations & crédits" />
+        <PendingDataPanel title="Epargnes & crédits" />
         <PendingDataPanel title="Répartition des membres" />
       </div>
       <div className="agent-dashboard-bottom">

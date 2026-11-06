@@ -4,7 +4,7 @@ export type TransactionKind =
   | "Dépôt"
   | "Retrait"
   | "Remboursement"
-  | "Cotisation";
+  | "Epargne";
 export type TransactionStatus = "Validé" | "En attente" | "Rejeté";
 
 export interface MemberAccountData {
@@ -64,9 +64,9 @@ export const dashboardData = {
     {
       id: "tx-20261002-01",
       date: "2026-10-02T12:30:00",
-      description: "Cotisation mensuelle",
+      description: "Epargne mensuelle",
       accountId: "principal",
-      kind: "Cotisation",
+      kind: "Epargne",
       amount: 180,
       status: "Validé",
     },
@@ -118,9 +118,9 @@ export const dashboardData = {
     {
       id: "tx-20260924-01",
       date: "2026-09-24T11:10:00",
-      description: "Cotisation coopérative",
+      description: "Epargne coopérative",
       accountId: "principal",
-      kind: "Cotisation",
+      kind: "Epargne",
       amount: 80,
       status: "En attente",
     },

@@ -35,6 +35,13 @@ export class AgentsService {
   ) {}
 
   async create(dto: CreateAgentDto) {
+    const fingerprintId = dto.userId?.trim();
+    if (!fingerprintId) {
+      throw new BadRequestException(
+        'La capture de l’empreinte digitale est obligatoire pour créer un agent.',
+      );
+    }
+
     const emailExists = await this.prisma.agent.findUnique({
       where: { email: dto.email },
     });
@@ -42,13 +49,11 @@ export class AgentsService {
       throw new BadRequestException('Un agent avec cet email existe déjà');
     }
 
-    if (dto.userId) {
-      const userIdTaken = await this.checkUserId(dto.userId);
-      if (userIdTaken.exists) {
-        throw new BadRequestException(
-          `Cette empreinte est déjà enregistrée pour un autre ${userIdTaken.where || 'compte'}`,
-        );
-      }
+    const userIdTaken = await this.checkUserId(fingerprintId);
+    if (userIdTaken.exists) {
+      throw new BadRequestException(
+        `Cette empreinte est déjà enregistrée pour un autre ${userIdTaken.where || 'compte'}`,
+      );
     }
 
     if (dto.numeroCarteElecteur) {
@@ -84,7 +89,7 @@ export class AgentsService {
           guichetAssigne: dto.guichetAssigne,
           soldeInitial,
           devise: deviseInitiale,
-          userId: dto.userId ?? null,
+          userId: fingerprintId,
           motDePasse: hashedPassword,
         },
         select: AGENT_SELECT,

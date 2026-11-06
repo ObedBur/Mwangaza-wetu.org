@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useState, Suspense } from "react";
+import React, { useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   IconArrowDown,
@@ -11,6 +11,8 @@ import {
   IconUsers,
   IconAlertTriangle,
   IconCircleCheck,
+  IconFingerprint,
+  IconRefresh,
 } from "@tabler/icons-react";
 
 import { CooperativeDataState } from "@/components/cooperative/CooperativeDataState";
@@ -33,17 +35,28 @@ import {
 import { cooperativeCopy as t } from "@/lib/cooperative-copy";
 import { apiClient } from "@/lib/auth";
 import { downloadReportCsv, downloadReportPdf } from "@/lib/cooperative-report-export";
+import { formatMixedCurrency } from "@/lib/format-currency";
+import {
+  MemberCredentialsDialog,
+  MemberEnrollmentDialog,
+  memberEnrollmentFrenchCopy,
+  type CreatedMemberCredentials,
+} from "@/components/cooperative/MemberEnrollmentDialog";
 type MemberRecord = {
   id: string;
   memberNumber: string;
   name: string;
   phone: string;
   joinedAt: string;
-  status: "Actif" | "Suspendu";
+  status: "Actif" | "Inactif";
   email: string;
   address: string;
   accountTypes: string[];
-  savingsTotal: number | null;
+  savingsTotal: { FC: number; USD: number };
+  sexe?: string | null;
+  activite?: string | null;
+  dateNaissance?: string | null;
+  empreinteEnregistree: boolean;
 };
 
 type ApiMember = {
@@ -57,40 +70,53 @@ type ApiMember = {
   statut: "actif" | "inactif";
   typeCompte: string;
   comptesEpargne?: { typeCompte: string; solde: string | number }[];
+  soldes?: { FC: number | string; USD: number | string };
+  sexe?: string | null;
+  activite?: string | null;
+  dateNaissance?: string | null;
+  empreinteEnregistree?: boolean;
 };
 
 type MembersResponse = {
   data: ApiMember[];
-  meta: { total: number };
+  meta: { total: number; page: number; pageSize: number; totalPages: number };
 };
 
 type MemberStats = {
   total: number;
   actifs: number;
   inactifs: number;
+  nouveauxCeMois: number;
 };
 
 function mapMember(record: ApiMember): MemberRecord {
   const accountTypes = (record.comptesEpargne ?? []).map((account) => account.typeCompte);
+  if (accountTypes.length === 0 && record.typeCompte) accountTypes.push(record.typeCompte);
   return {
     id: String(record.id),
     memberNumber: record.numeroCompte,
     name: record.nomComplet,
     phone: record.telephone,
     joinedAt: record.dateAdhesion.slice(0, 10),
-    status: record.statut === "actif" ? "Actif" : "Suspendu",
-    // The current account model has no currency field, so combining balances
-    // here would display a misleading total.
-    savingsTotal: null,
+    status: record.statut === "actif" ? "Actif" : "Inactif",
+    savingsTotal: {
+      FC: Number(record.soldes?.FC ?? 0),
+      USD: Number(record.soldes?.USD ?? 0),
+    },
     email: record.email ?? "",
     address: record.adresse ?? "",
     accountTypes,
+    sexe: record.sexe,
+    activite: record.activite,
+    dateNaissance: record.dateNaissance,
+    empreinteEnregistree: Boolean(record.empreinteEnregistree),
   };
 }
 
 function MembersContent() {
   const dark = useCooperativeDarkTheme();
   const [query, setQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
   const [status, setStatus] = useState("");
   const [account, setAccount] = useState<AccountSlug | "">("");
   const [sort, setSort] = useState("recent");
@@ -99,68 +125,86 @@ function MembersContent() {
   const [selectedMember, setSelectedMember] =
     useState<MemberRecord | null>(null);
   const [members, setMembers] = useState<MemberRecord[]>([]);
-  const [memberStats, setMemberStats] = useState<MemberStats>({ total: 0, actifs: 0, inactifs: 0 });
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState(false);
+  const [totalMembers, setTotalMembers] = useState(0);
+  const [memberStats, setMemberStats] = useState<MemberStats>({ total: 0, actifs: 0, inactifs: 0, nouveauxCeMois: 0 });
+  const [loadedQueryKey, setLoadedQueryKey] = useState("");
+  const [loadErrorKey, setLoadErrorKey] = useState("");
+  const [statsLoadedToken, setStatsLoadedToken] = useState(-1);
+  const [statsErrorToken, setStatsErrorToken] = useState(-1);
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState(false);
+  const [reloadToken, setReloadToken] = useState(0);
+  const [enrollmentOpen, setEnrollmentOpen] = useState(false);
+  const [createdCredentials, setCreatedCredentials] = useState<CreatedMemberCredentials | null>(null);
   const searchParams = useSearchParams();
   const requestedMemberId = searchParams ? searchParams.get("membre") : null;
+  const queryKey = JSON.stringify([page, pageSize, debouncedQuery, status, account, sort, reloadToken]);
+  const loading = loadedQueryKey !== queryKey;
+  const loadError = loadErrorKey === queryKey;
+  const statsLoading = statsLoadedToken !== reloadToken;
+  const statsError = statsErrorToken === reloadToken;
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedQuery(query.trim()), 250);
+    return () => window.clearTimeout(timer);
+  }, [query]);
 
   useEffect(() => {
     let active = true;
-    Promise.all([
-      apiClient.get<MembersResponse>("/membres", { params: { page: 1, pageSize: 1000 } }),
-      apiClient.get<MemberStats>("/membres/stats"),
-    ])
-      .then(([membersResponse, statsResponse]) => {
+    apiClient.get<MembersResponse>("/membres", {
+      params: { page, pageSize, search: debouncedQuery || undefined, status: status || undefined, account: account || undefined, sort },
+    })
+      .then((membersResponse) => {
         if (!active) return;
-        setMembers(membersResponse.data.data.map(mapMember));
-        setMemberStats(statsResponse.data);
-        setLoadError(false);
+        const records = membersResponse.data.data.map(mapMember);
+        setMembers(records);
+        setTotalMembers(membersResponse.data.meta.total);
+        if (requestedMemberId) {
+          setSelectedMember(records.find((member) => member.id === requestedMemberId) ?? null);
+        }
+        setLoadErrorKey("");
       })
       .catch(() => {
-        if (active) setLoadError(true);
+        if (active) setLoadErrorKey(queryKey);
       })
       .finally(() => {
-        if (active) setLoading(false);
+        if (active) setLoadedQueryKey(queryKey);
       });
     return () => {
       active = false;
     };
-  }, []);
+  }, [account, debouncedQuery, page, pageSize, queryKey, reloadToken, requestedMemberId, sort, status]);
 
   useEffect(() => {
-    if (!requestedMemberId) return;
-    setSelectedMember(
-      members.find((member) => member.id === requestedMemberId) ?? null,
-    );
-  }, [members, requestedMemberId]);
+    let active = true;
+    apiClient.get<MemberStats>("/membres/stats")
+      .then((response) => {
+        if (!active) return;
+        setMemberStats(response.data);
+        setStatsErrorToken(-1);
+      })
+      .catch(() => { if (active) setStatsErrorToken(reloadToken); })
+      .finally(() => { if (active) setStatsLoadedToken(reloadToken); });
+    return () => { active = false; };
+  }, [reloadToken]);
 
-  const filteredMembers = useMemo(() => {
-    const normalized = query.trim().toLocaleLowerCase("fr-FR");
-    return members
-      .filter((member) =>
-        `${member.name} ${member.memberNumber} ${member.phone}`
-          .toLocaleLowerCase("fr-FR")
-          .includes(normalized),
-      )
-      .filter((member) => !status || member.status === status)
-        .filter((member) => !account || member.accountTypes.some((type) => type.toLocaleLowerCase("fr-FR").includes(account)))
-      .sort((left, right) => {
-        if (sort === "name") return left.name.localeCompare(right.name, "fr");
-        if (sort === "balance") return (right.savingsTotal ?? -1) - (left.savingsTotal ?? -1);
-        return right.joinedAt.localeCompare(left.joinedAt);
-      });
-  }, [account, members, query, sort, status]);
+  const pageMembers = members;
 
-  const pageMembers = filteredMembers.slice(
-    (page - 1) * pageSize,
-    page * pageSize,
-  );
-  const joinedThisMonth = members.filter((member) => {
-    const date = new Date(`${member.joinedAt}T12:00:00`);
-    const now = new Date();
-    return date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth();
-  }).length;
+  async function fetchAllFilteredMembers() {
+    const params = {
+      pageSize: 100,
+      search: query.trim() || undefined,
+      status: status || undefined,
+      account: account || undefined,
+      sort,
+    };
+    const firstPage = await apiClient.get<MembersResponse>("/membres", { params: { ...params, page: 1 } });
+    const remainingPages = Array.from({ length: Math.max(0, firstPage.data.meta.totalPages - 1) }, (_, index) => index + 2);
+    const remaining = await Promise.all(remainingPages.map((exportPage) =>
+      apiClient.get<MembersResponse>("/membres", { params: { ...params, page: exportPage } }),
+    ));
+    return [...firstPage.data.data, ...remaining.flatMap((response) => response.data.data)].map(mapMember);
+  }
 
   const memberExportHeaders = [
     t.memberNumber,
@@ -171,22 +215,45 @@ function MembersContent() {
     t.savings,
     t.status,
   ];
-  const memberExportRows = filteredMembers.map((member) => [
-    member.memberNumber,
-    member.name,
-    member.phone,
-    member.joinedAt,
-    member.accountTypes.join(", ") || "—",
-    member.savingsTotal === null ? "Non disponible" : formatCurrency(member.savingsTotal),
-    member.status,
-  ]);
+  function rowsForExport(records: MemberRecord[]) {
+    return records.map((member) => [
+      member.memberNumber,
+      member.name,
+      member.phone,
+      member.joinedAt,
+      member.accountTypes.join(", ") || "—",
+      formatMixedCurrency([
+        { amount: member.savingsTotal.USD, currency: "USD" },
+        { amount: member.savingsTotal.FC, currency: "FC" },
+      ]),
+      member.status,
+    ]);
+  }
 
-  function exportMembersCsv() {
-    downloadReportCsv("membres-mwangaza-wetu", memberExportHeaders, memberExportRows);
+  async function exportMembersCsv() {
+    setExporting(true);
+    setExportError(false);
+    try {
+      const allFilteredMembers = await fetchAllFilteredMembers();
+      downloadReportCsv("membres-mwangaza-wetu", memberExportHeaders, rowsForExport(allFilteredMembers));
+    } catch {
+      setExportError(true);
+    } finally {
+      setExporting(false);
+    }
   }
 
   async function exportMembersPdf() {
-    await downloadReportPdf("Liste des membres · Mwangaza Wetu", "membres-mwangaza-wetu", memberExportHeaders, memberExportRows);
+    setExporting(true);
+    setExportError(false);
+    try {
+      const allFilteredMembers = await fetchAllFilteredMembers();
+      await downloadReportPdf("Liste des membres · Mwangaza Wetu", "membres-mwangaza-wetu", memberExportHeaders, rowsForExport(allFilteredMembers));
+    } catch {
+      setExportError(true);
+    } finally {
+      setExporting(false);
+    }
   }
 
   function changeFilters(change: () => void) {
@@ -209,28 +276,34 @@ function MembersContent() {
           <button
             className="mw-secondary"
             type="button"
+            onClick={() => setReloadToken((value) => value + 1)}
+            disabled={loading || statsLoading}
+          >
+            <IconRefresh aria-hidden="true" />
+            Actualiser
+          </button>
+          <button
+            className="mw-secondary"
+            type="button"
             onClick={exportMembersPdf}
-            disabled={loading || loadError || filteredMembers.length === 0}
+            disabled={loading || loadError || totalMembers === 0 || exporting}
           >
             <IconDownload aria-hidden="true" />
-            Exporter PDF
+            {exporting ? "Préparation…" : "Exporter PDF"}
           </button>
           <button
             className="mw-secondary"
             type="button"
             onClick={exportMembersCsv}
-            disabled={loading || loadError || filteredMembers.length === 0}
+            disabled={loading || loadError || totalMembers === 0 || exporting}
           >
             <IconDownload aria-hidden="true" />
-            Exporter CSV
+            {exporting ? "Préparation…" : "Exporter CSV"}
           </button>
           <button
             className="mw-primary"
             type="button"
-            onClick={() => {
-              window.sessionStorage.setItem("mw_open_member_enrollment", "1");
-              window.location.assign("/dashboard");
-            }}
+            onClick={() => setEnrollmentOpen(true)}
           >
             <IconUserPlus aria-hidden="true" />
             {t.newMember}
@@ -239,9 +312,9 @@ function MembersContent() {
       </div>
 
       <CooperativeDataState
-        loading={loading}
-        error={loadError}
-        empty={!loading && !loadError && members.length === 0}
+          loading={statsLoading}
+          error={statsError}
+          empty={false}
       >
         <section className="coop-stat-grid" aria-label={t.membersTitle}>
           <CooperativeStatCard
@@ -267,7 +340,7 @@ function MembersContent() {
           />
           <CooperativeStatCard
             label={t.newThisMonth}
-            value={joinedThisMonth}
+            value={memberStats.nouveauxCeMois}
             detail=""
             trend=""
             icon={IconArrowDown}
@@ -279,6 +352,7 @@ function MembersContent() {
         className="mw-panel coop-members-panel"
         aria-label={t.membersTitle}
       >
+        {exportError && <p className="coop-inline-error" role="alert">L’export n’a pas abouti. Vérifiez la connexion au serveur puis réessayez.</p>}
         <div className="coop-filter-bar">
           <label className="coop-filter-search">
             <IconSearch aria-hidden="true" />
@@ -301,8 +375,8 @@ function MembersContent() {
               }
             >
               <option value="">{t.statusFilter}</option>
-              <option>Actif</option>
-              <option>Suspendu</option>
+              <option value="actif">Actif</option>
+              <option value="inactif">Inactif</option>
             </select>
           </label>
           <label className="coop-filter-select">
@@ -334,14 +408,13 @@ function MembersContent() {
             >
               <option value="recent">{t.sortRecent}</option>
               <option value="name">{t.sortName}</option>
-              <option value="balance">{t.sortBalance}</option>
             </select>
           </label>
         </div>
         <CooperativeDataState
           loading={loading}
           error={loadError}
-          empty={!loading && !loadError && filteredMembers.length === 0}
+          empty={!loading && !loadError && totalMembers === 0}
           emptyMessage={t.noMembers}
           skeletonRows={6}
         >
@@ -356,6 +429,7 @@ function MembersContent() {
                   <th>{t.accounts}</th>
                   <th>{t.savings}</th>
                   <th>{t.status}</th>
+                  <th>Empreinte</th>
                 </tr>
               </thead>
               <tbody>
@@ -388,13 +462,24 @@ function MembersContent() {
                     <td>{member.phone}</td>
                     <td>{formatDate(member.joinedAt)}</td>
                     <td>
-                      <AccountPills accounts={accountSlugs.filter((slug) => member.accountTypes.some((type) => type.toLocaleLowerCase("fr-FR").includes(slug)))} />
+                      {accountSlugs.some((slug) => member.accountTypes.some((type) => type.toLocaleLowerCase("fr-FR").includes(slug)))
+                        ? <AccountPills accounts={accountSlugs.filter((slug) => member.accountTypes.some((type) => type.toLocaleLowerCase("fr-FR").includes(slug)))} />
+                        : <span title={member.accountTypes.join(", ") || undefined}>{member.accountTypes.join(", ") || "—"}</span>}
                     </td>
                     <td className="coop-amount-cell">
-                      {member.savingsTotal === null ? "—" : formatCurrency(member.savingsTotal)}
+                      <span className="coop-dual-amount">
+                        <span>{formatCurrency(member.savingsTotal.USD, "USD")}</span>
+                        <small>{formatCurrency(member.savingsTotal.FC, "FC")}</small>
+                      </span>
                     </td>
                     <td>
                       <CooperativeStatus status={member.status} />
+                    </td>
+                    <td>
+                      <span className={`coop-biometric-status${member.empreinteEnregistree ? " is-registered" : " is-pending"}`}>
+                        <IconFingerprint aria-hidden="true" />
+                        {member.empreinteEnregistree ? "Enregistrée" : "À capturer"}
+                      </span>
                     </td>
                   </tr>
                 ))}
@@ -403,7 +488,7 @@ function MembersContent() {
           </div>
         </CooperativeDataState>
         <CooperativePagination
-          totalItems={filteredMembers.length}
+          totalItems={totalMembers}
           page={page}
           pageSize={pageSize}
           onPageChange={setPage}
@@ -426,9 +511,41 @@ function MembersContent() {
           <SheetTitle className="coop-drawer-title">
             {t.memberSummary}
           </SheetTitle>
-          {selectedMember && <MemberDetails member={selectedMember} />}
+          {selectedMember && (
+            <MemberDetails
+              member={selectedMember}
+              onBiometricUpdated={() => {
+                setSelectedMember((current) => current ? { ...current, empreinteEnregistree: true } : current);
+                setMembers((current) => current.map((item) =>
+                  item.id === selectedMember.id ? { ...item, empreinteEnregistree: true } : item,
+                ));
+              }}
+            />
+          )}
         </SheetContent>
       </Sheet>
+
+      <MemberEnrollmentDialog
+        open={enrollmentOpen}
+        onOpenChange={setEnrollmentOpen}
+        dark={dark}
+        t={memberEnrollmentFrenchCopy}
+        onCreated={(credentials) => {
+          setCreatedCredentials(credentials);
+          setQuery("");
+          setDebouncedQuery("");
+          setStatus("");
+          setAccount("");
+          setSort("recent");
+          setPage(1);
+          setReloadToken((value) => value + 1);
+          window.dispatchEvent(new Event("mwangaza:members-updated"));
+        }}
+      />
+      <MemberCredentialsDialog
+        credentials={createdCredentials}
+        onClose={() => setCreatedCredentials(null)}
+      />
 
     </>
   );
@@ -442,7 +559,45 @@ export default function MembersRoute() {
   );
 }
 
-function MemberDetails({ member }: { member: MemberRecord }) {
+function MemberDetails({
+  member,
+  onBiometricUpdated,
+}: {
+  member: MemberRecord;
+  onBiometricUpdated: () => void;
+}) {
+  const [capturingFingerprint, setCapturingFingerprint] = useState(false);
+  const [fingerprintError, setFingerprintError] = useState("");
+
+  async function captureFingerprint() {
+    setCapturingFingerprint(true);
+    setFingerprintError("");
+    try {
+      const capture = await apiClient.post<{ userId: string }>("/zkteco/capture-fingerprint");
+      const userId = String(capture.data.userId || "").trim();
+      if (!userId) throw new Error("Aucun identifiant biométrique n’a été retourné par le lecteur.");
+
+      const check = await apiClient.get<{ exists: boolean; where: string | null }>(
+        `/membres/check-userid/${encodeURIComponent(userId)}`,
+        { params: { exclude: member.id } },
+      );
+      if (check.data.exists) {
+        throw new Error(`Cette empreinte est déjà enregistrée pour un autre ${check.data.where || "profil"}.`);
+      }
+
+      await apiClient.put(`/membres/${member.id}`, { userId });
+      onBiometricUpdated();
+    } catch (error: unknown) {
+      const responseMessage = (error as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message;
+      const message = Array.isArray(responseMessage) ? responseMessage.join(" ") : responseMessage;
+      setFingerprintError(
+        message || (error instanceof Error ? error.message : "La capture de l’empreinte a échoué. Réessayez."),
+      );
+    } finally {
+      setCapturingFingerprint(false);
+    }
+  }
+
   return (
     <div className="coop-drawer-content">
       <div className="coop-drawer-member">
@@ -467,23 +622,60 @@ function MemberDetails({ member }: { member: MemberRecord }) {
             <dd>{member.phone}</dd>
           </div>
           <div>
-          <dt>{t.joinDate}</dt>
-          <dd>{formatDate(member.joinedAt)}</dd>
-          <dt>Email</dt>
-          <dd>{member.email || "—"}</dd>
-          <dt>Adresse</dt>
-          <dd>{member.address || "—"}</dd>
+            <dt>Email</dt>
+            <dd>{member.email || "—"}</dd>
+          </div>
+          <div>
+            <dt>Adresse</dt>
+            <dd>{member.address || "—"}</dd>
+          </div>
+          <div>
+            <dt>Sexe</dt>
+            <dd>{member.sexe || "—"}</dd>
+          </div>
+          <div>
+            <dt>Activité</dt>
+            <dd>{member.activite || "—"}</dd>
+          </div>
+          <div>
+            <dt>Date de naissance</dt>
+            <dd>{member.dateNaissance ? formatDate(member.dateNaissance.slice(0, 10)) : "—"}</dd>
+          </div>
+          <div>
+            <dt>{t.joinDate}</dt>
+            <dd>{formatDate(member.joinedAt)}</dd>
           </div>
         </dl>
       </section>
+      <section className="coop-drawer-section" aria-labelledby="coop-member-biometric-title">
+        <h3 id="coop-member-biometric-title">Empreinte biométrique</h3>
+        {member.empreinteEnregistree ? (
+          <CooperativeStatus status="Enregistrée" />
+        ) : (
+          <>
+            <p className="coop-biometric-pending-note">
+              En attente de capture au bureau. Les dépôts sont autorisés, mais les retraits restent bloqués.
+            </p>
+            <button
+              type="button"
+              className="mw-secondary"
+              onClick={captureFingerprint}
+              disabled={capturingFingerprint}
+            >
+              <IconFingerprint aria-hidden="true" />
+              {capturingFingerprint ? "Placez le doigt sur le lecteur…" : "Capturer l’empreinte"}
+            </button>
+            {fingerprintError && <p className="coop-biometric-error" role="alert">{fingerprintError}</p>}
+          </>
+        )}
+      </section>
       <section className="coop-drawer-section">
         <h3>{t.accountBalances}</h3>
-        <CooperativeDataState empty={member.accountTypes.length === 0} emptyMessage={t.empty}>
-          <div className="coop-balance-list">
-            {member.accountTypes.map((type) => <div key={type}><span>{type}</span><strong>—</strong></div>)}
-          </div>
-        </CooperativeDataState>
-        <div className="coop-drawer-total"><span>{t.savings}</span><strong>—</strong></div>
+        <div className="coop-balance-list">
+          <div><span>Solde USD</span><strong>{formatCurrency(member.savingsTotal.USD, "USD")}</strong></div>
+          <div><span>Solde FC</span><strong>{formatCurrency(member.savingsTotal.FC, "FC")}</strong></div>
+        </div>
+        <div className="coop-drawer-total"><span>Types de comptes</span><strong>{member.accountTypes.join(", ") || "—"}</strong></div>
       </section>
     </div>
   );

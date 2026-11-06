@@ -1,32 +1,27 @@
 'use client';
 
+import Link from 'next/link';
 import {
+  IconAlertTriangle,
+  IconBuildingBank,
   IconCalendar,
-  IconCamera,
+  IconCheck,
   IconClock,
   IconCurrencyDollar,
-  IconFingerprint,
-  IconLeaf,
   IconPigMoney,
-  IconPlus,
   IconSearch,
-  IconUserCircle,
+  IconSend,
+  IconTrendingUp,
   IconUsers,
   IconWallet,
 } from "@tabler/icons-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
-import { useCooperativeDarkTheme } from "@/components/cooperative/CooperativeThemeContext";
+import { CooperativePagination } from "@/components/cooperative/CooperativePagination";
 import { getAuthUser } from "@/lib/auth";
 import { apiClient } from "@/lib/auth";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { formatCurrency } from "@/lib/format-currency";
+
+const activityPalette = ["#286e4d", "#ebaF39", "#91a673", "#b4c4b3", "#65869a", "#e56a1e"];
 
 type Transaction = {
   id: string;
@@ -39,44 +34,70 @@ type Transaction = {
   status: "valid" | "pending" | "rejected";
 };
 
-type DelegateDraft = {
-  name: string;
-  phone: string;
-  relation: string;
-  nationalId: string;
-  userId?: string;
-};
-
-type DatBaremeResponse = {
-  durees: { dureeMois: number; tauxPeriode: number; minFc: number; minUsd: number }[];
-};
-
 type DashboardResponse = {
   overview: {
     totalMembers: number;
     activeMembersCount: number;
     totalEpargne: { usd: number; fc: number };
     totalCaisse: { usd: number; fc: number };
+    totalRetrait?: { usd: number; fc: number };
     activeCreditBalance: { usd: number; fc: number };
     activeCreditsCount: number;
+    overdueCreditsCount?: number;
+    overdueCreditBalance?: { usd: number; fc: number };
     repaymentRate: number;
     activeProjectsCount: number;
+    datStats?: {
+      activeCount: number;
+      totalCapitalUSD: number;
+      totalCapitalFC: number;
+    };
   };
-  history: { month: string; depotsUSD: number; creditsUSD: number; depotsFC: number; creditsFC: number }[];
-  dailyHistory: { date: string; epargneUSD: number; creditUSD: number; epargneFC: number; creditFC: number }[];
+  savingsByType?: {
+    typeCompte: string;
+    totalUSD: number;
+    totalFC: number;
+    totalAccounts: number;
+  }[];
+  agentsCaisses?: {
+    id: number;
+    nom: string;
+    guichetAssigne: string;
+    actif: boolean;
+    soldes: { usd: number; fc: number };
+  }[];
+  history: {
+    month: string;
+    depotsUSD: number;
+    retraitsUSD?: number;
+    creditsUSD: number;
+    depotsFC: number;
+    retraitsFC?: number;
+    creditsFC: number;
+  }[];
+  dailyHistory: {
+    date: string;
+    epargneUSD: number;
+    retraitUSD?: number;
+    creditUSD: number;
+    epargneFC: number;
+    retraitFC?: number;
+    creditFC: number;
+  }[];
   activityDistribution: { activite: string; total: number }[];
 };
 
-type Reminder = { id: number; name: string; detail: string; amount: string };
-
-const accountTypes = [
-  { value: "PRINCIPAL", code: "P", label: "principal" },
-  { value: "KELASI", code: "K", label: "kelasi" },
-  { value: "NYUMBA", code: "N", label: "nyumba" },
-  { value: "HOPITAL", code: "H", label: "hopital" },
-  { value: "MUTOTO", code: "M", label: "mutoto" },
-  { value: "BIASHARA", code: "B", label: "biashara" },
-] as const;
+type Reminder = {
+  id: number;
+  memberId?: number;
+  name: string;
+  telephone?: string;
+  dueDate?: string;
+  detail: string;
+  amount: string;
+  isOverdue?: boolean;
+  diffDays?: number;
+};
 
 const copy = {
   FR: {
@@ -84,8 +105,7 @@ const copy = {
     adminSpace: "ESPACE ADMINISTRATEUR",
     adminTools: "GESTION DE LA COOPÉRATIVE",
     search: "Rechercher un membre, une transaction...",
-    addMember: "Nouveau membre",
-    addContribution: "Nouvelle cotisation",
+    addContribution: "Nouvelle Epargne",
     dashboard: "Bonjour, Aline",
     date: "Mardi 24 juin 2025",
     members: "Total des membres",
@@ -95,11 +115,11 @@ const copy = {
     thisMonth: "ce mois-ci",
     repayment: "de remboursement",
     community: "Agricoles & communautaires",
-    chart: "Cotisations & crédits",
+    chart: "Epargnes & crédits",
     annual: "Annuel",
     monthly: "Mensuel",
     weekly: "Hebdomadaire",
-    contributions: "Cotisations",
+    contributions: "Epargnes",
     credit: "Crédits",
     transactions: "Transactions récentes",
     viewAll: "Voir tout",
@@ -207,12 +227,11 @@ const copy = {
     fingerprintWaiting: "En attente du doigt sur le lecteur…",
     fingerprintUnavailable: "Capture impossible. Vérifiez que le lecteur est connecté, puis réessayez.",
     memberFingerprint: "Empreinte du membre",
-    memberFingerprintHint: "Facultative. Le lecteur enregistre l’identifiant biométrique du membre.",
+    memberFingerprintHint: "Les dépôts sont possibles sans lecteur. L’empreinte devra être enregistrée au bureau avant tout retrait.",
     memberActivity: "Activité principale",
     memberActivityPlaceholder: "Ex. Agriculture, commerce, élevage",
     createFailed: "La création du membre a échoué. Vérifiez les informations et réessayez.",
     creatingMember: "Création en cours…",
-    createdMember: "Membre créé",
     accountAssignedOnSave: "Attribué automatiquement après création",
     createMember: "Créer le membre",
     demoOnly: "Aperçu uniquement — aucune donnée n’a été enregistrée.",
@@ -230,7 +249,6 @@ const copy = {
     adminSpace: "ADMINISTRATOR WORKSPACE",
     adminTools: "COOPERATIVE MANAGEMENT",
     search: "Search members, transactions...",
-    addMember: "New member",
     addContribution: "New contribution",
     dashboard: "Good morning, Aline",
     date: "Tuesday, June 24, 2025",
@@ -352,12 +370,11 @@ const copy = {
     fingerprintWaiting: "Waiting for a finger on the reader…",
     fingerprintUnavailable: "Capture failed. Check the reader connection and try again.",
     memberFingerprint: "Member fingerprint",
-    memberFingerprintHint: "Optional. The reader stores the member’s biometric identifier.",
+    memberFingerprintHint: "Deposits are allowed without a reader. The fingerprint must be registered at the office before withdrawals.",
     memberActivity: "Main activity",
     memberActivityPlaceholder: "e.g. Agriculture, trade, livestock",
     createFailed: "Member creation failed. Check the details and try again.",
     creatingMember: "Creating member…",
-    createdMember: "Member created",
     accountAssignedOnSave: "Automatically assigned after creation",
     createMember: "Create member",
     demoOnly: "Preview only — no data was saved.",
@@ -377,13 +394,6 @@ function money(value: number, currency: "USD" | "FC" = "USD") {
   return currency === "USD" ? `$${amount}` : `${amount} FC`;
 }
 
-function localDateInputValue(date = new Date()) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
 export function meta() {
   return [
     { title: "Mwangaza Wetu — Tableau de bord" },
@@ -396,766 +406,15 @@ export function meta() {
 
 
 
-function MemberEnrollmentDialog({
-  open,
-  onOpenChange,
-  dark,
-  t,
-  onCreated,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  dark: boolean;
-  t: (typeof copy)["FR"];
-  onCreated: (credentials: { numeroCompte: string; nomComplet: string; email: string; motDePasseTemporaire: string; credentialsSent: boolean }) => void;
-}) {
-  const [accountType, setAccountType] = useState("PRINCIPAL");
-  const [generatedAccountNumber, setGeneratedAccountNumber] = useState("");
-  const [generatingAccountNumber, setGeneratingAccountNumber] = useState(false);
-  const [accountNumberError, setAccountNumberError] = useState("");
-  const [delegateOpen, setDelegateOpen] = useState(false);
-  const [delegate, setDelegate] = useState<DelegateDraft | null>(null);
-  const [capturedDelegateUserId, setCapturedDelegateUserId] = useState("");
-  const [capturingDelegateFingerprint, setCapturingDelegateFingerprint] = useState(false);
-  const [delegateFingerprintError, setDelegateFingerprintError] = useState("");
-  const [memberPhoto, setMemberPhoto] = useState<string | null>(null);
-  const [memberPhotoData, setMemberPhotoData] = useState("");
-  const [memberUserId, setMemberUserId] = useState("");
-  const [capturingMemberFingerprint, setCapturingMemberFingerprint] = useState(false);
-  const [memberFingerprintError, setMemberFingerprintError] = useState("");
-  const [creatingMember, setCreatingMember] = useState(false);
-  const [createError, setCreateError] = useState("");
-  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
-  const [touchedFields, setTouchedFields] = useState<Record<string, boolean>>({});
-  const [memberFormValid, setMemberFormValid] = useState(false);
-  const [datBareme, setDatBareme] = useState<DatBaremeResponse | null>(null);
-  const [datPreviewDuration, setDatPreviewDuration] = useState(1);
-  const [datBaremeLoading, setDatBaremeLoading] = useState(false);
-  const [datBaremeError, setDatBaremeError] = useState(false);
-  const memberFormRef = useRef<HTMLFormElement>(null);
-
-  useEffect(() => {
-    if (memberPhoto) return () => URL.revokeObjectURL(memberPhoto);
-  }, [memberPhoto]);
-
-  // Réinitialisation du formulaire quand la modale se ferme — ajustement
-  // d'état pendant le rendu (pattern React, pas d'effet setState)
-  const [wasOpen, setWasOpen] = useState(open);
-  if (open !== wasOpen) {
-    setWasOpen(open);
-    if (!open) {
-      setAccountType("PRINCIPAL");
-      setGeneratedAccountNumber("");
-      setGeneratingAccountNumber(false);
-      setAccountNumberError("");
-      setDelegate(null);
-      setCapturedDelegateUserId("");
-      setDelegateFingerprintError("");
-      setMemberPhoto(null);
-      setMemberPhotoData("");
-      setMemberUserId("");
-      setMemberFingerprintError("");
-      setCreateError("");
-      setFieldErrors({});
-      setTouchedFields({});
-      setMemberFormValid(false);
-      setDatBareme(null);
-      setDatPreviewDuration(1);
-      setDatBaremeError(false);
-    }
-  }
-
-  const refreshAccountNumber = useCallback(async () => {
-    setGeneratingAccountNumber(true);
-    setAccountNumberError("");
-    setGeneratedAccountNumber("");
-    try {
-      const response = await apiClient.get<{ numero: string }>("/membres/generate-numero", {
-        params: { section: accountType },
-      });
-      setGeneratedAccountNumber(response.data.numero);
-    } catch (error: any) {
-      const message = error?.response?.data?.message;
-      setAccountNumberError(Array.isArray(message) ? message.join(" ") : message || t.accountNumberUnavailable);
-    } finally {
-      setGeneratingAccountNumber(false);
-    }
-  }, [accountType, t.accountNumberUnavailable]);
-
-  useEffect(() => {
-    if (open) void refreshAccountNumber();
-  }, [open, refreshAccountNumber]);
-
-  useEffect(() => {
-    if (!open) return;
-    let cancelled = false;
-    setDatBaremeLoading(true);
-    setDatBaremeError(false);
-    apiClient.get<DatBaremeResponse>("/dat/bareme")
-      .then(({ data }) => {
-        if (!cancelled) {
-          setDatBareme(data);
-          setDatPreviewDuration((current) =>
-            data.durees.some((item) => item.dureeMois === current)
-              ? current
-              : data.durees[0]?.dureeMois ?? 1,
-          );
-        }
-      })
-      .catch(() => { if (!cancelled) setDatBaremeError(true); })
-      .finally(() => { if (!cancelled) setDatBaremeLoading(false); });
-    return () => { cancelled = true; };
-  }, [open]);
-
-  useEffect(() => {
-    if (open && memberFormRef.current) validateMemberForm(memberFormRef.current);
-  }, [open, generatedAccountNumber, generatingAccountNumber, accountNumberError]);
-
-  function validateMemberForm(form: HTMLFormElement, touchAll = false, touchedName?: string) {
-    const nextErrors: Record<string, string> = {};
-    const nextTouched = { ...touchedFields };
-    const requiredNames = ["memberName", "memberPhone", "memberEmail", "memberSex", "joinDate"];
-    const fields = Array.from(form.elements).filter(
-      (element): element is HTMLInputElement | HTMLSelectElement =>
-        (element instanceof HTMLInputElement || element instanceof HTMLSelectElement) &&
-        element.name !== "" && element.type !== "file",
-    );
-
-    for (const field of fields) {
-      const value = field.value.trim();
-      const required = requiredNames.includes(field.name);
-      if (touchAll || field.name === touchedName || field === form.ownerDocument.activeElement) nextTouched[field.name] = true;
-      if (!value && !required) continue;
-
-      let error = "";
-      if (!value && required) error = t.fieldRequiredError;
-      else if (field.name === "memberName" && value.length < 2) error = t.nameFieldError;
-      else if (field.name === "memberPhone" && (value.replace(/\D/g, "").length < 7 || !/^[+\d\s().-]+$/.test(value))) error = t.phoneFieldError;
-      else if (field.name === "memberEmail" && !(field as HTMLInputElement).validity.valid) error = t.emailFieldError;
-      else if (field.name === "memberSex" && !value) error = t.selectFieldError;
-      else if ((field.name === "joinDate" || field.name === "birthDate") && value && Number.isNaN(Date.parse(value))) error = t.dateFieldError;
-      else if (field.name === "nationalId" && value.length < 4) error = t.nationalIdFieldError;
-      if (error) nextErrors[field.name] = error;
-    }
-
-    setFieldErrors(nextErrors);
-    setTouchedFields(nextTouched);
-    const requiredValid = requiredNames.every((name) => {
-      const field = form.elements.namedItem(name) as HTMLInputElement | HTMLSelectElement | null;
-      return Boolean(field?.value.trim()) && !nextErrors[name];
-    });
-    setMemberFormValid(
-      requiredValid &&
-      !Object.keys(nextErrors).length &&
-      Boolean(generatedAccountNumber) &&
-      !generatingAccountNumber &&
-      !accountNumberError &&
-      !creatingMember,
-    );
-    return requiredValid && !Object.keys(nextErrors).length;
-  }
-
-  function fieldState(name: string) {
-    if (!touchedFields[name]) return "";
-    return fieldErrors[name] ? " has-error" : " is-valid";
-  }
-
-  function fieldFeedback(name: string) {
-    if (!touchedFields[name]) return null;
-    return fieldErrors[name]
-      ? <small className="mw-field-feedback is-error" role="alert">{fieldErrors[name]}</small>
-      : <small className="mw-field-feedback is-valid">✓ Correct</small>;
-  }
-
-  function saveDelegate(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const data = new FormData(event.currentTarget);
-    setDelegate({
-      name: String(data.get("name") || "").trim(),
-      phone: String(data.get("phone") || "").trim(),
-      relation: String(data.get("relation") || "").trim(),
-      nationalId: String(data.get("nationalId") || "").trim(),
-      userId: capturedDelegateUserId || undefined,
-    });
-    setDelegateOpen(false);
-  }
-
-  async function captureDelegateFingerprint() {
-    setCapturingDelegateFingerprint(true);
-    setDelegateFingerprintError("");
-    setCapturedDelegateUserId("");
-    try {
-      const response = await apiClient.post<{ userId: string }>("/zkteco/capture-fingerprint");
-      setCapturedDelegateUserId(response.data.userId);
-    } catch (error: any) {
-      const message = error?.response?.data?.message;
-      setDelegateFingerprintError(Array.isArray(message) ? message.join(" ") : message || t.fingerprintUnavailable);
-    } finally {
-      setCapturingDelegateFingerprint(false);
-    }
-  }
-
-  async function captureMemberFingerprint() {
-    setCapturingMemberFingerprint(true);
-    setMemberFingerprintError("");
-    setMemberUserId("");
-    try {
-      const response = await apiClient.post<{ userId: string }>("/zkteco/capture-fingerprint");
-      const userId = String(response.data.userId || "").trim();
-      if (!userId) throw new Error(t.fingerprintUnavailable);
-      const check = await apiClient.get<{ exists: boolean; where: string | null }>(
-        `/membres/check-userid/${encodeURIComponent(userId)}`,
-      );
-      if (check.data.exists) {
-        setMemberFingerprintError(`${t.fingerprintAlreadyUsed} ID ${userId} (${check.data.where || "autre profil"}).`);
-        return;
-      }
-      setMemberUserId(userId);
-    } catch (error: any) {
-      const message = error?.response?.data?.message;
-      const details = error?.response?.data?.details;
-      const networkError = !error?.response && error?.message === "Network Error";
-      const readableMessage = networkError
-        ? `${t.fingerprintApiUnavailable} (${apiClient.defaults.baseURL || "API URL non définie"})`
-        : Array.isArray(message)
-          ? message.join(" ")
-          : [message || t.fingerprintUnavailable, details].filter(Boolean).join(" ");
-      setMemberFingerprintError(readableMessage);
-    } finally {
-      setCapturingMemberFingerprint(false);
-    }
-  }
-
-  async function createMember(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!validateMemberForm(event.currentTarget, true)) {
-      event.currentTarget.querySelector<HTMLElement>(".has-error input, .has-error select")?.focus();
-      return;
-    }
-    setCreatingMember(true);
-    setCreateError("");
-    const data = new FormData(event.currentTarget);
-    const payload = {
-      numeroCompte: generatedAccountNumber || undefined,
-      nomComplet: String(data.get("memberName") || "").trim(),
-      telephone: String(data.get("memberPhone") || "").trim(),
-      email: String(data.get("memberEmail") || "").trim(),
-      sexe: String(data.get("memberSex") || ""),
-      dateAdhesion: String(data.get("joinDate") || ""),
-      typeCompte: accountType,
-      statut: "actif",
-      adresse: String(data.get("address") || "").trim() || undefined,
-      activite: String(data.get("activity") || "").trim() || undefined,
-      idNationale: String(data.get("nationalId") || "").trim() || undefined,
-      dateNaissance: String(data.get("birthDate") || "") || undefined,
-      photoProfil: memberPhotoData || undefined,
-      userId: memberUserId || undefined,
-      delegue: delegate
-        ? {
-            nom: delegate.name,
-            telephone: delegate.phone,
-            relation: delegate.relation,
-            pieceIdentite: delegate.nationalId || undefined,
-            userId: delegate.userId,
-          }
-        : undefined,
-    };
-
-    try {
-      const response = await apiClient.post<{
-        numeroCompte: string;
-        nomComplet: string;
-        email: string;
-        motDePasseTemporaire: string;
-        credentialsSent: boolean;
-      }>("/membres", payload);
-      onCreated(response.data);
-      onOpenChange(false);
-    } catch (error: any) {
-      const message = error?.response?.data?.message;
-      setCreateError(Array.isArray(message) ? message.join(" ") : message || t.createFailed);
-    } finally {
-      setCreatingMember(false);
-    }
-  }
-
-  return (
-    <>
-      <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent
-          data-theme={dark ? "dark" : "light"}
-          className="mw-dialog-content mw-member-dialog-content !gap-0 !rounded-[8px] !border-[var(--mw-line)] !bg-[var(--mw-paper)] !p-0 !text-[var(--mw-ink)] sm:!max-w-[920px]"
-        >
-          <DialogHeader className="mw-member-dialog-header !space-y-0 !text-left">
-            <div>
-              <DialogTitle className="mw-member-dialog-title">
-                {t.newMemberHeading}
-              </DialogTitle>
-              <DialogDescription className="mw-member-dialog-description">
-                {t.requiredFields}
-              </DialogDescription>
-            </div>
-          </DialogHeader>
-
-          <form
-            ref={memberFormRef}
-            className="mw-member-form"
-            onInput={(event) => validateMemberForm(event.currentTarget)}
-            onChange={(event) => validateMemberForm(event.currentTarget)}
-            onBlur={(event) => validateMemberForm(event.currentTarget, false, (event.target as HTMLElement).getAttribute("name") || undefined)}
-            onSubmit={createMember}
-          >
-            <section
-              className="mw-form-section"
-              aria-labelledby="mw-account-title"
-            >
-              <div className="mw-form-section-heading">
-                <span className="mw-form-number">01</span>
-                <div>
-                  <h3 id="mw-account-title">{t.accountTypeTitle}</h3>
-                  <p>{t.chooseAccountType}</p>
-                </div>
-              </div>
-              <div
-                className="mw-account-types"
-                role="group"
-                aria-label={t.chooseAccountType}
-              >
-                {accountTypes.map((type) => (
-                  <button
-                    type="button"
-                    key={type.value}
-                    className={`mw-account-option${accountType === type.value ? " is-selected" : ""}`}
-                    aria-pressed={accountType === type.value}
-                    onClick={() => setAccountType(type.value)}
-                  >
-                    {t[type.label]}
-                  </button>
-                ))}
-              </div>
-              <div className="mw-generated-account">
-                <div>
-                  <span>{t.assignedAccount}</span>
-                  <strong aria-live="polite">
-                    {generatingAccountNumber ? t.accountNumberLoading : generatedAccountNumber || t.accountNumberUnavailable}
-                  </strong>
-                </div>
-                <button
-                  type="button"
-                  className="mw-account-refresh"
-                  onClick={() => void refreshAccountNumber()}
-                  disabled={generatingAccountNumber}
-                >
-                  {t.refreshAccountNumber}
-                </button>
-                <p className={accountNumberError ? "is-error" : undefined}>
-                  {accountNumberError || t.accountNumberHelp}
-                </p>
-              </div>
-            </section>
-
-            <section
-              className="mw-form-section"
-              aria-labelledby="mw-identity-title"
-            >
-              <div className="mw-form-section-heading">
-                <span className="mw-form-number">02</span>
-                <div>
-                  <h3 id="mw-identity-title">{t.memberIdentity}</h3>
-                </div>
-              </div>
-              <div className="mw-identity-layout">
-                <div className="mw-photo-field">
-                  <span className="mw-form-label">{t.photoMember}</span>
-                  <label className="mw-photo-picker" htmlFor="mw-member-photo">
-                    {memberPhoto ? (
-                      <img src={memberPhoto} alt={t.photoMember} />
-                    ) : (
-                      <IconUserCircle />
-                    )}
-                    <span>
-                      <IconCamera />
-                      {t.changePhoto}
-                    </span>
-                  </label>
-                  <input
-                    id="mw-member-photo"
-                    className="mw-visually-hidden"
-                    type="file"
-                    accept="image/jpeg,image/png,image/gif"
-                    onChange={(event) => {
-                      const file = event.currentTarget.files?.[0];
-                      setMemberPhoto(file ? URL.createObjectURL(file) : null);
-                      if (file) {
-                        const reader = new FileReader();
-                        reader.onload = () => setMemberPhotoData(String(reader.result || ""));
-                        reader.onerror = () => setCreateError(t.createFailed);
-                        reader.readAsDataURL(file);
-                      } else {
-                        setMemberPhotoData("");
-                      }
-                    }}
-                  />
-                </div>
-                <div className="mw-form-grid">
-                  <label
-                    className={`mw-field mw-field-wide${fieldState("memberName")}`}
-                    htmlFor="mw-member-full-name"
-                  >
-                    <span>
-                      {t.fullName} <b>*</b>
-                    </span>
-                    <input
-                      id="mw-member-full-name"
-                      name="memberName"
-                      autoComplete="name"
-                      required
-                      placeholder="e.g. Jean Kabila"
-                    />
-                    {fieldFeedback("memberName")}
-                  </label>
-                  <label className={`mw-field${fieldState("memberPhone")}`} htmlFor="mw-member-phone">
-                    <span>
-                      {t.requiredPhone} <b>*</b>
-                    </span>
-                    <input
-                      id="mw-member-phone"
-                      name="memberPhone"
-                      type="tel"
-                      autoComplete="tel"
-                      required
-                      placeholder="0812345678"
-                    />
-                    {fieldFeedback("memberPhone")}
-                  </label>
-                  <label className={`mw-field${fieldState("memberEmail")}`} htmlFor="mw-member-email">
-                    <span>
-                      {t.emailAddress} <b>*</b>
-                    </span>
-                    <input
-                      id="mw-member-email"
-                      name="memberEmail"
-                      type="email"
-                      autoComplete="email"
-                      required
-                      placeholder="membre@example.com"
-                    />
-                    {fieldFeedback("memberEmail")}
-                  </label>
-                  <label className={`mw-field${fieldState("memberSex")}`} htmlFor="mw-member-sex">
-                    <span>
-                      {t.sex} <b>*</b>
-                    </span>
-                    <select
-                      id="mw-member-sex"
-                      name="memberSex"
-                      required
-                      defaultValue=""
-                    >
-                      <option value="" disabled>
-                        {t.selectSex}
-                      </option>
-                      <option value="F">{t.female}</option>
-                      <option value="M">{t.male}</option>
-                      <option value="AUTRE">{t.sexOther}</option>
-                    </select>
-                    {fieldFeedback("memberSex")}
-                  </label>
-                  <label className={`mw-field${fieldState("joinDate")}`} htmlFor="mw-member-join-date">
-                    <span>
-                      {t.joinDate} <b>*</b>
-                    </span>
-                    <input
-                      id="mw-member-join-date"
-                      name="joinDate"
-                      type="date"
-                      required
-                      defaultValue={localDateInputValue()}
-                    />
-                    {fieldFeedback("joinDate")}
-                  </label>
-                </div>
-              </div>
-            </section>
-
-            <section
-              className="mw-form-section"
-              aria-labelledby="mw-contact-title"
-            >
-              <div className="mw-form-section-heading">
-                <span className="mw-form-number">03</span>
-                <div>
-                  <h3 id="mw-contact-title">{t.contactsMore}</h3>
-                </div>
-              </div>
-              <div className="mw-form-grid">
-                <label className={`mw-field${fieldState("activity")}`} htmlFor="mw-member-activity">
-                  <span>{t.memberActivity}</span>
-                  <input
-                    id="mw-member-activity"
-                    name="activity"
-                    placeholder={t.memberActivityPlaceholder}
-                  />
-                  {fieldFeedback("activity")}
-                </label>
-                <label
-                  className={`mw-field mw-field-wide${fieldState("address")}`}
-                  htmlFor="mw-member-address"
-                >
-                  <span>{t.address}</span>
-                  <input
-                    id="mw-member-address"
-                    name="address"
-                    autoComplete="street-address"
-                    placeholder={t.addressPlaceholder}
-                  />
-                  {fieldFeedback("address")}
-                </label>
-                <label className={`mw-field${fieldState("nationalId")}`} htmlFor="mw-member-national-id">
-                  <span>{t.nationalId}</span>
-                  <input
-                    id="mw-member-national-id"
-                    name="nationalId"
-                    placeholder="00000000000"
-                  />
-                  {fieldFeedback("nationalId")}
-                </label>
-                <p className="mw-password-notice">{t.emailCredentialNotice}</p>
-              </div>
-              <details className="mw-extra-options">
-                <summary>{t.moreOptions}</summary>
-                <div className="mw-extra-grid">
-                  <label className={`mw-field${fieldState("birthDate")}`} htmlFor="mw-member-birth-date">
-                    <span>{t.birthDate}</span>
-                    <input
-                      id="mw-member-birth-date"
-                      name="birthDate"
-                      type="date"
-                    />
-                    {fieldFeedback("birthDate")}
-                  </label>
-                </div>
-              </details>
-            </section>
-
-            <section className="mw-form-section" aria-labelledby="mw-bio-title">
-              <div className="mw-form-section-heading">
-                <span className="mw-form-number">04</span>
-                <div>
-                  <h3 id="mw-bio-title">{t.bioFees}</h3>
-                </div>
-              </div>
-              <div className="mw-bio-fee-grid">
-                <div className="mw-bio-card mw-member-fingerprint-card">
-                  <span className="mw-form-label">{t.memberFingerprint}</span>
-                  <button
-                    type="button"
-                    className={`mw-delegate-capture${memberUserId ? " is-captured" : ""}`}
-                    onClick={captureMemberFingerprint}
-                    disabled={capturingMemberFingerprint}
-                    aria-describedby="mw-member-fingerprint-status"
-                    aria-live="polite"
-                  >
-                    <IconFingerprint />
-                    {capturingMemberFingerprint ? t.fingerprintWaiting : memberUserId ? t.recaptureFingerprint : t.captureFingerprint}
-                  </button>
-                  <div id="mw-member-fingerprint-status" aria-live="polite">
-                    {capturingMemberFingerprint ? (
-                      <p className="mw-fingerprint-progress" role="status">{t.fingerprintReadStarted} {t.fingerprintChecking}</p>
-                    ) : memberUserId ? (
-                      <p className="mw-delegate-fingerprint-success" role="status">✓ {t.fingerprintReady} · ID {memberUserId}<br />{t.fingerprintAvailable}</p>
-                    ) : memberFingerprintError ? (
-                      <p className="mw-delegate-fingerprint-error" role="alert">✕ {memberFingerprintError}</p>
-                    ) : (
-                      <p>{t.memberFingerprintHint}</p>
-                    )}
-                  </div>
-                </div>
-                <div className="mw-fee-card">
-                  <span className="mw-form-label">{t.membershipFee}</span>
-                  <strong>2 000 FC</strong>
-                  <p>{t.feeNote}</p>
-                  <div className="mw-dat-preview">
-                    <label className="mw-form-label" htmlFor="mw-dat-preview-duration">{t.datPreview}</label>
-                    {datBaremeLoading ? <p role="status">{t.datBaremeLoading}</p> : datBaremeError || !datBareme ? <p role="status">{t.datBaremeError}</p> : <>
-                      <div className="mw-dat-duration-options" role="group" aria-label={t.datPreview}>
-                        {datBareme.durees.map((item) => <button
-                          key={item.dureeMois}
-                          id={item.dureeMois === 1 ? "mw-dat-preview-duration" : undefined}
-                          type="button"
-                          aria-pressed={datPreviewDuration === item.dureeMois}
-                          className={datPreviewDuration === item.dureeMois ? "is-selected" : ""}
-                          onClick={() => setDatPreviewDuration(item.dureeMois)}
-                        >{item.dureeMois} {t.datMonths}</button>)}
-                      </div>
-                      {(() => {
-                        const selected = datBareme.durees.find((item) => item.dureeMois === datPreviewDuration);
-                        return selected ? <div className="mw-dat-minimum" aria-live="polite">
-                          <span>{t.datMinimum} {selected.dureeMois} {t.datMonths}</span>
-                          <strong>{selected.minFc.toLocaleString("fr-FR")} FC <small>· ${selected.minUsd.toLocaleString("en-US")} USD</small></strong>
-                          <span>Taux : {selected.tauxPeriode}%</span>
-                        </div> : null;
-                      })()}
-                    </>}
-                    <p>{t.datPreviewHint}</p>
-                  </div>
-                </div>
-              </div>
-            </section>
-
-            <section
-              className="mw-form-section"
-              aria-labelledby="mw-delegate-title"
-            >
-              <div className="mw-form-section-heading">
-                <span className="mw-form-number">05</span>
-                <div>
-                  <h3 id="mw-delegate-title">{t.delegateOptional}</h3>
-                  {delegate && (
-                    <p>
-                      {delegate.name} · {delegate.phone}
-                    </p>
-                  )}
-                </div>
-                {delegate && (
-                  <button
-                    type="button"
-                    className="mw-link-button"
-                    onClick={() => {
-                      setCapturedDelegateUserId(delegate.userId || "");
-                      setDelegateFingerprintError("");
-                      setDelegateOpen(true);
-                    }}
-                  >
-                    {t.editDelegate}
-                  </button>
-                )}
-              </div>
-              {!delegate && (
-                <button
-                  type="button"
-                  className="mw-add-delegate"
-                  onClick={() => {
-                    setCapturedDelegateUserId("");
-                    setDelegateFingerprintError("");
-                    setDelegateOpen(true);
-                  }}
-                >
-                  <IconPlus />
-                  {t.addDelegate}
-                </button>
-              )}
-            </section>
-
-            <div className="mw-member-form-footer">
-              {createError && <p className="mw-delegate-fingerprint-error" role="alert">{createError}</p>}
-              <button
-                type="button"
-                className="mw-dialog-cancel"
-                onClick={() => onOpenChange(false)}
-                disabled={creatingMember}
-              >
-                {t.cancel}
-              </button>
-              <button type="submit" className="mw-primary" disabled={creatingMember || !memberFormValid}>
-                {creatingMember ? t.creatingMember : t.createMember}
-              </button>
-              {!memberFormValid && !creatingMember && (
-                <p className="mw-form-validation-hint" role="status">{t.formInvalidNotice}</p>
-              )}
-            </div>
-          </form>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={delegateOpen} onOpenChange={setDelegateOpen}>
-        <DialogContent
-          data-theme={dark ? "dark" : "light"}
-          className="mw-dialog-content mw-delegate-dialog !gap-0 !rounded-[8px] !border-[var(--mw-line)] !bg-[var(--mw-paper)] !p-[22px] !text-[var(--mw-ink)] sm:!max-w-[460px]"
-        >
-          <DialogHeader className="!mb-5 !space-y-1 !text-left">
-            <DialogTitle>{t.addDelegate}</DialogTitle>
-            <DialogDescription>{t.delegateOptional}</DialogDescription>
-          </DialogHeader>
-          <form className="mw-delegate-form" onSubmit={saveDelegate}>
-            <label className="mw-field" htmlFor="mw-delegate-name">
-              <span>{t.delegateName} *</span>
-              <input
-                id="mw-delegate-name"
-                name="name"
-                required
-                defaultValue={delegate?.name}
-              />
-            </label>
-            <label className="mw-field" htmlFor="mw-delegate-phone">
-              <span>{t.delegatePhone} *</span>
-              <input
-                id="mw-delegate-phone"
-                name="phone"
-                type="tel"
-                required
-                defaultValue={delegate?.phone}
-              />
-            </label>
-            <label className="mw-field" htmlFor="mw-delegate-relation">
-              <span>{t.delegateRelation} *</span>
-              <input
-                id="mw-delegate-relation"
-                name="relation"
-                required
-                defaultValue={delegate?.relation}
-              />
-            </label>
-            <label className="mw-field" htmlFor="mw-delegate-id">
-              <span>{t.delegateNationalId}</span>
-              <input
-                id="mw-delegate-id"
-                name="nationalId"
-                defaultValue={delegate?.nationalId}
-                placeholder="00000000000"
-              />
-            </label>
-            <section className="mw-delegate-fingerprint" aria-labelledby="mw-delegate-fingerprint-title">
-              <div className="mw-delegate-fingerprint-copy">
-                <span id="mw-delegate-fingerprint-title">{t.delegateFingerprint}</span>
-                <p>{t.fingerprintHint}</p>
-              </div>
-              <button
-                type="button"
-                className="mw-delegate-capture"
-                onClick={captureDelegateFingerprint}
-                disabled={capturingDelegateFingerprint}
-              >
-                <IconFingerprint aria-hidden="true" />
-                {capturingDelegateFingerprint ? t.fingerprintWaiting : capturedDelegateUserId ? t.recaptureFingerprint : t.captureFingerprint}
-              </button>
-              {capturedDelegateUserId && <p className="mw-delegate-fingerprint-success" role="status">{t.fingerprintReady} · ID {capturedDelegateUserId}</p>}
-              {delegateFingerprintError && <p className="mw-delegate-fingerprint-error" role="alert">{delegateFingerprintError}</p>}
-            </section>
-            <div className="mw-dialog-actions">
-              <button
-                type="button"
-                className="mw-dialog-cancel"
-                onClick={() => setDelegateOpen(false)}
-              >
-                {t.cancel}
-              </button>
-              <button type="submit" className="mw-primary">
-                {t.save}
-              </button>
-            </div>
-          </form>
-        </DialogContent>
-      </Dialog>
-    </>
-  );
-}
-
 export default function HomeRoute() {
-  const dark = useCooperativeDarkTheme();
   const [query, setQuery] = useState("");
   const [period, setPeriod] = useState("Annuel");
   const [currency, setCurrency] = useState<"USD" | "FC">("USD");
+  const [chartMetric, setChartMetric] = useState<"contributions" | "cashflow">("contributions");
+  const [distributionTab, setDistributionTab] = useState<"accounts" | "activities">("accounts");
+  const [txTypeFilter, setTxTypeFilter] = useState<string>("ALL");
+  const [transactionPage, setTransactionPage] = useState(1);
+  const [transactionPageSize, setTransactionPageSize] = useState(10);
 
   function formatMoney(usd: number, fc: number) {
     return {
@@ -1164,42 +423,28 @@ export default function HomeRoute() {
     };
   }
 
-  const [language, setLanguage] = useState<"FR" | "EN">("FR");
+  const language: "FR" | "EN" = "FR";
   const [dashboard, setDashboard] = useState<DashboardResponse | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [loadError, setLoadError] = useState("");
   const [loading, setLoading] = useState(true);
-  const [dashboardRefresh, setDashboardRefresh] = useState(0);
-  const [dialog, setDialog] = useState<"member" | null>(null);
-  const [toast, setToast] = useState("");
-  const [newMemberCredentials, setNewMemberCredentials] = useState<{
-    numeroCompte: string;
-    nomComplet: string;
-    email: string;
-    motDePasseTemporaire: string;
-    credentialsSent: boolean;
-  } | null>(null);
-  const [copiedMemberCredentials, setCopiedMemberCredentials] = useState(false);
+const [toast, setToast] = useState("");
+  const [remindingId, setRemindingId] = useState<number | null>(null);
+  const [remindedIds, setRemindedIds] = useState<Record<number, boolean>>({});
+
   const t = copy[language];
 
   const authUser = getAuthUser();
   const greetingName = authUser?.firstName || authUser?.fullName?.split(" ")[0] || "Aline";
   const greeting = language === "FR" ? `Bonjour, ${greetingName}` : `Welcome back, ${greetingName}`;
 
-  useEffect(() => {
-    if (window.sessionStorage.getItem("mw_open_member_enrollment") !== "1") return;
-    window.sessionStorage.removeItem("mw_open_member_enrollment");
-    setDialog("member");
-  }, []);
-
-  useEffect(() => {
+useEffect(() => {
     let active = true;
-    setLoading(true);
     Promise.all([
       apiClient.get<DashboardResponse>("/solde/dashboard"),
-      apiClient.get<{ data: { id: string; memberName: string; type: string; amount: number; currency: "USD" | "FC"; date: string; status: string }[] }>("/solde/dashboard/transactions?limit=10"),
-      apiClient.get<{ data: { id: number; memberName: string; dueDate: string; amountRemaining: number; currency: "USD" | "FC" }[] }>("/credits/echeances?limit=3&days=30"),
+      apiClient.get<{ data: { id: string; memberName: string; type: string; amount: number; currency: "USD" | "FC"; date: string; status: string }[] }>("/solde/dashboard/transactions?limit=25"),
+      apiClient.get<{ data: { id: number; memberId?: number; memberName: string; dueDate: string; amountRemaining: number; currency: "USD" | "FC"; isOverdue?: boolean; diffDays?: number; telephone?: string }[] }>("/credits/echeances?limit=6&days=30"),
     ]).then(([summary, transactionResponse, dueResponse]) => {
       if (!active) return;
       setDashboard(summary.data);
@@ -1213,48 +458,141 @@ export default function HomeRoute() {
         date: new Intl.DateTimeFormat("fr-FR", { dateStyle: "medium" }).format(new Date(item.date)),
         status: item.status === "valid" ? "valid" : item.status === "pending" ? "pending" : "rejected",
       })));
-      setReminders(dueResponse.data.data.map((item) => ({
-        id: item.id,
-        name: item.memberName,
-        detail: `Échéance · ${new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "short" }).format(new Date(item.dueDate))}`,
-        amount: money(item.amountRemaining, item.currency),
-      })));
+      setReminders(dueResponse.data.data.map((item) => {
+        const isLate = Boolean(item.isOverdue);
+        const diff = item.diffDays ?? 0;
+        const detail = isLate
+          ? `En retard (${Math.abs(diff)} j) · Échéance ${new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "short" }).format(new Date(item.dueDate))}`
+          : diff === 0
+            ? `Échéance aujourd'hui`
+            : `Dans ${diff} j · ${new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "short" }).format(new Date(item.dueDate))}`;
+
+        return {
+          id: item.id,
+          memberId: item.memberId,
+          name: item.memberName,
+          telephone: item.telephone,
+          dueDate: item.dueDate,
+          detail,
+          amount: money(item.amountRemaining, item.currency),
+          isOverdue: isLate,
+          diffDays: diff,
+        };
+      }));
       setLoadError("");
     }).catch(() => {
       if (active) setLoadError("Impossible de charger les données du tableau de bord. Vérifiez la connexion au backend et votre session.");
     }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [dashboardRefresh]);
+  }, []);
+
+  const handleSendReminder = async (reminder: Reminder) => {
+    if (remindingId || remindedIds[reminder.id]) return;
+    setRemindingId(reminder.id);
+    try {
+      const res = await apiClient.post<{ success: boolean; message: string }>(`/credits/${reminder.id}/relancer`);
+      setRemindedIds((prev) => ({ ...prev, [reminder.id]: true }));
+      setToast(res.data.message || `Rappel envoyé avec succès à ${reminder.name}`);
+      window.setTimeout(() => setToast(""), 4000);
+    } catch {
+      setToast(`Échec de l'envoi du rappel pour ${reminder.name}.`);
+      window.setTimeout(() => setToast(""), 4000);
+    } finally {
+      setRemindingId(null);
+    }
+  };
 
   const memberCount = dashboard?.overview.totalMembers ?? 0;
   const chartData = useMemo(() => {
     if (!dashboard) return [];
-    if (period === "Annuel") return dashboard.history.map((item) => ({ label: new Intl.DateTimeFormat("fr-FR", { month: "short" }).format(new Date(`${item.month}-01T12:00:00`)), savings: currency === "USD" ? item.depotsUSD : item.depotsFC, loans: currency === "USD" ? item.creditsUSD : item.creditsFC }));
+    if (period === "Annuel") {
+      return dashboard.history.map((item) => {
+        const monthLabel = new Intl.DateTimeFormat("fr-FR", { month: "short" }).format(new Date(`${item.month}-01T12:00:00`));
+        if (chartMetric === "cashflow") {
+          return {
+            label: monthLabel,
+            savings: currency === "USD" ? item.depotsUSD : item.depotsFC,
+            loans: currency === "USD" ? (item.retraitsUSD || 0) : (item.retraitsFC || 0),
+          };
+        }
+        return {
+          label: monthLabel,
+          savings: currency === "USD" ? item.depotsUSD : item.depotsFC,
+          loans: currency === "USD" ? item.creditsUSD : item.creditsFC,
+        };
+      });
+    }
     const days = period === "Hebdomadaire" ? 7 : 30;
-    return dashboard.dailyHistory.slice(-days).map((item) => ({ label: new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "short" }).format(new Date(`${item.date}T12:00:00`)), savings: currency === "USD" ? item.epargneUSD : item.epargneFC, loans: currency === "USD" ? item.creditUSD : item.creditFC }));
-  }, [dashboard, period, currency]);
+    return dashboard.dailyHistory.slice(-days).map((item) => {
+      const dayLabel = new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "short" }).format(new Date(`${item.date}T12:00:00`));
+      if (chartMetric === "cashflow") {
+        return {
+          label: dayLabel,
+          savings: currency === "USD" ? item.epargneUSD : item.epargneFC,
+          loans: currency === "USD" ? (item.retraitUSD || 0) : (item.retraitFC || 0),
+        };
+      }
+      return {
+        label: dayLabel,
+        savings: currency === "USD" ? item.epargneUSD : item.epargneFC,
+        loans: currency === "USD" ? item.creditUSD : item.creditFC,
+      };
+    });
+  }, [dashboard, period, currency, chartMetric]);
+
   const chartTotal = chartData.reduce((sum, point) => sum + point.savings, 0);
-  const activityPalette = ["#286e4d", "#ebaF39", "#91a673", "#b4c4b3", "#65869a"];
+
+  // Distribution
   const activityTotal = dashboard?.activityDistribution.reduce((sum, item) => sum + item.total, 0) || 0;
   const distributionGradient = useMemo(() => {
-    let cursor = 0;
-    const segments = (dashboard?.activityDistribution || []).map((item, index) => {
-      const start = cursor;
-      cursor += activityTotal ? (item.total / activityTotal) * 100 : 0;
-      return `${activityPalette[index % activityPalette.length]} ${start}% ${cursor}%`;
-    });
+    const segments = (dashboard?.activityDistribution || []).reduce<{ parts: string[]; cursor: number }>(
+      (state, item, index) => {
+        const end = state.cursor + (activityTotal ? (item.total / activityTotal) * 100 : 0);
+        state.parts.push(`${activityPalette[index % activityPalette.length]} ${state.cursor}% ${end}%`);
+        return { parts: state.parts, cursor: end };
+      },
+      { parts: [], cursor: 0 },
+    ).parts;
     return segments.length ? `conic-gradient(${segments.join(",")})` : "#e5e7eb";
   }, [dashboard, activityTotal]);
 
-  const filteredTransactions = useMemo(
-    () =>
-      transactions.filter((transaction) =>
+  // Breakdown 6 accounts
+  const savingsAccountsList = useMemo(() => {
+    const list = dashboard?.savingsByType || [];
+    const totalSum = list.reduce(
+      (sum, acc) => sum + (currency === "USD" ? acc.totalUSD : acc.totalFC),
+      0,
+    );
+    return list.map((acc) => {
+      const val = currency === "USD" ? acc.totalUSD : acc.totalFC;
+      const pct = totalSum > 0 ? Math.round((val / totalSum) * 100) : 0;
+      return {
+        ...acc,
+        val,
+        pct,
+      };
+    });
+  }, [dashboard, currency]);
+
+  const filteredTransactions = useMemo(() => {
+    return transactions.filter((transaction) => {
+      const matchesQuery =
+        !query ||
         `${transaction.name} ${transaction.type} ${transaction.status}`
           .toLowerCase()
-          .includes(query.toLowerCase()),
-      ),
-    [query, transactions],
-  );
+          .includes(query.toLowerCase());
+      const matchesType =
+        txTypeFilter === "ALL" ||
+        transaction.type.toLowerCase().includes(txTypeFilter.toLowerCase());
+      return matchesQuery && matchesType;
+    });
+  }, [query, transactions, txTypeFilter]);
+  const paginatedTransactions = useMemo(() => {
+    const pageCount = Math.max(1, Math.ceil(filteredTransactions.length / transactionPageSize));
+    const safePage = Math.min(transactionPage, pageCount);
+    const start = (safePage - 1) * transactionPageSize;
+    return filteredTransactions.slice(start, start + transactionPageSize);
+  }, [filteredTransactions, transactionPage, transactionPageSize]);
 
   return (
     <div className="mw-dashboard-page">
@@ -1267,16 +605,16 @@ export default function HomeRoute() {
             {new Intl.DateTimeFormat(language === "FR" ? "fr-FR" : "en-US", { dateStyle: "full" }).format(new Date())}
           </div>
         </div>
-        <div className="coop-page-actions">
-          <button type="button" className="mw-primary" title={t.addMember} aria-label={t.addMember} onClick={() => setDialog("member")}>
-            <IconPlus size={16} />
-            {t.addMember}
-          </button>
+        <div className="coop-page-actions" style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+          <a href="#mw-guichets-section" className="mw-dialog-cancel" style={{ display: "inline-flex", alignItems: "center", gap: "6px", textDecoration: "none" }}>
+            <IconBuildingBank size={15} />
+            <span>Guichets ({dashboard?.agentsCaisses?.length || 0})</span>
+          </a>
         </div>
       </div>
 
-      {/* ── KPI Cards ───────────────────────────────────────────── */}
-      <section className="mw-kpis" aria-label={t.overview}>
+      {/* ── KPI Cards (Bento 5) ──────────────────────────────────── */}
+      <section className="mw-kpis mw-kpis-5" aria-label={t.overview}>
         {/* Carte 1 : Membres */}
         <article className="mw-kpi mw-kpi-bento">
           <div className="mw-kpi-top">
@@ -1305,10 +643,15 @@ export default function HomeRoute() {
             <div className="mw-kpi-value">
               {loading ? "…" : formatMoney(dashboard?.overview.totalEpargne.usd || 0, dashboard?.overview.totalEpargne.fc || 0).primary}
             </div>
-            <div className="mw-kpi-sub">
+            <div className="mw-kpi-sub" style={{ display: "flex", gap: "6px", flexWrap: "wrap", alignItems: "center" }}>
               <span className="mw-kpi-badge-secondary">
                 {formatMoney(dashboard?.overview.totalEpargne.usd || 0, dashboard?.overview.totalEpargne.fc || 0).secondary}
               </span>
+              {(dashboard?.overview.datStats?.activeCount ?? 0) > 0 && (
+                <span className="mw-kpi-badge-gold" title="Capital bloqué sous Dépôt à terme">
+                  DAT: {money(currency === "USD" ? (dashboard?.overview.datStats?.totalCapitalUSD || 0) : (dashboard?.overview.datStats?.totalCapitalFC || 0), currency)}
+                </span>
+              )}
             </div>
           </div>
         </article>
@@ -1325,15 +668,45 @@ export default function HomeRoute() {
             <div className="mw-kpi-value">
               {loading ? "…" : formatMoney(dashboard?.overview.activeCreditBalance.usd || 0, dashboard?.overview.activeCreditBalance.fc || 0).primary}
             </div>
-            <div className="mw-kpi-sub">
+            <div className="mw-kpi-sub" style={{ display: "flex", gap: "6px", flexWrap: "wrap", alignItems: "center" }}>
               <span className="mw-kpi-badge-secondary">
                 {formatMoney(dashboard?.overview.activeCreditBalance.usd || 0, dashboard?.overview.activeCreditBalance.fc || 0).secondary}
+              </span>
+              <span className="mw-kpi-badge positive" title="Taux de remboursement global">
+                <IconTrendingUp size={12} />
+                {dashboard?.overview.repaymentRate ?? 0}% remboursé
               </span>
             </div>
           </div>
         </article>
 
-        {/* Carte 4 : Disponibilités Caisse */}
+        {/* Carte 4 : Portefeuille à Risque (PAR / Impayés) */}
+        <article className="mw-kpi mw-kpi-bento">
+          <div className="mw-kpi-top">
+            <span className="mw-kpi-title">Crédits en Souffrance (PAR)</span>
+            <span className={`mw-kpi-icon ${(dashboard?.overview.overdueCreditsCount ?? 0) > 0 ? "red" : "green"}`}>
+              {(dashboard?.overview.overdueCreditsCount ?? 0) > 0 ? <IconAlertTriangle /> : <IconCheck />}
+            </span>
+          </div>
+          <div className="mw-kpi-main">
+            <div className="mw-kpi-value" style={{ color: (dashboard?.overview.overdueCreditsCount ?? 0) > 0 ? "var(--mw-red)" : "inherit" }}>
+              {loading ? "…" : `${dashboard?.overview.overdueCreditsCount ?? 0} impayé${(dashboard?.overview.overdueCreditsCount ?? 0) > 1 ? "s" : ""}`}
+            </div>
+            <div className="mw-kpi-sub">
+              {(dashboard?.overview.overdueCreditsCount ?? 0) > 0 ? (
+                <span className="mw-kpi-badge-danger">
+                  Restant dû : {formatMoney(dashboard?.overview.overdueCreditBalance?.usd || 0, dashboard?.overview.overdueCreditBalance?.fc || 0).primary}
+                </span>
+              ) : (
+                <span className="mw-kpi-subtext" style={{ color: "var(--mw-green)" }}>
+                  Aucun retard constaté
+                </span>
+              )}
+            </div>
+          </div>
+        </article>
+
+        {/* Carte 5 : Disponibilités Caisse */}
         <article className="mw-kpi mw-kpi-bento">
           <div className="mw-kpi-top">
             <span className="mw-kpi-title">Disponibilités Caisse</span>
@@ -1359,20 +732,66 @@ export default function HomeRoute() {
         <div className="mw-main-column">
           {/* Chart */}
           <section className="mw-panel mw-overview-panel" aria-labelledby="mw-chart-title">
-            <div className="mw-panel-header">
-              <h2 id="mw-chart-title">{t.chart}</h2>
-              <div className="mw-periods" role="group" aria-label="Devise">
-                {(["USD", "FC"] as const).map((value) => <button type="button" key={value} className={`mw-period${currency === value ? " is-active" : ""}`} aria-pressed={currency === value} onClick={() => setCurrency(value)}>{value}</button>)}
+            <div className="mw-panel-header" style={{ flexWrap: "wrap", gap: "10px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <h2 id="mw-chart-title" style={{ margin: 0 }}>
+                  {chartMetric === "contributions" ? "Epargnes & Crédits" : "Flux de Trésorerie (Dépôts vs Retraits)"}
+                </h2>
+                <div className="mw-periods" role="group" aria-label="Métrique">
+                  <button
+                    type="button"
+                    className={`mw-period${chartMetric === "contributions" ? " is-active" : ""}`}
+                    onClick={() => setChartMetric("contributions")}
+                  >
+                    Epargnes & Crédits
+                  </button>
+                  <button
+                    type="button"
+                    className={`mw-period${chartMetric === "cashflow" ? " is-active" : ""}`}
+                    onClick={() => setChartMetric("cashflow")}
+                  >
+                    Dépôts vs Retraits
+                  </button>
+                </div>
               </div>
-              <div className="mw-periods" role="group" aria-label={t.chart}>
-                {[["Annuel", t.annual], ["Mensuel", t.monthly], ["Hebdomadaire", t.weekly]].map(([value, label]) => (
-                  <button type="button" key={value} className={`mw-period${period === value ? " is-active" : ""}`} aria-pressed={period === value} onClick={() => setPeriod(value)}>{label}</button>
-                ))}
+
+              <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                <div className="mw-periods" role="group" aria-label="Devise">
+                  {(["USD", "FC"] as const).map((value) => (
+                    <button
+                      type="button"
+                      key={value}
+                      className={`mw-period${currency === value ? " is-active" : ""}`}
+                      aria-pressed={currency === value}
+                      onClick={() => setCurrency(value)}
+                    >
+                      {value}
+                    </button>
+                  ))}
+                </div>
+                <div className="mw-periods" role="group" aria-label={t.chart}>
+                  {[["Annuel", t.annual], ["Mensuel", t.monthly], ["Hebdomadaire", t.weekly]].map(([value, label]) => (
+                    <button
+                      type="button"
+                      key={value}
+                      className={`mw-period${period === value ? " is-active" : ""}`}
+                      aria-pressed={period === value}
+                      onClick={() => setPeriod(value)}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
+
             <div className="mw-chart-summary">
               <strong className="mw-chart-total">{money(chartTotal, currency)}</strong>
+              <span style={{ fontSize: "11px", color: "var(--mw-muted)", marginLeft: "8px" }}>
+                {chartMetric === "contributions" ? "Total cotisé sur la période" : "Total dépôts sur la période"}
+              </span>
             </div>
+
             <div className="mw-chart">
               <svg viewBox="0 0 700 190" role="img" aria-label={`${t.chart} · ${t[period === "Annuel" ? "annual" : period === "Mensuel" ? "monthly" : "weekly"]}`} preserveAspectRatio="none">
                 <defs>
@@ -1384,33 +803,98 @@ export default function HomeRoute() {
                 {[26, 67, 108, 149].map((y) => (
                   <g key={y}>
                     <line x1="46" x2="687" y1={y} y2={y} className="mw-chart-grid" />
-                    <text x="1" y={y + 3} className="mw-chart-axis">{Math.round((180 - y) * (Math.max(1, ...chartData.map((point) => point.savings), ...chartData.map((point) => point.loans)) / 150))}</text>
+                    <text x="1" y={y + 3} className="mw-chart-axis">
+                      {Math.round((180 - y) * (Math.max(1, ...chartData.map((point) => point.savings), ...chartData.map((point) => point.loans)) / 150))}
+                    </text>
                   </g>
                 ))}
                 {(() => {
                   const max = Math.max(1, ...chartData.flatMap((point) => [point.savings, point.loans]));
-                  const coords = (key: "savings" | "loans") => chartData.map((point, index) => `${48 + (chartData.length < 2 ? 319 : index * 638 / (chartData.length - 1))},${158 - (point[key] / max) * 132}`).join(" ");
+                  const coords = (key: "savings" | "loans") =>
+                    chartData.map((point, index) => `${48 + (chartData.length < 2 ? 319 : (index * 638) / (chartData.length - 1))},${158 - (point[key] / max) * 132}`).join(" ");
                   const savingsPoints = coords("savings");
-                  return <><polyline className="mw-line-contribution" points={savingsPoints} fill="none" /><polyline className="mw-line-loan" points={coords("loans")} fill="none" />{chartData.map((point, index) => <text key={`${point.label}-${index}`} x={48 + (chartData.length < 2 ? 319 : index * 638 / (chartData.length - 1))} y="184" textAnchor="middle" className={`mw-chart-axis mw-chart-month-label${index % 2 === 1 ? " is-hidden-on-mobile" : ""}`}>{point.label}</text>)}</>;
+                  return (
+                    <>
+                      <polyline className="mw-line-contribution" points={savingsPoints} fill="none" />
+                      <polyline className={chartMetric === "cashflow" ? "mw-line-loan" : "mw-line-loan"} points={coords("loans")} fill="none" />
+                      {chartData.map((point, index) => (
+                        <text
+                          key={`${point.label}-${index}`}
+                          x={48 + (chartData.length < 2 ? 319 : (index * 638) / (chartData.length - 1))}
+                          y="184"
+                          textAnchor="middle"
+                          className={`mw-chart-axis mw-chart-month-label${index % 2 === 1 ? " is-hidden-on-mobile" : ""}`}
+                        >
+                          {point.label}
+                        </text>
+                      ))}
+                    </>
+                  );
                 })()}
               </svg>
               <div className="mw-chart-legend">
-                <span className="mw-legend-item"><i className="mw-legend-dot" />{t.contributions}</span>
-                <span className="mw-legend-item"><i className="mw-legend-dot gold" />{t.credit}</span>
+                <span className="mw-legend-item">
+                  <i className="mw-legend-dot" />
+                  {chartMetric === "contributions" ? t.contributions : "Dépôts (Entrées)"}
+                </span>
+                <span className="mw-legend-item">
+                  <i className="mw-legend-dot gold" />
+                  {chartMetric === "contributions" ? t.credit : "Retraits (Sorties)"}
+                </span>
               </div>
             </div>
           </section>
 
           {/* Transactions */}
           <section className="mw-panel" aria-labelledby="mw-transactions-title">
-            <div className="mw-panel-header mw-transaction-head">
+            <div className="mw-panel-header mw-transaction-head" style={{ flexWrap: "wrap", gap: "10px" }}>
               <h2 id="mw-transactions-title">{t.transactions}</h2>
-              <div className="mw-transaction-actions">
+              <div className="mw-transaction-actions" style={{ flexWrap: "wrap", gap: "8px" }}>
+                <div className="mw-tx-filter-bar">
+                  {[
+                    ["ALL", "Toutes"],
+                    ["Epargne", "Epargnes"],
+                    ["Retrait", "Retraits"],
+                    ["Crédit", "Crédits"],
+                    ["Remboursement", "Remboursements"],
+                  ].map(([val, label]) => (
+                    <button
+                      key={val}
+                      type="button"
+                      className={`mw-tx-filter-btn${txTypeFilter === val ? " is-active" : ""}`}
+                      onClick={() => {
+                        setTxTypeFilter(val);
+                        setTransactionPage(1);
+                      }}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
                 <label className="mw-table-search">
                   <IconSearch size={14} />
-                  <input placeholder={t.search} value={query} onChange={(event) => setQuery(event.target.value)} />
+                  <input
+                    placeholder={t.search}
+                    value={query}
+                    onChange={(event) => {
+                      setQuery(event.target.value);
+                      setTransactionPage(1);
+                    }}
+                  />
                 </label>
-                {query && (<button type="button" className="mw-link-button" onClick={() => setQuery("")}>{t.viewAll}</button>)}
+                {(query || txTypeFilter !== "ALL") && (
+                  <button
+                    type="button"
+                    className="mw-link-button"
+                    onClick={() => {
+                      setQuery("");
+                      setTxTypeFilter("ALL");
+                      setTransactionPage(1);
+                    }}
+                  >
+                    {t.viewAll}
+                  </button>
+                )}
               </div>
             </div>
             <div className="mw-table-wrap">
@@ -1426,7 +910,7 @@ export default function HomeRoute() {
                 </thead>
                 <tbody>
                   {filteredTransactions.length ? (
-                    filteredTransactions.map((transaction) => (
+                    paginatedTransactions.map((transaction) => (
                       <tr key={transaction.id}>
                         <td>
                           <span className="mw-member">
@@ -1437,109 +921,237 @@ export default function HomeRoute() {
                         <td className="mw-type">{transaction.type}</td>
                         <td className="mw-amount">{money(transaction.amount, transaction.currency)}</td>
                         <td className="mw-type">{transaction.date}</td>
-                        <td><span className={`mw-status ${transaction.status}`}>{t[transaction.status]}</span></td>
+                        <td>
+                          <span className={`mw-status ${transaction.status}`}>
+                            {t[transaction.status]}
+                          </span>
+                        </td>
                       </tr>
                     ))
                   ) : (
-                    <tr><td colSpan={5} className="mw-empty">{t.noResults}</td></tr>
+                    <tr>
+                      <td colSpan={5} className="mw-empty">
+                        {t.noResults}
+                      </td>
+                    </tr>
                   )}
                 </tbody>
               </table>
             </div>
-            {query && (<div className="mw-search-results">{filteredTransactions.length} · {t.transactions}</div>)}
+            {(query || txTypeFilter !== "ALL") && (
+              <div className="mw-search-results">
+                {filteredTransactions.length} transaction{filteredTransactions.length > 1 ? "s" : ""} trouvée{filteredTransactions.length > 1 ? "s" : ""}
+              </div>
+            )}
+            {filteredTransactions.length > 0 && (
+              <CooperativePagination
+                totalItems={filteredTransactions.length}
+                page={transactionPage}
+                pageSize={transactionPageSize}
+                onPageChange={setTransactionPage}
+                onPageSizeChange={(pageSize) => {
+                  setTransactionPageSize(pageSize);
+                  setTransactionPage(1);
+                }}
+                itemLabel="transactions"
+              />
+            )}
           </section>
         </div>
 
         {/* Right column */}
         <aside className="mw-right-column">
-          {/* Distribution */}
+          {/* Distribution Section (Comptes vs Activités) */}
           <section className="mw-panel mw-overview-panel" aria-labelledby="mw-distribution-title">
-            <div className="mw-panel-header">
-              <h2 id="mw-distribution-title">{t.distribution}</h2>
+            <div className="mw-panel-header" style={{ flexWrap: "wrap", gap: "8px" }}>
+              <h2 id="mw-distribution-title" style={{ margin: 0, fontSize: "13px" }}>
+                {distributionTab === "accounts" ? "Comptes d'Épargne (6)" : t.distribution}
+              </h2>
+              <div className="mw-periods" role="group">
+                <button
+                  type="button"
+                  className={`mw-period${distributionTab === "accounts" ? " is-active" : ""}`}
+                  onClick={() => setDistributionTab("accounts")}
+                >
+                  Comptes
+                </button>
+                <button
+                  type="button"
+                  className={`mw-period${distributionTab === "activities" ? " is-active" : ""}`}
+                  onClick={() => setDistributionTab("activities")}
+                >
+                  Secteurs
+                </button>
+              </div>
             </div>
-            <div className="mw-donut-row">
-              <div className="mw-donut" role="img" aria-label={`${t.total}: ${memberCount.toLocaleString("fr-FR")}`} style={{ background: distributionGradient }}>
-                <div className="mw-donut-center">
-                  <strong>{memberCount.toLocaleString("fr-FR")}</strong>
-                  <span>{t.total}</span>
+
+            {distributionTab === "accounts" ? (
+              <div className="mw-accounts-breakdown">
+                {savingsAccountsList.map((acc) => {
+                  return (
+                    <div key={acc.typeCompte} className="mw-account-row">
+                      <div className="mw-account-tag">
+                        <span className="mw-account-tag-badge">
+                          {acc.typeCompte[0]}
+                        </span>
+                        <div>
+                          <strong>{acc.typeCompte}</strong>
+                          <span style={{ display: "block", fontSize: "10px", color: "var(--mw-muted)" }}>
+                            {acc.totalAccounts} compte{acc.totalAccounts > 1 ? "s" : ""}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="mw-account-vals">
+                        <strong>{money(acc.val, currency)}</strong>
+                            <span>{acc.pct}% de l&apos;épargne</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="mw-donut-row">
+                <div
+                  className="mw-donut"
+                  role="img"
+                  aria-label={`${t.total}: ${memberCount.toLocaleString("fr-FR")}`}
+                  style={{ background: distributionGradient }}
+                >
+                  <div className="mw-donut-center">
+                    <strong>{memberCount.toLocaleString("fr-FR")}</strong>
+                    <span>{t.total}</span>
+                  </div>
+                </div>
+                <div className="mw-categories">
+                  {(dashboard?.activityDistribution || []).map((item, index) => (
+                    <span className="mw-category" key={item.activite}>
+                      <i style={{ background: activityPalette[index % activityPalette.length] }} />
+                      {item.activite}
+                      <strong>{activityTotal ? Math.round((item.total / activityTotal) * 100) : 0}%</strong>
+                    </span>
+                  ))}
+                  {!loading && dashboard?.activityDistribution.length === 0 && (
+                    <span className="mw-empty">Aucune activité renseignée</span>
+                  )}
                 </div>
               </div>
-              <div className="mw-categories">
-                {(dashboard?.activityDistribution || []).map((item, index) => <span className="mw-category" key={item.activite}><i style={{ background: activityPalette[index % activityPalette.length] }} />{item.activite}<strong>{activityTotal ? Math.round(item.total / activityTotal * 100) : 0}%</strong></span>)}
-                {!loading && dashboard?.activityDistribution.length === 0 && <span className="mw-empty">Aucune activité renseignée</span>}
-              </div>
-            </div>
+            )}
           </section>
 
-          {/* Reminders */}
+          {/* Reminders / Échéances et Alertes */}
           <section className="mw-panel" aria-labelledby="mw-reminders-title">
             <div className="mw-panel-header">
               <h2 id="mw-reminders-title">{t.reminders}</h2>
-              <span className="mw-kpi-icon gold"><IconClock /></span>
+              <span className="mw-kpi-icon gold">
+                <IconClock />
+              </span>
             </div>
             <div className="mw-reminder-list">
-              {reminders.map((reminder) => (
-                <div className="mw-reminder" key={reminder.id}>
-                  <span className="mw-reminder-mark"><IconCalendar /></span>
-                  <span className="mw-reminder-info">
-                    <strong>{reminder.name}</strong>
-                    <span>{reminder.detail} · {reminder.amount}</span>
-                  </span>
-                  <span className="mw-reminder-action" aria-label="Rappel non disponible">{t.send}</span>
-                </div>
-              ))}
+              {reminders.length > 0 ? (
+                reminders.map((reminder) => (
+                  <div className="mw-reminder" key={reminder.id} style={{ alignItems: "center" }}>
+                    <span className={`mw-reminder-mark ${reminder.isOverdue ? "red" : ""}`}>
+                      {reminder.isOverdue ? <IconAlertTriangle size={15} color="var(--mw-red)" /> : <IconCalendar size={15} />}
+                    </span>
+                    <div className="mw-reminder-info" style={{ flex: 1, minWidth: 0 }}>
+                      <strong style={{ display: "block", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                        {reminder.name}
+                      </strong>
+                      <span style={{ display: "block" }}>
+                        {reminder.detail} · <strong>{reminder.amount}</strong>
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      className={`mw-reminder-btn${remindedIds[reminder.id] ? " is-sent" : ""}`}
+                      onClick={() => handleSendReminder(reminder)}
+                      disabled={remindingId === reminder.id || Boolean(remindedIds[reminder.id])}
+                      title="Envoyer un rappel de paiement"
+                    >
+                      {remindedIds[reminder.id] ? (
+                        <>
+                          <IconCheck size={12} />
+                          <span>Envoyé</span>
+                        </>
+                      ) : remindingId === reminder.id ? (
+                        <span>Envoi…</span>
+                      ) : (
+                        <>
+                          <IconSend size={12} />
+                          <span>Rappeler</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                ))
+              ) : (
+                <p className="mw-empty" style={{ margin: "10px 0" }}>
+                  Aucune échéance urgente dans les 30 prochains jours.
+                </p>
+              )}
             </div>
           </section>
         </aside>
       </div>
+
+      {/* ── Section Guichets & Caisses Agents ──────────────────────── */}
+      <section id="mw-guichets-section" className="mw-panel mw-guichets-panel" aria-labelledby="mw-guichets-title">
+        <div className="mw-panel-header">
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <span className="mw-kpi-icon blue">
+              <IconBuildingBank size={18} />
+            </span>
+            <div>
+              <h2 id="mw-guichets-title" style={{ margin: 0, fontSize: "14px", fontWeight: 700 }}>
+                Situation des Caisses & Guichets (En direct)
+              </h2>
+              <span style={{ fontSize: "11px", color: "var(--mw-muted)" }}>
+                Suivi des liquidités disponibles par guichet et agent assigné
+              </span>
+            </div>
+          </div>
+          <Link href="/agents" className="mw-link-button" style={{ textDecoration: "none" }}>
+            Gérer les agents
+          </Link>
+        </div>
+        <div className="mw-guichets-grid" role="list" aria-label="Agents et soldes des caisses">
+          {dashboard?.agentsCaisses && dashboard.agentsCaisses.length > 0 ? (
+            dashboard.agentsCaisses.map((ag) => (
+              <article key={ag.id} className="mw-guichet-card" role="listitem">
+                <div className="mw-guichet-identity">
+                  <div className="mw-guichet-name">
+                    <span className="mw-dot-green" aria-hidden="true" />
+                    <strong>{ag.nom}</strong>
+                  </div>
+                  <span className="mw-guichet-desk">{ag.guichetAssigne}</span>
+                </div>
+                <div className="mw-guichet-balances">
+                  <div className="mw-guichet-currency-item">
+                    <span className="mw-guichet-currency-label">Caisse USD</span>
+                    <strong className="mw-guichet-currency-value">{money(ag.soldes.usd, "USD")}</strong>
+                  </div>
+                  <div className="mw-guichet-currency-item" style={{ textAlign: "right" }}>
+                    <span className="mw-guichet-currency-label">Caisse FC</span>
+                    <strong className="mw-guichet-currency-value">{money(ag.soldes.fc, "FC")}</strong>
+                  </div>
+                </div>
+              </article>
+            ))
+          ) : (
+            <div style={{ padding: "16px", color: "var(--mw-muted)", textAlign: "center", gridColumn: "1 / -1" }}>
+              Aucun agent ou guichet configuré pour le moment. Accédez à l&apos;onglet{" "}
+              <Link href="/agents" style={{ color: "var(--mw-primary)", fontWeight: 600 }}>
+                Agents
+              </Link>{" "}
+              pour ouvrir des caisses.
+            </div>
+          )}
+        </div>
+      </section>
+
       {loading && <p className="mw-empty" role="status">Chargement des données du dashboard…</p>}
       {loadError && <p className="mw-empty" role="alert">{loadError}</p>}
 
-      {/* ── Dialogs ─────────────────────────────────────────────── */}
-      <MemberEnrollmentDialog
-        open={dialog === "member"}
-        onOpenChange={(open) => !open && setDialog(null)}
-        dark={dark}
-        t={t}
-        onCreated={(credentials) => {
-          setDashboardRefresh((current) => current + 1);
-          setNewMemberCredentials(credentials);
-          setCopiedMemberCredentials(false);
-          setToast(`${t.createdMember} · ${credentials.numeroCompte}`);
-          window.setTimeout(() => setToast(""), 4000);
-        }}
-      />
-      <Dialog open={Boolean(newMemberCredentials)} onOpenChange={(open) => { if (!open) setNewMemberCredentials(null); }}>
-        <DialogContent className="coop-agent-credentials-dialog">
-          <DialogHeader>
-            <span className="coop-agent-credentials-icon"><IconUsers size={22} /></span>
-            <DialogTitle>Membre créé avec succès</DialogTitle>
-            <DialogDescription>Remettez ces identifiants à {newMemberCredentials?.nomComplet}. Le mot de passe ne sera plus affiché après la fermeture.</DialogDescription>
-          </DialogHeader>
-          <div className="coop-agent-credentials-box">
-            <span>Numéro de compte</span><strong>{newMemberCredentials?.numeroCompte}</strong>
-            <span>Adresse e-mail</span><strong>{newMemberCredentials?.email}</strong>
-            <span>Mot de passe temporaire</span><code>{newMemberCredentials?.motDePasseTemporaire}</code>
-          </div>
-          <p className="coop-agent-credentials-warning">
-            {newMemberCredentials?.credentialsSent
-              ? "Un e-mail contenant les identifiants a été envoyé au membre. Il devra changer son mot de passe après sa première connexion."
-              : "L’e-mail n’a pas pu être envoyé. Remettez ces identifiants au membre de façon sécurisée ; il devra changer son mot de passe après sa première connexion."}
-          </p>
-          <div className="coop-agent-dialog-actions">
-            <button type="button" className="mw-dialog-cancel" onClick={() => setNewMemberCredentials(null)}>Fermer</button>
-            <button type="button" className="mw-primary" onClick={async () => {
-              if (!newMemberCredentials) return;
-              try {
-                await navigator.clipboard.writeText(`Numéro de compte : ${newMemberCredentials.numeroCompte}\nE-mail : ${newMemberCredentials.email}\nMot de passe temporaire : ${newMemberCredentials.motDePasseTemporaire}`);
-                setCopiedMemberCredentials(true);
-              } catch {
-                setToast("Copie impossible. Sélectionnez le mot de passe pour le copier.");
-              }
-            }}>{copiedMemberCredentials ? "Identifiants copiés" : "Copier les identifiants"}</button>
-          </div>
-        </DialogContent>
-      </Dialog>
       {toast && (<div className="mw-toast" role="status">{toast}</div>)}
     </div>
   );

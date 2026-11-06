@@ -4,21 +4,19 @@ import {
   IconAlertTriangle,
   IconArrowDown,
   IconCheck,
-  IconClock,
   IconCoins,
   IconSearch,
   IconUserPlus,
   IconWallet,
   IconX,
 } from "@tabler/icons-react";
-import { useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 
 import { CooperativeDataState } from "@/components/cooperative/CooperativeDataState";
 import { CooperativePagination } from "@/components/cooperative/CooperativePagination";
 import {
   CooperativeBreadcrumb,
   CooperativeStatCard,
-  CooperativeStatus,
   formatCurrency,
   formatDate,
 } from "@/components/cooperative/CooperativePrimitives";
@@ -31,130 +29,421 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
-import {
-  addCreditRecord,
-  approveCreditRecord,
-  calculateLoanSummary,
-  findCreditMember,
-  getCreditGuarantors,
-  getCreditRecords,
-  getUpcomingInstallment,
-  rejectCreditRecord,
-  updateCreditRecord,
-  type CooperativeCredit,
-  type CreditPurpose,
-  type CreditStatus,
-} from "@/mocks/credit-data";
-import {
-  mockMembers,
-  type CooperativeMember,
-} from "@/mocks/cooperative-data";
+import { apiClient, getAuthUser } from "@/lib/auth";
+import { formatMixedCurrency } from "@/lib/format-currency";
 
-const statuses: (CreditStatus | "Tous")[] = [
-  "En attente", "Actif", "En retard", "Soldé", "Rejeté", "Tous",
-];
-const purposes: CreditPurpose[] = ["Commerce", "Scolarité", "Santé", "Logement", "Autre"];
+type BadgeTone = "valid" | "pending" | "rejected";
+
+/** Ligne de GET /api/credits (mapCreditToResponse). */
+type CreditListItem = {
+  id: string;
+  memberName: string;
+  memberRole: string;
+  initials: string;
+  amount: number;
+  remainingAmount: number;
+  currency: string;
+  startDate: string;
+  interestRate: number;
+  durationMonths: number;
+  status: "active" | "overdue" | "repaid";
+};
+
+type CreditsResponse = {
+  data: CreditListItem[];
+  meta: { total: number; totalPages: number };
+};
+
+type CreditStats = {
+  totalAmount: { usd: number; fc: number };
+  activeAmount: { usd: number; fc: number };
+  overdueAmount: { usd: number; fc: number };
+  availableBalance: { usd: number; fc: number };
+  totalCount: number;
+  activeCount: number;
+  overdueCount: number;
+};
+
+/** GET /api/credits/:id — crédit brut Prisma + membre + remboursements. */
+type CreditDetail = {
+  id: number;
+  numeroCompte: string;
+  montant: string | number;
+  montantRembourse: string | number;
+  devise: string;
+  tauxInteret: string | number;
+  duree: number;
+  dateDebut: string;
+  dateEcheance: string | null;
+  statut: string;
+  description: string | null;
+  createdAt: string;
+  derniereOperation: string | null;
+  membre: {
+    nomComplet: string;
+    numeroCompte: string;
+    telephone?: string | null;
+    email?: string | null;
+    typeCompte?: string;
+  };
+  remboursements: Array<{
+    id: number;
+    montant: string | number;
+    devise: string;
+    dateRemboursement: string;
+    partPrincipal: string | number;
+    partInteret: string | number;
+    description: string | null;
+  }>;
+};
+
+type MemberOption = { id: number; numero_compte: string; nom_complet: string };
+
+const creditStatus: Record<string, { label: string; tone: BadgeTone }> = {
+  active: { label: "Actif", tone: "valid" },
+  overdue: { label: "En retard", tone: "pending" },
+  repaid: { label: "Soldé", tone: "valid" },
+};
+
+const statutLabel: Record<string, string> = {
+  actif: "Actif",
+  rembourse: "Soldé",
+  en_retard: "En retard",
+};
+
+const tabs = ["Actif", "En retard", "Soldé", "Tous"] as const;
+const purposes = ["Commerce", "Scolarité", "Santé", "Logement", "Autre"];
 const periods = ["Toutes les périodes", "Ce mois", "30 derniers jours"] as const;
 
 export function meta() {
   return [{ title: "Crédits — Mwangaza Wetu" }];
 }
 
+function apiErrorMessage(error: unknown, fallback: string): string {
+  const message = (
+    error as { response?: { data?: { message?: string | string[] } } }
+  )?.response?.data?.message;
+  if (Array.isArray(message)) return message.filter(Boolean).join(" ");
+  if (typeof message === "string" && message) return message;
+  return fallback;
+}
+
+function todayIso() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+}
+
+/** Échéance finale = date de début + durée en mois (calcul identique au serveur). */
+function dueDateOf(credit: CreditListItem) {
+  const [year, month, day] = credit.startDate.split("-").map(Number);
+  if (!year || !month || !day) return credit.startDate;
+  const due = new Date(year, month - 1 + credit.durationMonths, day);
+  return `${due.getFullYear()}-${String(due.getMonth() + 1).padStart(2, "0")}-${String(due.getDate()).padStart(2, "0")}`;
+}
+
+function creditProgress(credit: CreditListItem) {
+  const totalDue = credit.amount * (1 + credit.interestRate / 100);
+  const paid = Math.max(0, totalDue - credit.remainingAmount);
+  const progress =
+    totalDue > 0 ? Math.min(100, Math.round((paid / totalDue) * 100)) : 0;
+  return { totalDue, paid, progress };
+}
+
+/** Simulation d'échéancier (mathématiques pures, sans donnée en dur). */
+function simulateLoan(principal: number, annualRate: number, termMonths: number) {
+  const monthlyRate = annualRate / 100 / 12;
+  const payment =
+    termMonths <= 0
+      ? 0
+      : monthlyRate === 0
+        ? principal / termMonths
+        : (principal * monthlyRate) / (1 - (1 + monthlyRate) ** -termMonths);
+  const monthlyPayment = Math.round(payment * 100) / 100;
+  const totalToRepay = Math.round(monthlyPayment * termMonths * 100) / 100;
+  return {
+    monthlyPayment,
+    totalToRepay,
+    creditCost: Math.round((totalToRepay - principal) * 100) / 100,
+  };
+}
+
+function StatusBadge({ label, tone }: { label: string; tone: BadgeTone }) {
+  return <span className={`coop-status coop-status--${tone}`}>{label}</span>;
+}
+
 export default function CreditsRoute() {
   const dark = useCooperativeDarkTheme();
-  const [records, setRecords] = useState(getCreditRecords());
-  const [activeStatus, setActiveStatus] = useState<CreditStatus | "Tous">("En attente");
+  const [role, setRole] = useState<string | null>(null);
+  const [records, setRecords] = useState<CreditListItem[]>([]);
+  const [stats, setStats] = useState<CreditStats | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const [activeTab, setActiveTab] = useState<string>("Tous");
   const [query, setQuery] = useState("");
-  const [purpose, setPurpose] = useState<CreditPurpose | "">("");
   const [period, setPeriod] = useState<(typeof periods)[number]>(periods[0]);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [createOpen, setCreateOpen] = useState(false);
-  const [rejectTarget, setRejectTarget] = useState<CooperativeCredit | null>(null);
-  const [rejectReason, setRejectReason] = useState("");
-  const [memberId, setMemberId] = useState(mockMembers[0].id);
-  const [principal, setPrincipal] = useState(500);
-  const [termMonths, setTermMonths] = useState(12);
-  const [annualRate, setAnnualRate] = useState(12);
-  const [formError, setFormError] = useState("");
+  const [detail, setDetail] = useState<CreditDetail | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState("");
   const [success, setSuccess] = useState("");
 
-  const selectedCredit = records.find((credit) => credit.id === selectedId) ?? null;
+  // Création
+  const [createOpen, setCreateOpen] = useState(false);
+  const [members, setMembers] = useState<MemberOption[]>([]);
+  const [membersLoaded, setMembersLoaded] = useState(false);
+  const [memberNumero, setMemberNumero] = useState("");
+  const [savings, setSavings] = useState<{ usd: number; fc: number } | null>(
+    null,
+  );
+  const [principal, setPrincipal] = useState(500);
+  const [devise, setDevise] = useState<"USD" | "FC">("USD");
+  const [termMonths, setTermMonths] = useState(12);
+  const [annualRate, setAnnualRate] = useState(15);
+  const [startDate, setStartDate] = useState(todayIso());
+  const [formError, setFormError] = useState("");
+  const [createBusy, setCreateBusy] = useState(false);
+
+  const isDirection = role === "admin" || role === "superadmin";
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setLoadError("");
+    try {
+      const all: CreditListItem[] = [];
+      let current = 1;
+      let totalPages = 1;
+      do {
+        const response = await apiClient.get<CreditsResponse>("/credits", {
+          params: { page: current, pageSize: 100 },
+        });
+        all.push(...response.data.data);
+        totalPages = response.data.meta.totalPages || 1;
+        current += 1;
+      } while (current <= totalPages);
+      const statsResponse = await apiClient.get<CreditStats>("/credits/stats");
+      setRecords(all);
+      setStats(statsResponse.data);
+    } catch (error) {
+      setRecords([]);
+      setStats(null);
+      setLoadError(
+        apiErrorMessage(error, "Impossible de charger les crédits depuis le backend."),
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    setRole(getAuthUser()?.role ?? "admin");
+  }, []);
+
+  useEffect(() => {
+    if (isDirection) void load();
+  }, [isDirection, load]);
+
+  // Détail du crédit sélectionné
+  useEffect(() => {
+    if (!selectedId) {
+      setDetail(null);
+      setDetailError("");
+      return;
+    }
+    let cancelled = false;
+    setDetailLoading(true);
+    setDetailError("");
+    setDetail(null);
+    apiClient
+      .get<CreditDetail>(`/credits/${selectedId}`)
+      .then((response) => {
+        if (!cancelled) setDetail(response.data);
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setDetailError(
+            apiErrorMessage(error, "Impossible de charger le détail du crédit."),
+          );
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setDetailLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedId]);
+
+  // Liste des membres pour le formulaire de création
+  async function ensureMembers() {
+    if (membersLoaded) return;
+    try {
+      const response = await apiClient.get<MemberOption[]>("/membres/numeros");
+      setMembers(response.data);
+      setMembersLoaded(true);
+      setMemberNumero((current) => current || response.data[0]?.numero_compte || "");
+    } catch (error) {
+      setFormError(
+        apiErrorMessage(error, "Impossible de charger la liste des membres."),
+      );
+    }
+  }
+
+  // Épargne du membre sélectionné (affichage indicatif)
+  useEffect(() => {
+    if (!createOpen || !memberNumero) {
+      setSavings(null);
+      return;
+    }
+    let cancelled = false;
+    apiClient
+      .get<{ soldeUSD: number; soldeFC: number }>(
+        `/epargnes/soldes/${encodeURIComponent(memberNumero)}`,
+      )
+      .then((response) => {
+        if (!cancelled) {
+          setSavings({
+            usd: Number(response.data.soldeUSD || 0),
+            fc: Number(response.data.soldeFC || 0),
+          });
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setSavings(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [createOpen, memberNumero]);
+
   const filtered = useMemo(() => {
     const search = query.trim().toLocaleLowerCase("fr-FR");
+    const now = new Date();
+    const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+    const thirtyDaysAgo = new Date(now);
+    thirtyDaysAgo.setDate(now.getDate() - 29);
+    const thirtyDaysKey = `${thirtyDaysAgo.getFullYear()}-${String(thirtyDaysAgo.getMonth() + 1).padStart(2, "0")}-${String(thirtyDaysAgo.getDate()).padStart(2, "0")}`;
     return records
-      .filter((credit) => activeStatus === "Tous" || credit.status === activeStatus)
-      .filter((credit) => `${findCreditMember(credit).name} ${credit.reference}`.toLocaleLowerCase("fr-FR").includes(search))
-      .filter((credit) => !purpose || credit.purpose === purpose)
-      .filter((credit) => period === periods[0] || (period === periods[1] ? credit.requestedAt.startsWith("2025-06") : credit.requestedAt >= "2025-05-26"));
-  }, [activeStatus, period, purpose, query, records]);
+      .filter(
+        (credit) =>
+          activeTab === "Tous" ||
+          creditStatus[credit.status]?.label === activeTab,
+      )
+      .filter((credit) =>
+        `${credit.memberName} CRD-${credit.id} ${credit.memberRole}`
+          .toLocaleLowerCase("fr-FR")
+          .includes(search),
+      )
+      .filter((credit) => {
+        if (period === periods[0]) return true;
+        if (period === periods[1]) return credit.startDate.startsWith(monthKey);
+        return credit.startDate >= thirtyDaysKey;
+      });
+  }, [activeTab, period, query, records]);
+
   const visible = filtered.slice((page - 1) * pageSize, page * pageSize);
-  const activeCredits = records.filter((credit) => ["Actif", "En retard"].includes(credit.status));
-  const outstanding = activeCredits.reduce((sum, credit) => sum + credit.remainingBalance, 0);
-  const lateCredits = records.filter((credit) => credit.status === "En retard");
-  const lateAmount = lateCredits.reduce((sum, credit) => sum + credit.remainingBalance, 0);
-  const totalScheduled = records.flatMap((credit) => credit.installments).reduce((sum, item) => sum + item.totalDue, 0);
-  const totalPaid = records.flatMap((credit) => credit.installments).reduce((sum, item) => sum + item.amountPaid, 0);
-  const repaymentRate = totalScheduled ? Math.round((totalPaid / totalScheduled) * 100) : 0;
-  const currentMember = mockMembers.find((member) => member.id === memberId)!;
-  const maxEligible = currentMember.savingsTotal * 3;
-  const simulator = calculateLoanSummary(principal, annualRate, termMonths, "2025-06-25");
-  const exceedsEligibility = principal > maxEligible;
+  const selected = records.find((credit) => credit.id === selectedId) ?? null;
+
+  const totals = records.reduce(
+    (acc, credit) => {
+      const { totalDue, paid } = creditProgress(credit);
+      acc.totalDue += totalDue;
+      acc.paid += paid;
+      return acc;
+    },
+    { totalDue: 0, paid: 0 },
+  );
+  const repaymentRate =
+    totals.totalDue > 0 ? Math.round((totals.paid / totals.totalDue) * 100) : 0;
+
+  const simulator = simulateLoan(principal, annualRate, termMonths);
 
   function changeFilter(action: () => void) {
     action();
     setPage(1);
   }
 
-  function refreshCredits() {
-    setRecords(getCreditRecords());
+  function openCreate() {
+    setFormError("");
+    setStartDate(todayIso());
+    setCreateOpen(true);
+    void ensureMembers();
   }
 
-  function approve(credit: CooperativeCredit) {
-    updateCreditRecord(credit.id, (current) => approveCreditRecord(current, "2025-06-25"));
-    refreshCredits();
-    setSuccess(`Crédit ${credit.reference} approuvé; l’échéancier est activé.`);
-  }
-
-  function reject(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!rejectTarget || rejectReason.trim().length < 5) return;
-    updateCreditRecord(rejectTarget.id, (current) => rejectCreditRecord(current, rejectReason.trim(), "2025-06-25"));
-    refreshCredits();
-    setSuccess(`Demande ${rejectTarget.reference} rejetée.`);
-    setRejectTarget(null);
-    setRejectReason("");
-  }
-
-  function createCredit(event: FormEvent<HTMLFormElement>) {
+  async function createCredit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
-    const guarantorId = String(form.get("guarantorId"));
-    const selectedPurpose = String(form.get("purpose")) as CreditPurpose;
-    if (!(principal > 0) || !(termMonths > 0) || !(annualRate >= 0) || !guarantorId || !purposes.includes(selectedPurpose)) {
-      setFormError("Vérifiez le montant, la durée, le taux, l’objet et le garant.");
+    const numeroCompte = memberNumero;
+    const montant = Number(form.get("montant"));
+    const tauxInteret = Number(form.get("rate"));
+    const duree = Number(form.get("term"));
+    const dateDebut = String(form.get("dateDebut"));
+    const description = String(form.get("purpose"));
+    if (!numeroCompte) {
+      setFormError("Choisissez le membre bénéficiaire.");
       return;
     }
-    if (exceedsEligibility) {
-      setFormError(`Le montant dépasse le plafond d’éligibilité de ${formatCurrency(maxEligible)} (3 × l’épargne).`);
+    if (!(montant > 0) || !(duree > 0) || !(tauxInteret >= 0) || !dateDebut) {
+      setFormError("Vérifiez le montant, la durée, le taux et la date de début.");
       return;
     }
-    const credit = addCreditRecord({
-      memberId,
-      guarantorIds: [guarantorId],
-      principal,
-      annualRate,
-      termMonths,
-      purpose: selectedPurpose,
-      requestedAt: "2025-06-25",
-    });
-    refreshCredits();
-    setActiveStatus("En attente");
-    setPage(1);
-    setCreateOpen(false);
+    setCreateBusy(true);
     setFormError("");
-    setSuccess(`Demande ${credit.reference} créée pour ${findCreditMember(credit).name}.`);
+    try {
+      const response = await apiClient.post<{ id: number }>("/credits", {
+        numeroCompte,
+        montant,
+        devise,
+        tauxInteret,
+        duree,
+        dateDebut,
+        description,
+      });
+      const member = members.find((item) => item.numero_compte === numeroCompte);
+      setCreateOpen(false);
+      setSuccess(
+        `Crédit CRD-${response.data.id} enregistré et décaissé${member ? ` pour ${member.nom_complet}` : ""}.`,
+      );
+      await load();
+    } catch (error) {
+      setFormError(apiErrorMessage(error, "Le crédit n’a pas pu être enregistré."));
+    } finally {
+      setCreateBusy(false);
+    }
+  }
+
+  if (role === null) {
+    return (
+      <div className="coop-operations-page coop-credit-page">
+        <CooperativeDataState loading error={false} empty={false}>
+          <span />
+        </CooperativeDataState>
+      </div>
+    );
+  }
+
+  if (!isDirection) {
+    return (
+      <div className="coop-operations-page coop-credit-page">
+        <div className="coop-page-heading">
+          <div>
+            <CooperativeBreadcrumb section="Opérations" current="Crédits" />
+            <h1>Crédits</h1>
+            <p>Demandes de crédit et suivi des remboursements accordés aux membres.</p>
+          </div>
+        </div>
+        <section className="mw-panel coop-operations-panel">
+          <div className="coop-empty-state" role="status">
+            <IconWallet aria-hidden="true" />
+            <span>
+              Cette section est réservée à la direction (administrateur /
+              superadministrateur).
+            </span>
+          </div>
+        </section>
+      </div>
+    );
   }
 
   return (
@@ -165,84 +454,565 @@ export default function CreditsRoute() {
           <h1>Crédits</h1>
           <p>Demandes de crédit et suivi des remboursements accordés aux membres.</p>
         </div>
-        <div className="coop-page-actions"><button className="mw-primary" type="button" onClick={() => { setCreateOpen(true); setFormError(""); }}><IconUserPlus aria-hidden="true" />Nouvelle demande de crédit</button></div>
+        <div className="coop-page-actions">
+          <button className="mw-primary" type="button" onClick={openCreate}>
+            <IconUserPlus aria-hidden="true" />
+            Nouveau crédit
+          </button>
+        </div>
       </div>
-      {success && <div className="coop-inline-success" role="status"><IconCheck aria-hidden="true" />{success}<button type="button" aria-label="Fermer le message" onClick={() => setSuccess("")}><IconX aria-hidden="true" /></button></div>}
 
-      <CooperativeDataState loading={false} error={false} empty={records.length === 0}>
+      {success && (
+        <div className="coop-inline-success" role="status">
+          <IconCheck aria-hidden="true" />
+          {success}
+          <button
+            type="button"
+            aria-label="Fermer le message"
+            onClick={() => setSuccess("")}
+          >
+            <IconX aria-hidden="true" />
+          </button>
+        </div>
+      )}
+
+      {loadError && (
+        <p className="coop-form-error" role="alert">
+          {loadError}{" "}
+          <button type="button" onClick={() => void load()}>
+            Réessayer
+          </button>
+        </p>
+      )}
+
+      {!loading && !loadError && stats && (
         <section className="coop-stat-grid" aria-label="Indicateurs des crédits">
-          <CooperativeStatCard label="Encours total" value={formatCurrency(outstanding)} detail="Capital restant à rembourser" icon={IconWallet} />
-          <CooperativeStatCard label="Crédits actifs" value={activeCredits.length} detail="Contrats en cours" icon={IconCoins} />
-          <CooperativeStatCard label="Taux de remboursement" value={`${repaymentRate} %`} detail="Montant reçu / prévu" icon={IconArrowDown} />
-          <CooperativeStatCard label="Crédits en retard" value={lateCredits.length} detail={`${formatCurrency(lateAmount)} d’encours`} icon={IconAlertTriangle} accent="#c95151" />
+          <CooperativeStatCard
+            label="Encours total USD"
+            value={formatCurrency(stats.totalAmount.usd, "USD")}
+            detail="Capital prêté (tous statuts)"
+            icon={IconWallet}
+          />
+          <CooperativeStatCard
+            label="Encours total FC"
+            value={formatCurrency(stats.totalAmount.fc, "FC")}
+            detail="Capital prêté (tous statuts)"
+            icon={IconCoins}
+            accent="#4384b5"
+          />
+          <CooperativeStatCard
+            label="Taux de remboursement"
+            value={`${repaymentRate} %`}
+            detail="Montant reçu / prévu"
+            icon={IconArrowDown}
+          />
+          <CooperativeStatCard
+            label="Crédits en retard"
+            value={stats.overdueCount}
+            detail={formatMixedCurrency([
+              { amount: stats.overdueAmount.usd, currency: "USD" },
+              { amount: stats.overdueAmount.fc, currency: "FC" },
+            ])}
+            icon={IconAlertTriangle}
+            accent="#c95151"
+          />
         </section>
-      </CooperativeDataState>
+      )}
 
       <section className="mw-panel coop-operations-panel" aria-label="Suivi des crédits">
-        <div className="coop-withdrawal-tabs" role="tablist" aria-label="Filtrer les crédits par statut">{statuses.map((status) => { const count = status === "Tous" ? records.length : records.filter((credit) => credit.status === status).length; return <button type="button" role="tab" aria-selected={activeStatus === status} className={activeStatus === status ? "is-active" : ""} key={status} onClick={() => changeFilter(() => setActiveStatus(status))}>{status === "Tous" ? "Tous" : status === "En attente" ? "Demandes" : status}<span>{count}</span></button>; })}</div>
-        <div className="coop-filter-bar">
-          <label className="coop-filter-search"><IconSearch aria-hidden="true" /><input type="search" value={query} aria-label="Rechercher un membre ou une référence de crédit" placeholder="Membre ou référence…" onChange={(event) => changeFilter(() => setQuery(event.target.value))} /></label>
-          <label className="coop-filter-select"><span className="sr-only">Objet du crédit</span><select value={purpose} onChange={(event) => changeFilter(() => setPurpose(event.target.value as CreditPurpose | ""))}><option value="">Tous les objets</option>{purposes.map((item) => <option key={item}>{item}</option>)}</select></label>
-          <label className="coop-filter-select"><span className="sr-only">Période de demande</span><select value={period} onChange={(event) => changeFilter(() => setPeriod(event.target.value as (typeof periods)[number]))}>{periods.map((item) => <option key={item}>{item}</option>)}</select></label>
+        <div
+          className="coop-withdrawal-tabs"
+          role="tablist"
+          aria-label="Filtrer les crédits par statut"
+        >
+          {tabs.map((tab) => {
+            const count =
+              tab === "Tous"
+                ? records.length
+                : records.filter(
+                    (credit) => creditStatus[credit.status]?.label === tab,
+                  ).length;
+            return (
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activeTab === tab}
+                className={activeTab === tab ? "is-active" : ""}
+                key={tab}
+                onClick={() => changeFilter(() => setActiveTab(tab))}
+              >
+                {tab}
+                <span>{count}</span>
+              </button>
+            );
+          })}
         </div>
-        <CooperativeDataState loading={false} error={false} empty={visible.length === 0} emptyMessage="Aucun crédit ne correspond à ces filtres.">
-          <div className="coop-table-scroll"><table className="mw-table coop-credit-table"><thead><tr><th>Référence</th><th>Membre</th><th>Montant accordé</th><th>Taux</th><th>Durée</th><th>Objet</th><th>Solde restant</th><th>Remboursé</th><th>Prochaine échéance</th><th>Statut</th></tr></thead><tbody>{visible.map((credit) => <CreditRow key={credit.id} credit={credit} onSelect={() => setSelectedId(credit.id)} />)}</tbody></table></div>
+        <div className="coop-filter-bar">
+          <label className="coop-filter-search">
+            <IconSearch aria-hidden="true" />
+            <input
+              type="search"
+              value={query}
+              aria-label="Rechercher un membre ou une référence de crédit"
+              placeholder="Membre ou référence (CRD-…)…"
+              onChange={(event) => changeFilter(() => setQuery(event.target.value))}
+            />
+          </label>
+          <label className="coop-filter-select">
+            <span className="sr-only">Période de début</span>
+            <select
+              value={period}
+              onChange={(event) =>
+                changeFilter(() =>
+                  setPeriod(event.target.value as (typeof periods)[number]),
+                )
+              }
+            >
+              {periods.map((item) => (
+                <option key={item}>{item}</option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        <CooperativeDataState
+          loading={loading}
+          error={Boolean(loadError)}
+          empty={filtered.length === 0}
+          emptyMessage={
+            records.length === 0
+              ? "Aucun crédit enregistré pour le moment."
+              : "Aucun crédit ne correspond à ces filtres."
+          }
+        >
+          <div className="coop-table-scroll">
+            <table className="mw-table coop-credit-table">
+              <thead>
+                <tr>
+                  <th>Référence</th>
+                  <th>Membre</th>
+                  <th>Montant</th>
+                  <th>Taux</th>
+                  <th>Durée</th>
+                  <th>Début</th>
+                  <th>Échéance</th>
+                  <th>Solde restant</th>
+                  <th>Remboursé</th>
+                  <th>Statut</th>
+                </tr>
+              </thead>
+              <tbody>
+                {visible.map((credit) => {
+                  const { progress } = creditProgress(credit);
+                  const status = creditStatus[credit.status] ?? {
+                    label: credit.status,
+                    tone: "pending" as BadgeTone,
+                  };
+                  return (
+                    <tr
+                      key={credit.id}
+                      tabIndex={0}
+                      onClick={() => setSelectedId(credit.id)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          setSelectedId(credit.id);
+                        }
+                      }}
+                    >
+                      <td>
+                        <strong>CRD-{credit.id}</strong>
+                      </td>
+                      <td>
+                        <span className="mw-member">
+                          <span className="mw-member-avatar">
+                            {credit.initials}
+                          </span>
+                          <span>{credit.memberName}</span>
+                        </span>
+                      </td>
+                      <td className="coop-amount-cell">
+                        {formatCurrency(credit.amount, credit.currency)}
+                      </td>
+                      <td>{credit.interestRate} %</td>
+                      <td>{credit.durationMonths} mois</td>
+                      <td>{formatDate(credit.startDate)}</td>
+                      <td>{formatDate(dueDateOf(credit))}</td>
+                      <td className="coop-amount-cell">
+                        {formatCurrency(credit.remainingAmount, credit.currency)}
+                      </td>
+                      <td>
+                        <span className="coop-progress-cell">
+                          <span className="coop-progress-track">
+                            <span style={{ width: `${progress}%` }} />
+                          </span>
+                          <small>{progress} %</small>
+                        </span>
+                      </td>
+                      <td>
+                        <StatusBadge label={status.label} tone={status.tone} />
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </CooperativeDataState>
-        <CooperativePagination totalItems={filtered.length} page={page} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={(value) => { setPageSize(value); setPage(1); }} itemLabel="crédits" />
+
+        <CooperativePagination
+          totalItems={filtered.length}
+          page={page}
+          pageSize={pageSize}
+          onPageChange={setPage}
+          onPageSizeChange={(value) => {
+            setPageSize(value);
+            setPage(1);
+          }}
+          itemLabel="crédits"
+        />
       </section>
 
-      <Sheet open={selectedCredit !== null} onOpenChange={(open) => !open && setSelectedId(null)}>
-        <SheetContent data-theme={dark ? "dark" : "light"} className="coop-member-drawer coop-credit-drawer" side="right"><SheetTitle className="coop-drawer-title">Détail du crédit</SheetTitle>{selectedCredit && <CreditDetails credit={selectedCredit} onApprove={() => approve(selectedCredit)} onReject={() => { setRejectTarget(selectedCredit); setRejectReason(""); }} />}</SheetContent>
+      <Sheet
+        open={selected !== null}
+        onOpenChange={(open) => !open && setSelectedId(null)}
+      >
+        <SheetContent
+          data-theme={dark ? "dark" : "light"}
+          className="coop-member-drawer coop-credit-drawer"
+          side="right"
+        >
+          <SheetTitle className="coop-drawer-title">Détail du crédit</SheetTitle>
+          {detailLoading && (
+            <CooperativeDataState loading error={false} empty={false}>
+              <span />
+            </CooperativeDataState>
+          )}
+          {!detailLoading && detailError && (
+            <p className="coop-form-error" role="alert">
+              {detailError}
+            </p>
+          )}
+          {!detailLoading && !detailError && detail && (
+            <CreditDetails credit={detail} />
+          )}
+        </SheetContent>
       </Sheet>
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent data-theme={dark ? "dark" : "light"} className="mw-dialog-content coop-action-dialog coop-operation-dialog coop-credit-form-dialog">
-          <DialogHeader><DialogTitle>Nouvelle demande de crédit</DialogTitle><DialogDescription>Le dossier de démonstration sera ajouté aux demandes en attente.</DialogDescription></DialogHeader>
+        <DialogContent
+          data-theme={dark ? "dark" : "light"}
+          className="mw-dialog-content coop-action-dialog coop-operation-dialog coop-credit-form-dialog"
+        >
+          <DialogHeader>
+            <DialogTitle>Nouveau crédit</DialogTitle>
+            <DialogDescription>
+              Le crédit est décaissé immédiatement : il devient actif et
+              apparaît dans le tableau. Les fonds sont vérifiés dans la
+              trésorerie avant validation.
+            </DialogDescription>
+          </DialogHeader>
           <form className="coop-operation-form" onSubmit={createCredit}>
-            <label className="coop-form-field">Membre<select value={memberId} onChange={(event) => setMemberId(event.target.value)} required>{mockMembers.map((member) => <option value={member.id} key={member.id}>{member.name} · {member.memberNumber}</option>)}</select></label>
-            <div className="coop-credit-eligibility"><span>Épargne du membre</span><strong>{formatCurrency(currentMember.savingsTotal)}</strong><span>Montant maximum (3 × épargne)</span><strong>{formatCurrency(maxEligible)}</strong></div>
-            <div className="coop-form-grid"><label className="coop-form-field">Montant demandé (USD)<input value={principal} onChange={(event) => setPrincipal(Number(event.target.value))} name="principal" type="number" min="1" step="50" required /></label><label className="coop-form-field">Durée (mois)<input value={termMonths} onChange={(event) => setTermMonths(Number(event.target.value))} name="term" type="number" min="1" max="60" required /></label></div>
-            <div className="coop-form-grid"><label className="coop-form-field">Taux annuel (%)<input value={annualRate} onChange={(event) => setAnnualRate(Number(event.target.value))} name="rate" type="number" min="0" max="100" step="0.5" required /></label><label className="coop-form-field">Objet<select name="purpose" required>{purposes.map((item) => <option key={item}>{item}</option>)}</select></label></div>
-            <label className="coop-form-field">Garant<select name="guarantorId" required>{mockMembers.filter((member) => member.id !== memberId).map((member) => <option key={member.id} value={member.id}>{member.name} · {member.memberNumber}</option>)}</select></label>
-            <section className="coop-simulator" aria-live="polite"><h3>Simulation de l’échéancier</h3><div><span>Mensualité estimée</span><strong>{formatCurrency(simulator.monthlyPayment)}</strong></div><div><span>Total à rembourser</span><strong>{formatCurrency(simulator.totalToRepay)}</strong></div><div><span>Coût du crédit</span><strong>{formatCurrency(simulator.creditCost)}</strong></div></section>
-            {exceedsEligibility && <p className="coop-form-error" role="alert">Montant supérieur au plafond autorisé de {formatCurrency(maxEligible)} pour l’épargne de ce membre.</p>}
-            {formError && <p className="coop-form-error" role="alert">{formError}</p>}
-            <div className="coop-form-actions"><button className="mw-secondary" type="button" onClick={() => setCreateOpen(false)}>Annuler</button><button className="mw-primary" type="submit" disabled={exceedsEligibility}>Soumettre la demande</button></div>
+            <label className="coop-form-field">
+              Membre bénéficiaire
+              <select
+                value={memberNumero}
+                onChange={(event) => setMemberNumero(event.target.value)}
+                required
+              >
+                {members.length === 0 && (
+                  <option value="">Chargement des membres…</option>
+                )}
+                {members.map((member) => (
+                  <option key={member.id} value={member.numero_compte}>
+                    {member.nom_complet} · {member.numero_compte}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <div className="coop-credit-eligibility">
+              <span>Épargne principale du membre</span>
+              <strong>
+                {savings
+                  ? `${formatCurrency(savings.usd, "USD")} · ${formatCurrency(savings.fc, "FC")}`
+                  : "—"}
+              </strong>
+              <span>Plafond indicatif (3 × épargne USD)</span>
+              <strong>
+                {savings ? formatCurrency(savings.usd * 3, "USD") : "—"}
+              </strong>
+            </div>
+
+            <div className="coop-form-grid">
+              <label className="coop-form-field">
+                Montant
+                <input
+                  name="montant"
+                  type="number"
+                  min="1"
+                  step="50"
+                  value={principal}
+                  onChange={(event) => setPrincipal(Number(event.target.value))}
+                  required
+                />
+              </label>
+              <label className="coop-form-field">
+                Devise
+                <select
+                  value={devise}
+                  onChange={(event) =>
+                    setDevise(event.target.value as "USD" | "FC")
+                  }
+                  required
+                >
+                  <option value="USD">USD</option>
+                  <option value="FC">FC</option>
+                </select>
+              </label>
+            </div>
+            <div className="coop-form-grid">
+              <label className="coop-form-field">
+                Durée (mois)
+                <input
+                  name="term"
+                  type="number"
+                  min="1"
+                  max="60"
+                  value={termMonths}
+                  onChange={(event) => setTermMonths(Number(event.target.value))}
+                  required
+                />
+              </label>
+              <label className="coop-form-field">
+                Taux annuel (%)
+                <input
+                  name="rate"
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.5"
+                  value={annualRate}
+                  onChange={(event) => setAnnualRate(Number(event.target.value))}
+                  required
+                />
+              </label>
+            </div>
+            <div className="coop-form-grid">
+              <label className="coop-form-field">
+                Date de début
+                <input
+                  name="dateDebut"
+                  type="date"
+                  value={startDate}
+                  onChange={(event) => setStartDate(event.target.value)}
+                  required
+                />
+              </label>
+              <label className="coop-form-field">
+                Objet
+                <select name="purpose" required>
+                  {purposes.map((item) => (
+                    <option key={item}>{item}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
+            <section className="coop-simulator" aria-live="polite">
+              <h3>Simulation de l’échéancier</h3>
+              <div>
+                <span>Mensualité estimée</span>
+                <strong>{formatCurrency(simulator.monthlyPayment, devise)}</strong>
+              </div>
+              <div>
+                <span>Total à rembourser</span>
+                <strong>{formatCurrency(simulator.totalToRepay, devise)}</strong>
+              </div>
+              <div>
+                <span>Coût du crédit</span>
+                <strong>{formatCurrency(simulator.creditCost, devise)}</strong>
+              </div>
+            </section>
+
+            {formError && (
+              <p className="coop-form-error" role="alert">
+                {formError}
+              </p>
+            )}
+            <div className="coop-form-actions">
+              <button
+                className="mw-secondary"
+                type="button"
+                onClick={() => setCreateOpen(false)}
+              >
+                Annuler
+              </button>
+              <button
+                className="mw-primary"
+                type="submit"
+                disabled={createBusy || members.length === 0}
+              >
+                {createBusy ? "Enregistrement…" : "Octroyer le crédit"}
+              </button>
+            </div>
           </form>
         </DialogContent>
-      </Dialog>
-
-      <Dialog open={rejectTarget !== null} onOpenChange={(open) => !open && setRejectTarget(null)}>
-        <DialogContent data-theme={dark ? "dark" : "light"} className="mw-dialog-content coop-action-dialog coop-operation-dialog"><DialogHeader><DialogTitle>Rejeter la demande de crédit</DialogTitle><DialogDescription>Indiquez le motif communiqué au membre.</DialogDescription></DialogHeader><form className="coop-operation-form" onSubmit={reject}><label className="coop-form-field">Motif du rejet<textarea value={rejectReason} onChange={(event) => setRejectReason(event.target.value)} minLength={5} rows={3} required /></label><div className="coop-form-actions"><button className="mw-secondary" type="button" onClick={() => setRejectTarget(null)}>Annuler</button><button className="mw-danger" type="submit" disabled={rejectReason.trim().length < 5}>Confirmer le rejet</button></div></form></DialogContent>
       </Dialog>
     </div>
   );
 }
 
-function CreditRow({ credit, onSelect }: { credit: CooperativeCredit; onSelect: () => void }) {
-  const member = findCreditMember(credit);
-  const paid = credit.installments.reduce((sum, item) => sum + item.amountPaid, 0);
-  const total = credit.installments.reduce((sum, item) => sum + item.totalDue, 0);
-  const progress = total ? Math.min(100, Math.round((paid / total) * 100)) : 0;
-  const next = getUpcomingInstallment(credit);
-  const status = credit.status === "Actif" || credit.status === "Soldé" ? "Validé" : credit.status === "En retard" ? "En retard" : credit.status === "Rejeté" ? "Rejeté" : "En attente";
-  return <tr tabIndex={0} onClick={onSelect} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onSelect(); } }}><td><strong>{credit.reference}</strong></td><td><span className="mw-member"><span className="mw-member-avatar">{member.name.split(" ").map((part) => part[0]).slice(0, 2).join("")}</span><span>{member.name}</span></span></td><td className="coop-amount-cell">{formatCurrency(credit.principal)}</td><td>{credit.annualRate} %</td><td>{credit.termMonths} mois</td><td>{credit.purpose}</td><td className="coop-amount-cell">{formatCurrency(credit.remainingBalance)}</td><td><span className="coop-progress-cell"><span className="coop-progress-track"><span style={{ width: `${progress}%` }} /></span><small>{progress} %</small></span></td><td>{next ? formatDate(next.dueDate) : "—"}</td><td><CooperativeStatus status={status} /></td></tr>;
-}
+function CreditDetails({ credit }: { credit: CreditDetail }) {
+  const montant = Number(credit.montant);
+  const taux = Number(credit.tauxInteret) || 0;
+  const rembourse = Number(credit.montantRembourse) || 0;
+  const totalDue = montant * (1 + taux / 100);
+  const restant = Math.max(0, totalDue - rembourse);
+  const status = statutLabel[credit.statut] ?? credit.statut;
+  const tone: BadgeTone =
+    credit.statut === "en_retard"
+      ? "pending"
+      : credit.statut === "rembourse"
+        ? "valid"
+        : "valid";
 
-function CreditDetails({ credit, onApprove, onReject }: { credit: CooperativeCredit; onApprove: () => void; onReject: () => void }) {
-  const member = findCreditMember(credit);
-  const guarantors = getCreditGuarantors(credit);
-  return <div className="coop-drawer-content coop-credit-detail">
-    <div className="coop-drawer-member"><span className="mw-member-avatar">{member.name.split(" ").map((part) => part[0]).slice(0, 2).join("")}</span><div><strong>{member.name}</strong><span>{member.memberNumber} · {member.phone}</span></div><CooperativeStatus status={credit.status === "Actif" || credit.status === "Soldé" ? "Validé" : credit.status === "En retard" ? "En retard" : credit.status === "Rejeté" ? "Rejeté" : "En attente"} /></div>
-    <section className="coop-drawer-section"><h3>Conditions du crédit</h3><dl className="coop-detail-list"><div><dt>Référence</dt><dd>{credit.reference}</dd></div><div><dt>Montant</dt><dd>{formatCurrency(credit.principal)}</dd></div><div><dt>Taux annuel</dt><dd>{credit.annualRate} %</dd></div><div><dt>Durée</dt><dd>{credit.termMonths} mois</dd></div><div><dt>Objet</dt><dd>{credit.purpose}</dd></div><div><dt>Début du contrat</dt><dd>{credit.startDate ? formatDate(credit.startDate) : "Après approbation"}</dd></div><div><dt>Solde restant</dt><dd>{formatCurrency(credit.remainingBalance)}</dd></div></dl></section>
-    <section className="coop-drawer-section"><h3>Garant(s)</h3>{guarantors.map((guarantor) => <p className="coop-muted-copy" key={guarantor.id}>{guarantor.name} · {guarantor.phone}</p>)}</section>
-    <section className="coop-drawer-section"><h3>Échéancier complet</h3>{credit.installments.length ? <div className="coop-table-scroll coop-schedule-scroll"><table className="mw-table coop-schedule-table"><thead><tr><th>N°</th><th>Échéance</th><th>Capital</th><th>Intérêt</th><th>Total</th><th>Payé</th><th>Statut</th></tr></thead><tbody>{credit.installments.map((item) => <tr key={item.number}><td>{item.number}</td><td>{formatDate(item.dueDate)}</td><td>{formatCurrency(item.principal)}</td><td>{formatCurrency(item.interest)}</td><td>{formatCurrency(item.totalDue)}</td><td>{formatCurrency(item.amountPaid)}</td><td><InstallmentBadge status={item.status} /></td></tr>)}</tbody></table></div> : <p className="coop-muted-copy">L’échéancier sera généré après approbation.</p>}</section>
-    <section className="coop-drawer-section"><h3>Historique</h3><ol className="coop-timeline">{credit.history.map((entry, index) => <li key={`${entry.date}-${entry.label}-${index}`}><span className={`coop-timeline-dot ${index === 0 ? "is-done" : ""}`} /><div><strong>{entry.label}</strong><small>{formatDate(entry.date)} · {entry.detail}</small></div></li>)}</ol></section>
-    {credit.status === "En attente" && <div className="coop-withdrawal-actions"><button className="mw-danger" type="button" onClick={onReject}><IconX aria-hidden="true" />Rejeter</button><button className="mw-primary" type="button" onClick={onApprove}><IconCheck aria-hidden="true" />Approuver</button></div>}
-  </div>;
-}
+  return (
+    <div className="coop-drawer-content coop-credit-detail">
+      <div className="coop-drawer-member">
+        <span className="mw-member-avatar">
+          {credit.membre.nomComplet
+            .split(" ")
+            .map((part) => part[0])
+            .filter(Boolean)
+            .slice(0, 2)
+            .join("")
+            .toUpperCase()}
+        </span>
+        <div>
+          <strong>{credit.membre.nomComplet}</strong>
+          <span>
+            {credit.membre.numeroCompte}
+            {credit.membre.telephone ? ` · ${credit.membre.telephone}` : ""}
+          </span>
+        </div>
+        <StatusBadge label={status} tone={tone} />
+      </div>
 
-function InstallmentBadge({ status }: { status: string }) {
-  const className = status === "Payé" ? "coop-installment--paid" : status === "En retard" ? "coop-installment--late" : status === "Partiel" ? "coop-installment--partial" : "coop-installment--upcoming";
-  return <span className={`coop-installment-badge ${className}`}>{status}</span>;
+      <section className="coop-drawer-section">
+        <h3>Conditions du crédit</h3>
+        <dl className="coop-detail-list">
+          <div>
+            <dt>Référence</dt>
+            <dd>CRD-{credit.id}</dd>
+          </div>
+          <div>
+            <dt>Montant</dt>
+            <dd>{formatCurrency(montant, credit.devise)}</dd>
+          </div>
+          <div>
+            <dt>Taux annuel</dt>
+            <dd>{taux} %</dd>
+          </div>
+          <div>
+            <dt>Durée</dt>
+            <dd>{credit.duree} mois</dd>
+          </div>
+          <div>
+            <dt>Objet</dt>
+            <dd>{credit.description || "—"}</dd>
+          </div>
+          <div>
+            <dt>Début du contrat</dt>
+            <dd>{formatDate(credit.dateDebut)}</dd>
+          </div>
+          <div>
+            <dt>Échéance finale</dt>
+            <dd>{credit.dateEcheance ? formatDate(credit.dateEcheance) : "—"}</dd>
+          </div>
+          <div>
+            <dt>Total dû</dt>
+            <dd>{formatCurrency(totalDue, credit.devise)}</dd>
+          </div>
+          <div>
+            <dt>Déjà remboursé</dt>
+            <dd>{formatCurrency(rembourse, credit.devise)}</dd>
+          </div>
+          <div>
+            <dt>Solde restant</dt>
+            <dd>{formatCurrency(restant, credit.devise)}</dd>
+          </div>
+        </dl>
+      </section>
+
+      <section className="coop-drawer-section">
+        <h3>Remboursements enregistrés</h3>
+        {credit.remboursements.length ? (
+          <div className="coop-table-scroll coop-schedule-scroll">
+            <table className="mw-table coop-schedule-table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Montant</th>
+                  <th>Principal</th>
+                  <th>Intérêts</th>
+                </tr>
+              </thead>
+              <tbody>
+                {credit.remboursements.map((remboursement) => (
+                  <tr key={remboursement.id}>
+                    <td>{formatDate(remboursement.dateRemboursement)}</td>
+                    <td className="coop-amount-cell">
+                      {formatCurrency(
+                        Number(remboursement.montant),
+                        remboursement.devise,
+                      )}
+                    </td>
+                    <td>
+                      {formatCurrency(
+                        Number(remboursement.partPrincipal),
+                        remboursement.devise,
+                      )}
+                    </td>
+                    <td>
+                      {formatCurrency(
+                        Number(remboursement.partInteret),
+                        remboursement.devise,
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="coop-muted-copy">
+            Aucun remboursement enregistré pour ce crédit.
+          </p>
+        )}
+      </section>
+
+      <section className="coop-drawer-section">
+        <h3>Historique</h3>
+        <ol className="coop-timeline">
+          <li>
+            <span className="coop-timeline-dot is-done" />
+            <div>
+              <strong>Crédit créé et décaissé</strong>
+              <small>{formatDate(credit.createdAt)}</small>
+            </div>
+          </li>
+          {credit.derniereOperation && (
+            <li>
+              <span className="coop-timeline-dot is-done" />
+              <div>
+                <strong>Dernière opération</strong>
+                <small>{formatDate(credit.derniereOperation)}</small>
+              </div>
+            </li>
+          )}
+        </ol>
+      </section>
+    </div>
+  );
 }

@@ -2,11 +2,13 @@
 
 import {
   IconArrowDown,
+  IconCheck,
+  IconPrinter,
   IconReceipt,
   IconSearch,
+  IconX,
 } from "@tabler/icons-react";
-import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 
 import { CooperativeDataState } from "@/components/cooperative/CooperativeDataState";
 import { CooperativePagination } from "@/components/cooperative/CooperativePagination";
@@ -19,6 +21,13 @@ import {
 } from "@/components/cooperative/CooperativePrimitives";
 import { useCooperativeDarkTheme } from "@/components/cooperative/CooperativeThemeContext";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   accountConfigs,
   accountSlugs,
   type AccountSlug,
@@ -26,6 +35,7 @@ import {
 import { cooperativeCopy as t } from "@/lib/cooperative-copy";
 import { apiClient } from "@/lib/auth";
 import { downloadReportCsv, downloadReportPdf } from "@/lib/cooperative-report-export";
+import { MWANGAZA_BRAND } from "@/lib/theme-constants";
 
 type DepositRecord = {
   id: number;
@@ -52,7 +62,7 @@ type DepositResponse = {
 const periods = ["Aujourd’hui", "Toutes les périodes", "Ce mois", "30 derniers jours"] as const;
 
 export function meta() {
-  return [{ title: "Dépôts & cotisations — Mwangaza Wetu" }];
+  return [{ title: "Dépôts & Epargnes — Mwangaza Wetu" }];
 }
 
 function accountSlugFor(record: DepositRecord): AccountSlug | null {
@@ -76,6 +86,26 @@ export default function DepositsContributionsRoute() {
   const [period, setPeriod] = useState<(typeof periods)[number]>(periods[2]);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+
+  // Notifications et formulaires
+  const [success, setSuccess] = useState("");
+
+  // Modal Nouveau Dépôt
+  const [createOpen, setCreateOpen] = useState(false);
+  const [compteInput, setCompteInput] = useState("");
+  const [memberCheck, setMemberCheck] = useState<{
+    compte: string;
+    nomComplet: string;
+    typeCompte: string;
+    soldeUSD: number;
+    soldeFC: number;
+  } | null>(null);
+  const [checking, setChecking] = useState(false);
+  const [createBusy, setCreateBusy] = useState(false);
+  const [formError, setFormError] = useState("");
+
+  // Reçu de caisse à imprimer
+  const [receiptTarget, setReceiptTarget] = useState<DepositRecord | null>(null);
 
   async function loadDeposits() {
     setLoading(true);
@@ -157,11 +187,11 @@ export default function DepositsContributionsRoute() {
   ]);
 
   function exportDepositsCsv() {
-    downloadReportCsv("journal-depots-cotisations", depositExportHeaders, depositExportRows);
+    downloadReportCsv("journal-depots-Epargnes", depositExportHeaders, depositExportRows);
   }
 
   async function exportDepositsPdf() {
-    await downloadReportPdf("Journal des dépôts & cotisations · Mwangaza Wetu", "journal-depots-cotisations", depositExportHeaders, depositExportRows);
+    await downloadReportPdf("Journal des dépôts & Epargnes · Mwangaza Wetu", "journal-depots-Epargnes", depositExportHeaders, depositExportRows);
   }
 
   function changeFilter(action: () => void) {
@@ -169,12 +199,126 @@ export default function DepositsContributionsRoute() {
     setPage(1);
   }
 
+  async function verifyMember() {
+    const compte = compteInput.trim();
+    if (!compte) {
+      setFormError("Saisissez le numéro de compte du membre.");
+      return;
+    }
+    setChecking(true);
+    setMemberCheck(null);
+    setFormError("");
+    try {
+      const response = await apiClient.get<{
+        exists: boolean;
+        membre?: { numeroCompte: string; nomComplet: string; statut: string; typeCompte: string };
+      }>(`/membres/by-numero/${encodeURIComponent(compte)}`);
+      const membre = response.data.exists ? response.data.membre : null;
+      if (!membre) {
+        setFormError("Aucun membre trouvé pour ce numéro de compte.");
+        return;
+      }
+      if (membre.statut !== "actif") {
+        setFormError("Ce membre est inactif : opération refusée.");
+        return;
+      }
+      const soldes = await apiClient.get<{ soldeUSD: number; soldeFC: number }>(
+        `/epargnes/soldes/${encodeURIComponent(membre.numeroCompte)}`,
+      );
+      setMemberCheck({
+        compte: membre.numeroCompte,
+        nomComplet: membre.nomComplet,
+        typeCompte: membre.typeCompte || "PRINCIPAL",
+        soldeUSD: Number(soldes.data.soldeUSD || 0),
+        soldeFC: Number(soldes.data.soldeFC || 0),
+      });
+    } catch (error: any) {
+      const message = error?.response?.data?.message;
+      setFormError(
+        Array.isArray(message)
+          ? message.join(" ")
+          : message || "Impossible de vérifier ce compte.",
+      );
+    } finally {
+      setChecking(false);
+    }
+  }
+
+  async function createDeposit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const devise = String(form.get("devise")) as "USD" | "FC";
+    const montant = Number(form.get("montant"));
+    const description = String(form.get("description") || "").trim();
+    const compte = compteInput.trim();
+
+    if (!memberCheck || memberCheck.compte !== compte) {
+      setFormError("Vérifiez d’abord le compte du membre.");
+      return;
+    }
+    if (!(montant > 0)) {
+      setFormError("Indiquez un montant supérieur à zéro.");
+      return;
+    }
+
+    setCreateBusy(true);
+    setFormError("");
+    try {
+      const dateOperation = new Date().toISOString();
+      const payload = {
+        compte,
+        devise,
+        montant,
+        dateOperation,
+        description: description || "Dépôt d'espèces au guichet",
+        typeOperation: "depot",
+        idempotencyKey: crypto.randomUUID(),
+      };
+
+      const response = await apiClient.post<DepositRecord>("/epargnes", payload);
+      setCreateOpen(false);
+      setCompteInput("");
+      const savedMember = memberCheck;
+      setMemberCheck(null);
+      setSuccess(`Dépôt de ${formatCurrency(montant, devise)} enregistré avec succès pour ${savedMember.nomComplet}.`);
+
+      // Préparer le reçu de caisse prêt pour impression
+      const newRecord: DepositRecord = {
+        id: response.data?.id || Date.now(),
+        compte,
+        typeOperation: "depot",
+        devise,
+        montant,
+        dateOperation,
+        description: payload.description,
+        executeParRole: "agent",
+        membre: {
+          id: 0,
+          nomComplet: savedMember.nomComplet,
+          numeroCompte: compte,
+          typeCompte: savedMember.typeCompte,
+        },
+      };
+      setReceiptTarget(newRecord);
+      await loadDeposits();
+    } catch (error: any) {
+      const message = error?.response?.data?.message;
+      setFormError(
+        Array.isArray(message)
+          ? message.join(" ")
+          : message || "Le dépôt n’a pas pu être enregistré.",
+      );
+    } finally {
+      setCreateBusy(false);
+    }
+  }
+
   return (
     <div className="coop-operations-page">
       <div className="coop-page-heading">
         <div>
-          <CooperativeBreadcrumb section="Opérations" current="Dépôts & cotisations" />
-          <h1>Dépôts & cotisations</h1>
+          <CooperativeBreadcrumb section="Opérations" current="Dépôts & Epargnes" />
+          <h1>Dépôts & Epargnes</h1>
           <p>Suivi des dépôts enregistrés dans le journal de la coopérative.</p>
         </div>
         <div className="coop-page-actions coop-export-actions">
@@ -184,11 +328,35 @@ export default function DepositsContributionsRoute() {
           <button className="mw-secondary" type="button" onClick={exportDepositsCsv} disabled={loading || Boolean(loadError) || filtered.length === 0}>
             <IconReceipt aria-hidden="true" /> Exporter CSV
           </button>
-          <Link className="mw-primary" href="/comptes-epargne/principal">
+          {/* Ouvre directement le modal de dépôt sur la page sans redirection */}
+          <button
+            className="mw-primary"
+            type="button"
+            onClick={() => {
+              setCreateOpen(true);
+              setFormError("");
+              setMemberCheck(null);
+              setCompteInput("");
+            }}
+          >
             <IconArrowDown aria-hidden="true" /> Nouveau dépôt
-          </Link>
+          </button>
         </div>
       </div>
+
+      {success && (
+        <div className="coop-inline-success" role="status">
+          <IconCheck aria-hidden="true" />
+          {success}
+          <button
+            type="button"
+            aria-label="Fermer le message"
+            onClick={() => setSuccess("")}
+          >
+            <IconX aria-hidden="true" />
+          </button>
+        </div>
+      )}
 
       <section className="coop-stat-grid" aria-label="Indicateurs réels des dépôts">
         <CooperativeStatCard
@@ -259,6 +427,7 @@ export default function DepositsContributionsRoute() {
                   <th>Montant</th>
                   <th>Date</th>
                   <th>Enregistré par</th>
+                  <th>Action</th>
                 </tr>
               </thead>
               <tbody>
@@ -280,6 +449,17 @@ export default function DepositsContributionsRoute() {
                       <td className="coop-amount-cell">{formatCurrency(Number(record.montant), record.devise)}</td>
                       <td>{formatDate(record.dateOperation)}</td>
                       <td>{actorLabel(record.executeParRole)}</td>
+                      <td>
+                        <button
+                          className="mw-ghost coop-icon-btn"
+                          type="button"
+                          title="Imprimer le reçu de versement"
+                          aria-label={`Imprimer le reçu de dépôt DEP-${record.id}`}
+                          onClick={() => setReceiptTarget(record)}
+                        >
+                          <IconPrinter aria-hidden="true" size={16} />
+                        </button>
+                      </td>
                     </tr>
                   );
                 })}
@@ -299,6 +479,242 @@ export default function DepositsContributionsRoute() {
           nextLabel={t.next}
         />
       </section>
+
+      {/* Modal Nouveau Dépôt Direct */}
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+        <DialogContent
+          data-theme={dark ? "dark" : "light"}
+          className="mw-dialog-content coop-action-dialog coop-operation-dialog"
+        >
+          <DialogHeader>
+            <DialogTitle>Nouveau versement / dépôt</DialogTitle>
+            <DialogDescription>
+              Enregistrez un versement d&apos;espèces sur le compte d&apos;un membre de la coopérative.
+            </DialogDescription>
+          </DialogHeader>
+
+          <form className="coop-operation-form" onSubmit={createDeposit}>
+            <div className="coop-form-field">
+              <label htmlFor="depot-compte">Numéro de compte du membre</label>
+              <span className="coop-form-grid">
+                <input
+                  id="depot-compte"
+                  value={compteInput}
+                  onChange={(event) => {
+                    setCompteInput(event.target.value);
+                    setMemberCheck(null);
+                  }}
+                  placeholder="Ex. MW-PRI-0001"
+                  required
+                />
+                <button
+                  className="mw-secondary"
+                  type="button"
+                  onClick={() => void verifyMember()}
+                  disabled={checking}
+                >
+                  {checking ? "Vérification…" : "Vérifier"}
+                </button>
+              </span>
+            </div>
+
+            {memberCheck && (
+              <div className="coop-credit-eligibility">
+                <span>Membre</span>
+                <strong>{memberCheck.nomComplet}</strong>
+                <span>Section / Type</span>
+                <strong>{memberCheck.typeCompte}</strong>
+                <span>Solde actuel</span>
+                <strong>
+                  {formatCurrency(memberCheck.soldeUSD, "USD")} ·{" "}
+                  {formatCurrency(memberCheck.soldeFC, "FC")}
+                </strong>
+              </div>
+            )}
+
+            <div className="coop-form-grid">
+              <label className="coop-form-field">
+                Montant à verser
+                <input
+                  name="montant"
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  required
+                  placeholder="0.00"
+                />
+              </label>
+              <label className="coop-form-field">
+                Devise
+                <select name="devise" defaultValue="USD" required>
+                  <option value="USD">USD</option>
+                  <option value="FC">FC</option>
+                </select>
+              </label>
+            </div>
+
+            <label className="coop-form-field">
+              Motif / Libellé
+              <textarea
+                name="description"
+                rows={2}
+                placeholder="Ex. Dépôt d'espèces au guichet"
+              />
+            </label>
+
+            {formError && (
+              <p className="coop-form-error" role="alert">
+                {formError}
+              </p>
+            )}
+
+            <div className="coop-form-actions">
+              <button
+                className="mw-secondary"
+                type="button"
+                onClick={() => setCreateOpen(false)}
+              >
+                Annuler
+              </button>
+              <button
+                className="mw-primary"
+                type="submit"
+                disabled={createBusy || !memberCheck}
+              >
+                {createBusy ? "Enregistrement…" : "Valider le versement"}
+              </button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal Reçu de Versement Officiel (Impression) */}
+      <Dialog
+        open={receiptTarget !== null}
+        onOpenChange={(open) => !open && setReceiptTarget(null)}
+      >
+        <DialogContent
+          data-theme={dark ? "dark" : "light"}
+          className="coop-receipt-dialog"
+        >
+          <DialogHeader>
+            <DialogTitle>Bordereau de versement / Dépôt</DialogTitle>
+            <DialogDescription>
+              Reçu officiel de versement pour le membre et la caisse.
+            </DialogDescription>
+          </DialogHeader>
+
+          {receiptTarget && (
+            <div className="coop-print-receipt">
+              <div className="coop-receipt-brand">
+                <div className="coop-receipt-mark">MW</div>
+                <div>
+                  <strong>{MWANGAZA_BRAND.name.toUpperCase()}</strong>
+                  <small>{MWANGAZA_BRAND.subtitle}</small>
+                  <small>{MWANGAZA_BRAND.pillars}</small>
+                </div>
+              </div>
+
+              <div className="coop-receipt-rule" />
+
+              <h3>BORDEREAU DE VERSEMENT D’ESPÈCES</h3>
+
+              <div className="coop-receipt-total" style={{ color: "#16a34a" }}>
+                + {formatCurrency(Number(receiptTarget.montant), receiptTarget.devise)}
+              </div>
+
+              <dl>
+                <div>
+                  <dt>Réf. opération</dt>
+                  <dd><strong>DEP-{receiptTarget.id}</strong></dd>
+                </div>
+                <div>
+                  <dt>Date & Heure</dt>
+                  <dd>{formatDate(receiptTarget.dateOperation)}</dd>
+                </div>
+                <div>
+                  <dt>Compte membre</dt>
+                  <dd><strong>{receiptTarget.compte}</strong></dd>
+                </div>
+                <div>
+                  <dt>Titulaire</dt>
+                  <dd>{receiptTarget.membre?.nomComplet || "Membre"}</dd>
+                </div>
+                <div>
+                  <dt>Montant versé</dt>
+                  <dd>
+                    <strong>{formatCurrency(Number(receiptTarget.montant), receiptTarget.devise)}</strong>
+                  </dd>
+                </div>
+                <div>
+                  <dt>Type d&apos;opération</dt>
+                  <dd>DÉPÔT / VERSEMENT ESPÈCES</dd>
+                </div>
+                <div>
+                  <dt>Motif</dt>
+                  <dd>{receiptTarget.description || "Versement au guichet"}</dd>
+                </div>
+                <div>
+                  <dt>Statut</dt>
+                  <dd><span style={{ color: "#16a34a", fontWeight: 700 }}>VALIDÉ / CRÉDITÉ</span></dd>
+                </div>
+              </dl>
+
+              <div className="coop-receipt-rule" />
+
+              {/* Cadre de double émargement */}
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1fr",
+                  gap: "14px",
+                  marginTop: "12px",
+                  fontSize: "10px",
+                }}
+              >
+                <div style={{ textAlign: "center", border: "1px dashed #cbd5e1", borderRadius: "8px", padding: "8px" }}>
+                  <p style={{ fontWeight: 700, margin: "0 0 24px 0", color: "#334155" }}>
+                    Signature du Déposant
+                  </p>
+                  <small style={{ color: "#64748b", fontSize: "9px" }}>
+                    Bon pour versement
+                  </small>
+                </div>
+                <div style={{ textAlign: "center", border: "1px dashed #cbd5e1", borderRadius: "8px", padding: "8px" }}>
+                  <p style={{ fontWeight: 700, margin: "0 0 24px 0", color: "#334155" }}>
+                    Visa du Guichetier
+                  </p>
+                  <small style={{ color: "#64748b", fontSize: "9px" }}>
+                    Cachet de la caisse
+                  </small>
+                </div>
+              </div>
+
+              <p style={{ marginTop: "10px", fontSize: "9px", color: "#64748b" }}>
+                Conservez ce reçu. Document certifié conforme émis par {MWANGAZA_BRAND.name}.
+              </p>
+            </div>
+          )}
+
+          <div className="coop-form-actions">
+            <button
+              className="mw-secondary"
+              type="button"
+              onClick={() => setReceiptTarget(null)}
+            >
+              Fermer
+            </button>
+            <button
+              className="mw-primary"
+              type="button"
+              onClick={() => window.print()}
+            >
+              <IconPrinter aria-hidden="true" />
+              Imprimer le bordereau
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

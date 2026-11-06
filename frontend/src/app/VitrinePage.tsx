@@ -45,6 +45,7 @@ import {
 ───────────────────────────────────────────── */
 type Lang = 'FR' | 'EN';
 type Segment = 'particuliers' | 'entrepreneurs' | 'diaspora';
+type AccountType = 'all' | 'daily' | 'commerce' | 'projects' | 'health' | 'diaspora';
 type SimType = 'epargne' | 'credit';
 
 interface AccountFormula {
@@ -220,6 +221,7 @@ export default function VitrinePage() {
   const [lang, setLang] = useState<Lang>('FR');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [activeSegment, setActiveSegment] = useState<Segment>('particuliers');
+  const [selectedAccountType, setSelectedAccountType] = useState<AccountType>('all');
   const [modalOpen, setModalOpen] = useState(false);
   const [showSecurityAlert, setShowSecurityAlert] = useState(true);
   const [currentSlide, setCurrentSlide] = useState(0);
@@ -277,16 +279,19 @@ export default function VitrinePage() {
     }
   }, [simType, amount, durationMonths, currency]);
 
-  // Filtrage des formules selon le segment
+  // Filtrage des formules selon le type de compte choisi
   const filteredAccounts = useMemo(() => {
-    if (activeSegment === 'entrepreneurs') {
-      return accountsList.filter((a) => a.segment === 'entrepreneurs' || a.slug === 'principal');
-    }
-    if (activeSegment === 'diaspora') {
-      return accountsList.filter((a) => a.slug === 'nyumba' || a.slug === 'principal' || a.slug === 'mutoto');
-    }
-    return accountsList;
-  }, [activeSegment]);
+    const slugsByType: Record<AccountType, string[] | null> = {
+      all: null,
+      daily: ['principal'],
+      commerce: ['biashara'],
+      projects: ['nyumba', 'kelasi', 'mutoto'],
+      health: ['hopital'],
+      diaspora: ['principal', 'nyumba', 'mutoto'],
+    };
+    const slugs = slugsByType[selectedAccountType];
+    return slugs ? accountsList.filter((account) => slugs.includes(account.slug)) : accountsList;
+  }, [selectedAccountType]);
 
   return (
     <div className="bk-portal">
@@ -297,21 +302,21 @@ export default function VitrinePage() {
             <button
               type="button"
               className={`bk-seg-tab-new ${activeSegment === 'particuliers' ? 'active' : ''}`}
-              onClick={() => setActiveSegment('particuliers')}
+              onClick={() => { setActiveSegment('particuliers'); setSelectedAccountType('all'); }}
             >
               Particuliers
             </button>
             <button
               type="button"
               className={`bk-seg-tab-new ${activeSegment === 'entrepreneurs' ? 'active' : ''}`}
-              onClick={() => setActiveSegment('entrepreneurs')}
+              onClick={() => { setActiveSegment('entrepreneurs'); setSelectedAccountType('commerce'); }}
             >
               Entrepreneurs
             </button>
             <button
               type="button"
               className={`bk-seg-tab-new ${activeSegment === 'diaspora' ? 'active' : ''}`}
-              onClick={() => setActiveSegment('diaspora')}
+              onClick={() => { setActiveSegment('diaspora'); setSelectedAccountType('diaspora'); }}
             >
               Diaspora
             </button>
@@ -693,98 +698,101 @@ export default function VitrinePage() {
       </div>
 
       {/* ─────────────────────────────────────────────────────────────
-          2. SECTION DES FORMULES & COMPTES CONCRETS (Style UI/UX Pro)
+          SECTION DES FORMULES & COMPTES CONCRETS
          ───────────────────────────────────────────────────────────── */}
-      <section className="bk-section bk-products-section" id="services">
+      <section className="bk-section bk-products-section" id="services" aria-labelledby="accounts-title">
         <div className="bk-container">
           <div className="bk-section-header text-center">
             <div className="bk-kicker">FORMULES DE COMPTES &amp; CRÉDITS ADAPTÉS</div>
-            <h2 className="bk-section-title">
-              Des solutions concrètes pour sécuriser et faire grandir votre argent
-            </h2>
-            <p className="bk-section-sub">
-              Chaque compte répond à un besoin réel de votre quotidien : financer votre commerce, sécuriser votre loyer, garantir la scolarité de vos enfants ou épargner en toute liberté.
-            </p>
-
-            {/* Onglets de filtrage par profil (Synchronisés avec le plateau flottant) */}
-            <div className="bk-category-tabs">
-              <button
-                type="button"
-                className={`bk-cat-tab ${activeSegment === 'particuliers' ? 'active' : ''}`}
-                onClick={() => setActiveSegment('particuliers')}
-              >
-                <Users size={16} />
-                <span>Particuliers &amp; Familles</span>
-              </button>
-              <button
-                type="button"
-                className={`bk-cat-tab ${activeSegment === 'entrepreneurs' ? 'active' : ''}`}
-                onClick={() => setActiveSegment('entrepreneurs')}
-              >
-                <Store size={16} />
-                <span>Commerçants &amp; PME</span>
-              </button>
-              <button
-                type="button"
-                className={`bk-cat-tab ${activeSegment === 'diaspora' ? 'active' : ''}`}
-                onClick={() => setActiveSegment('diaspora')}
-              >
-                <Landmark size={16} />
-                <span>Diaspora &amp; Projets</span>
-              </button>
-            </div>
+            <h2 id="accounts-title" className="bk-section-title">Des solutions concrètes pour vos projets</h2>
+            <p className="bk-section-sub">Choisissez un type de compte pour découvrir les formules adaptées à vos besoins.</p>
           </div>
 
-          {/* Grille des 6 Comptes Phares Mwangaza */}
-          <div className="bk-cards-grid">
-            {filteredAccounts.map((acc) => {
-              const IconComp = acc.icon;
-              return (
-                <div className="bk-product-card" key={acc.slug}>
-                  <div className="bk-card-accent" style={{ background: acc.color }} />
-                  <div className="bk-prod-top">
-                    <div
-                      className="bk-prod-icon"
-                      style={{ background: `${acc.color}15`, color: acc.color }}
-                    >
-                      <IconComp size={26} />
+          <div className="bk-products-layout">
+            <aside className="bk-account-types" aria-label="Types de comptes">
+              <div className="bk-account-types-heading">
+                <span>VOTRE BESOIN</span>
+                <h3>Quel type de compte recherchez-vous&nbsp;?</h3>
+              </div>
+              <div className="bk-account-type-list">
+                <button type="button" className={`bk-account-type ${selectedAccountType === 'all' ? 'active' : ''}`} aria-pressed={selectedAccountType === 'all'} onClick={() => setSelectedAccountType('all')}>
+                  <span className="bk-account-type-icon"><Wallet size={18} /></span><span className="bk-account-type-label">Toutes les formules</span><ChevronRight size={17} />
+                </button>
+                <button type="button" className={`bk-account-type ${selectedAccountType === 'daily' ? 'active' : ''}`} aria-pressed={selectedAccountType === 'daily'} onClick={() => setSelectedAccountType('daily')}>
+                  <span className="bk-account-type-icon"><CreditCard size={18} /></span><span className="bk-account-type-label">Compte courant</span><ChevronRight size={17} />
+                </button>
+                <button type="button" className={`bk-account-type ${selectedAccountType === 'commerce' ? 'active' : ''}`} aria-pressed={selectedAccountType === 'commerce'} onClick={() => setSelectedAccountType('commerce')}>
+                  <span className="bk-account-type-icon"><Store size={18} /></span><span className="bk-account-type-label">Commerce &amp; crédit</span><ChevronRight size={17} />
+                </button>
+                <button type="button" className={`bk-account-type ${selectedAccountType === 'projects' ? 'active' : ''}`} aria-pressed={selectedAccountType === 'projects'} onClick={() => setSelectedAccountType('projects')}>
+                  <span className="bk-account-type-icon"><Target size={18} /></span><span className="bk-account-type-label">Épargne &amp; projets</span><ChevronRight size={17} />
+                </button>
+                <button type="button" className={`bk-account-type ${selectedAccountType === 'health' ? 'active' : ''}`} aria-pressed={selectedAccountType === 'health'} onClick={() => setSelectedAccountType('health')}>
+                  <span className="bk-account-type-icon"><HeartPulse size={18} /></span><span className="bk-account-type-label">Santé &amp; urgences</span><ChevronRight size={17} />
+                </button>
+                <button type="button" className={`bk-account-type ${selectedAccountType === 'diaspora' ? 'active' : ''}`} aria-pressed={selectedAccountType === 'diaspora'} onClick={() => setSelectedAccountType('diaspora')}>
+                  <span className="bk-account-type-icon"><Landmark size={18} /></span><span className="bk-account-type-label">Diaspora</span><ChevronRight size={17} />
+                </button>
+              </div>
+              <p className="bk-account-types-note">Sélectionnez une catégorie pour découvrir les offres adaptées.</p>
+            </aside>
+
+            <div className="bk-formulas-panel">
+              <div className="bk-formulas-panel-heading">
+                <div><span>NOS FORMULES</span><h3>Découvrez les offres</h3></div>
+                <span className="bk-formula-count">{filteredAccounts.length} formule{filteredAccounts.length > 1 ? 's' : ''}</span>
+              </div>
+              <div className="bk-cards-grid" aria-live="polite">
+                {filteredAccounts.map((acc) => {
+                  const IconComp = acc.icon;
+                  return (
+                    <div className="bk-product-card" key={acc.slug}>
+                      <div className="bk-card-accent" style={{ background: acc.color }} />
+                      <div className="bk-prod-top">
+                        <div
+                          className="bk-prod-icon"
+                          style={{ background: `${acc.color}15`, color: acc.color }}
+                        >
+                          <IconComp size={26} />
+                        </div>
+                        <span
+                          className="bk-prod-tag"
+                          style={{ color: acc.color, borderColor: `${acc.color}40`, background: `${acc.color}08` }}
+                        >
+                          {acc.rateBonus}
+                        </span>
+                      </div>
+
+                      <h3 className="bk-prod-name">{acc.name}</h3>
+                      <div className="bk-prod-sub">{acc.sub}</div>
+                      <p className="bk-prod-desc">{acc.desc}</p>
+
+                      {/* 3 Avantages clés concrets avec checkmarks */}
+                      <ul className="bk-prod-features">
+                        {acc.features.map((feat, fIdx) => (
+                          <li key={fIdx}>
+                            <CheckCircle2 size={16} className="text-emerald-500 flex-shrink-0" />
+                            <span>{feat}</span>
+                          </li>
+                        ))}
+                      </ul>
+
+                      <div className="bk-prod-action">
+                        <button
+                          type="button"
+                          onClick={() => setModalOpen(true)}
+                          className="bk-btn-subscribe"
+                          style={{ '--accent-color': acc.color } as React.CSSProperties}
+                        >
+                          <span>Souscrire à ce compte</span>
+                          <ArrowRight size={16} />
+                        </button>
+                      </div>
                     </div>
-                    <span
-                      className="bk-prod-tag"
-                      style={{ color: acc.color, borderColor: `${acc.color}40`, background: `${acc.color}08` }}
-                    >
-                      {acc.rateBonus}
-                    </span>
-                  </div>
-
-                  <h3 className="bk-prod-name">{acc.name}</h3>
-                  <div className="bk-prod-sub">{acc.sub}</div>
-                  <p className="bk-prod-desc">{acc.desc}</p>
-
-                  {/* 3 Avantages clés concrets avec checkmarks */}
-                  <ul className="bk-prod-features">
-                    {acc.features.map((feat, fIdx) => (
-                      <li key={fIdx}>
-                        <CheckCircle2 size={16} className="text-emerald-500 flex-shrink-0" />
-                        <span>{feat}</span>
-                      </li>
-                    ))}
-                  </ul>
-
-                  <div className="bk-prod-action">
-                    <button
-                      type="button"
-                      onClick={() => setModalOpen(true)}
-                      className="bk-btn-subscribe"
-                      style={{ '--accent-color': acc.color } as React.CSSProperties}
-                    >
-                      <span>Souscrire à ce compte</span>
-                      <ArrowRight size={16} />
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
+                  );
+                })}
+              </div>
+            </div>
           </div>
 
           {/* Bannière de Réassurance & Orientation en bas de section */}
@@ -937,7 +945,7 @@ export default function VitrinePage() {
                       <strong className="text-emerald-600">+50.00 $</strong>
                     </div>
                     <div className="bk-history-row">
-                      <span>Cotisation Nyumba</span>
+                      <span>Epargne Nyumba</span>
                       <strong className="text-emerald-600">+100.00 $</strong>
                     </div>
                   </div>
@@ -985,7 +993,7 @@ export default function VitrinePage() {
               </div>
               <h3>Réseau d’Agents Délégués</h3>
               <p className="bk-contact-desc">
-                Des agents itinérants équipés de terminaux sécurisés collectent vos cotisations sur votre lieu de travail ou commerce.
+                Des agents itinérants équipés de terminaux sécurisés collectent vos Epargnes sur votre lieu de travail ou commerce.
               </p>
               <div className="bk-contact-badge">
                 Vérification d’identité par badge QR officiel

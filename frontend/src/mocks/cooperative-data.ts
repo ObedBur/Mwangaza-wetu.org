@@ -4,7 +4,7 @@ import {
   type AccountSlug,
 } from "@/lib/account-config";
 
-export type MemberStatus = "Actif" | "En retard" | "Suspendu";
+export type MemberStatus = "Actif" | "Inactif" | "En retard" | "Suspendu";
 export type OperationStatus = "Validé" | "En attente" | "Rejeté";
 export type OperationType = "Dépôt" | "Retrait" | "Intérêt";
 

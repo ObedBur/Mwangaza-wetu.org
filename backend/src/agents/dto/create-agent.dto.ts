@@ -50,8 +50,8 @@ export class CreateAgentDto {
   devise?: Devise;
 
   @IsString()
-  @IsOptional()
-  userId?: string;
+  @IsNotEmpty()
+  userId: string;
 
   @IsBoolean()
   @IsOptional()

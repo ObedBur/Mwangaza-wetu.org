@@ -38,11 +38,19 @@ export class MembersController {
     @Query('page') page?: string,
     @Query('pageSize') pageSize?: string,
     @Query('userId') userId?: string,
+    @Query('search') search?: string,
+    @Query('status') status?: string,
+    @Query('account') account?: string,
+    @Query('sort') sort?: string,
   ) {
     return this.membersService.findAll({
       page: page ? parseInt(page) : 1,
       pageSize: pageSize ? parseInt(pageSize) : 10,
       userId,
+      search,
+      status,
+      account,
+      sort,
     });
   }
 

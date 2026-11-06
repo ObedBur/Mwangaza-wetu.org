@@ -12,9 +12,17 @@ export class PrismaService
   constructor(config: ConfigService) {
     const connectionString = config.get<string>('DATABASE_URL');
     const isNeon = connectionString?.includes('neon.tech');
+    const connectionUrl = connectionString ? new URL(connectionString) : undefined;
+
+    if (
+      connectionUrl?.searchParams.get('sslmode') === 'require' &&
+      !connectionUrl.searchParams.has('uselibpqcompat')
+    ) {
+      connectionUrl.searchParams.set('uselibpqcompat', 'true');
+    }
 
     const pool = new Pool({
-      connectionString,
+      connectionString: connectionUrl?.toString(),
       ssl: isNeon ? { rejectUnauthorized: false } : false,
     });
     const adapter = new PrismaPg(pool);

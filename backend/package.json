@@ -21,7 +21,8 @@
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev --name init_migration",
-    "prisma:studio": "prisma studio"
+    "prisma:studio": "prisma studio",
+    "admin:send-welcome": "bun run prisma/send-admin-welcome.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",
@@ -67,7 +68,7 @@
     "globals": "^16.0.0",
     "jest": "^30.0.0",
     "prettier": "^3.4.2",
-    "prisma": "7.4.2",
+    "prisma": "^7.10.0",
     "source-map-support": "^0.5.21",
     "supertest": "^7.0.0",
     "ts-jest": "^29.2.5",

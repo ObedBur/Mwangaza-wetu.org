@@ -268,6 +268,11 @@ export class WithdrawalsService {
     if (!membre || membre.statut !== 'actif') {
       throw new NotFoundException('Compte membre introuvable ou inactif');
     }
+    if (!membre.userId) {
+      throw new ForbiddenException(
+        "Retrait bloqué : l'empreinte du membre doit d'abord être capturée au bureau.",
+      );
+    }
 
     // Le scan est lancé par le backend. Le client ne peut pas fournir un ID biométrique arbitraire.
     let zkUserId: string;
@@ -312,6 +317,11 @@ export class WithdrawalsService {
       });
       if (!membreCourant || membreCourant.statut !== 'actif') {
         throw new NotFoundException('Compte membre introuvable ou inactif');
+      }
+      if (!membreCourant.userId) {
+        throw new ForbiddenException(
+          "Retrait bloqué : l'empreinte du membre doit d'abord être capturée au bureau.",
+        );
       }
       if (
         membreCourant.userId !== zkUserId &&
@@ -552,6 +562,18 @@ export class WithdrawalsService {
     devise: Devise,
     agentId: number,
   ) {
+    const membre = await this.prisma.membre.findUnique({
+      where: { numeroCompte: compte },
+      select: { userId: true, statut: true },
+    });
+    if (!membre || membre.statut !== 'actif') {
+      throw new NotFoundException('Compte membre introuvable ou inactif');
+    }
+    if (!membre.userId) {
+      throw new ForbiddenException(
+        "Retrait bloqué : l'empreinte du membre doit d'abord être capturée au bureau.",
+      );
+    }
     const result = await this.verifyLimites(compte, montant, devise);
     const caisse = await this.prisma.caisseAgent.findUnique({
       where: { agentId_devise: { agentId, devise } },

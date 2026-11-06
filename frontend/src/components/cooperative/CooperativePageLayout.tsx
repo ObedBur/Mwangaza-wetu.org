@@ -19,7 +19,6 @@ import { CooperativeThemeContext } from "@/components/cooperative/CooperativeThe
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { accountConfigs, type AccountSlug } from "@/lib/account-config";
 import { cooperativeCopy as t } from "@/lib/cooperative-copy";
-import { mockMembers } from "@/mocks/cooperative-data";
 import { apiClient, getAuthUser, logout } from "@/lib/auth";
 
 type DepositNoticeSummary = {
@@ -57,6 +56,7 @@ export function CooperativePageLayout({
   const [profileOpen, setProfileOpen] = useState(false);
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [membersCount, setMembersCount] = useState<number | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [depositNotice, setDepositNotice] = useState<DepositNoticeSummary>({ count: 0, cursor: "", cursorId: 0, recent: [] });
   const isAdmin = authUser?.role === "admin" || authUser?.role === "superadmin";
@@ -75,6 +75,25 @@ export function CooperativePageLayout({
         ? "Administrateur"
         : "Utilisateur";
   const depositCursorKey = authUser ? `mwangaza_deposit_notice_cursor_${authUser.id}` : "";
+
+  useEffect(() => {
+    if (!isAdmin) {
+      setMembersCount(null);
+      return;
+    }
+    let active = true;
+    const refreshMembersCount = () => {
+      apiClient.get<{ total: number }>("/membres/stats")
+        .then((response) => { if (active) setMembersCount(response.data.total); })
+        .catch(() => { if (active) setMembersCount(null); });
+    };
+    refreshMembersCount();
+    window.addEventListener("mwangaza:members-updated", refreshMembersCount);
+    return () => {
+      active = false;
+      window.removeEventListener("mwangaza:members-updated", refreshMembersCount);
+    };
+  }, [isAdmin]);
 
   useEffect(() => {
     if (!isAdmin || !depositCursorKey) return;
@@ -142,7 +161,7 @@ export function CooperativePageLayout({
       : pathname === "/membres"
         ? "Membres"
         : pathname === "/operations/depots-cotisations"
-          ? "Dépôts & cotisations"
+          ? "Dépôts & Epargnes"
           : pathname === "/operations/retraits"
             ? "Retraits"
             : pathname === "/operations/credits"
@@ -155,14 +174,14 @@ export function CooperativePageLayout({
                     ? "Agents"
                     : pathname === "/compte-agent"
                       ? "Sécurité du compte"
-                  : activeOverride;
+                      : activeOverride;
 
   return (
     <CooperativeThemeContext.Provider value={dark}>
       <div className="mw-app" data-theme={dark ? "dark" : "light"}>
         <CooperativeSidebar
           active={pageActive}
-          membersCount={1248}
+          membersCount={membersCount}
           t={roleCopy}
           onNavigate={(label) => setActiveOverride(label)}
           isCollapsed={isSidebarCollapsed}
@@ -309,7 +328,7 @@ export function CooperativePageLayout({
             <SheetTitle className="sr-only">Navigation</SheetTitle>
             <CooperativeSidebar
               active={pageActive}
-              membersCount={mockMembers.length}
+              membersCount={membersCount}
               t={sidebarCopy}
               close={() => setMobileOpen(false)}
               onNavigate={(label) => setActiveOverride(label)}

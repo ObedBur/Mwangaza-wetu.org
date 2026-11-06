@@ -49,7 +49,7 @@ export class BalancesService {
       usd: Math.round(garantieUSD * 100) / 100,
     };
   }
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService) { }
 
   async getTotal() {
     const excludeSystem = [
@@ -116,7 +116,7 @@ export class BalancesService {
           (sum, row) =>
             sum +
             Number(row._sum.montant || 0) *
-              (row.typeOperation === TypeOperationEpargne.depot ? 1 : -1),
+            (row.typeOperation === TypeOperationEpargne.depot ? 1 : -1),
           0,
         );
 
@@ -402,7 +402,7 @@ export class BalancesService {
     });
 
     const typesRevenu = await this.prisma.revenuType.findMany();
-    const [activeProjectsCount, activityGroups, creditsForKpis] = await Promise.all([
+    const [activeProjectsCount, activityGroups, creditsForKpis, activeDats, rawComptesEpargne, epargnesByType, agentsWithCaisses] = await Promise.all([
       this.prisma.projet.count({
         where: { statut: StatutProjet.EN_COURS },
       }),
@@ -427,22 +427,133 @@ export class BalancesService {
           montantRembourse: true,
           tauxInteret: true,
           devise: true,
+          statut: true,
+          dateEcheance: true,
         },
+      }),
+      this.prisma.dat.findMany({
+        where: { statut: 'OUVERT' },
+        select: { capital: true, devise: true, gain: true },
+      }),
+      this.prisma.compteEpargne.groupBy({
+        by: ['typeCompte'],
+        where: {
+          NOT: [
+            { typeCompte: 'SYSTEME' },
+            { numeroCompte: { contains: 'SECTION-0000' } },
+          ],
+        },
+        _sum: { solde: true },
+        _count: { _all: true },
+      }),
+      this.prisma.epargne.groupBy({
+        by: ['typeCompte', 'devise', 'typeOperation'],
+        where: {
+          NOT: [
+            { compte: { contains: 'REVENUS' } },
+            { compte: { contains: 'SECTION-0000' } },
+            { compte: { contains: 'CREDITS' } },
+            { compte: { contains: 'TRESORERIE' } },
+          ],
+        },
+        _sum: { montant: true },
+      }),
+      this.prisma.agent.findMany({
+        where: { actif: true },
+        select: {
+          id: true,
+          nom: true,
+          guichetAssigne: true,
+          actif: true,
+          caisses: {
+            select: { devise: true, solde: true },
+          },
+        },
+        orderBy: { guichetAssigne: 'asc' },
       }),
     ]);
 
     const activeCreditBalance = { usd: 0, fc: 0 };
+    const overdueCreditBalance = { usd: 0, fc: 0 };
+    let overdueCreditsCount = 0;
+    const now = new Date();
     let totalDue = 0;
     let totalPaid = 0;
+
     for (const credit of creditsForKpis) {
       const principal = Number(credit.montant);
       const paid = Number(credit.montantRembourse);
       const due = principal * (1 + Number(credit.tauxInteret) / 100);
+      const remaining = Math.max(0, due - paid);
       const currencyKey = credit.devise === Devise.USD ? 'usd' : 'fc';
-      activeCreditBalance[currencyKey] += Math.max(0, due - paid);
+      activeCreditBalance[currencyKey] += remaining;
       totalDue += due;
       totalPaid += paid;
+
+      const isLate =
+        credit.statut === StatutCredit.en_retard ||
+        (credit.dateEcheance && new Date(credit.dateEcheance) < now && remaining > 0);
+      if (isLate) {
+        overdueCreditsCount++;
+        overdueCreditBalance[currencyKey] += remaining;
+      }
     }
+
+    const datStats = {
+      activeCount: activeDats.length,
+      totalCapitalUSD: activeDats
+        .filter((d) => d.devise === Devise.USD)
+        .reduce((sum, d) => sum + Number(d.capital), 0),
+      totalCapitalFC: activeDats
+        .filter((d) => d.devise === Devise.FC)
+        .reduce((sum, d) => sum + Number(d.capital), 0),
+    };
+
+    const standardTypes = ['PRINCIPAL', 'KELASI', 'NYUMBA', 'HOPITAL', 'MUTOTO', 'BIASHARA'];
+    const savingsByType = standardTypes.map((typeKey) => {
+      const getSumForType = (dev: Devise) => {
+        const depots =
+          epargnesByType.find(
+            (e) =>
+              (e.typeCompte || 'PRINCIPAL').toUpperCase() === typeKey &&
+              e.devise === dev &&
+              e.typeOperation === TypeOperationEpargne.depot,
+          )?._sum.montant || 0;
+        const retraits =
+          epargnesByType.find(
+            (e) =>
+              (e.typeCompte || 'PRINCIPAL').toUpperCase() === typeKey &&
+              e.devise === dev &&
+              e.typeOperation === TypeOperationEpargne.retrait,
+          )?._sum.montant || 0;
+        return Math.max(0, Number(depots) - Number(retraits));
+      };
+
+      const accountGroup = rawComptesEpargne.find(
+        (c) => c.typeCompte.toUpperCase() === typeKey,
+      );
+      return {
+        typeCompte: typeKey,
+        totalUSD: getSumForType(Devise.USD),
+        totalFC: getSumForType(Devise.FC),
+        totalAccounts: accountGroup?._count._all || 0,
+      };
+    });
+
+    const agentsCaisses = agentsWithCaisses.map((agent) => ({
+      id: agent.id,
+      nom: agent.nom,
+      guichetAssigne: agent.guichetAssigne,
+      actif: agent.actif,
+      soldes: {
+        usd: Number(
+          agent.caisses.find((c) => c.devise === Devise.USD)?.solde || 0,
+        ),
+        fc: Number(
+          agent.caisses.find((c) => c.devise === Devise.FC)?.solde || 0,
+        ),
+      },
+    }));
 
     const revenusDetails = typesRevenu.map((tr) => {
       const fc =
@@ -491,12 +602,11 @@ export class BalancesService {
           },
         }),
         activeCreditBalance,
+        overdueCreditsCount,
+        overdueCreditBalance,
         repaymentRate:
           totalDue > 0 ? Math.min(100, Math.round((totalPaid / totalDue) * 100)) : 0,
         activeProjectsCount,
-        overdueCreditsCount: await this.prisma.credit.count({
-          where: { statut: 'en_retard' },
-        }),
         totalMembers: await this.prisma.membre.count({
           where: {
             NOT: {
@@ -521,8 +631,11 @@ export class BalancesService {
             },
           },
         }),
+        datStats,
       },
       revenusDetails,
+      savingsByType,
+      agentsCaisses,
       activityDistribution: activityGroups.map(({ activite, _count }) => ({
         activite: activite || 'Non renseigné',
         total: _count._all,
@@ -578,7 +691,7 @@ export class BalancesService {
       ...savings.map((row) => ({
         id: `epargne-${row.id}`,
         memberName: row.membre.nomComplet,
-        type: row.typeOperation === 'depot' ? 'Cotisation' : 'Retrait',
+        type: row.typeOperation === 'depot' ? 'Epargne' : 'Retrait',
         amount: Number(row.montant),
         currency: row.devise,
         date: row.dateOperation,
@@ -632,12 +745,25 @@ export class BalancesService {
     twelveMonthsAgo.setDate(1);
     twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 11);
 
-    const [epargnes, credits] = await Promise.all([
+    const [epargnes, retraits, credits] = await Promise.all([
       this.prisma.epargne.findMany({
         where: {
           dateOperation: { gte: twelveMonthsAgo },
           typeOperation: TypeOperationEpargne.depot,
           remboursementId: null,
+          NOT: [
+            { compte: { contains: 'SECTION-0000' } },
+            { compte: { contains: 'REVENUS' } },
+            { compte: { contains: 'CREDITS' } },
+            { compte: { contains: 'TRESORERIE' } },
+          ],
+        },
+        select: { dateOperation: true, montant: true, devise: true },
+      }),
+      this.prisma.retrait.findMany({
+        where: {
+          dateOperation: { gte: twelveMonthsAgo },
+          statut: 'COMPLETED',
           NOT: [
             { compte: { contains: 'SECTION-0000' } },
             { compte: { contains: 'REVENUS' } },
@@ -665,17 +791,26 @@ export class BalancesService {
       const filtered = epargnes.filter((e) =>
         e.dateOperation.toISOString().startsWith(month),
       );
+      const filteredRetraits = retraits.filter((r) =>
+        r.dateOperation.toISOString().startsWith(month),
+      );
       return {
         month,
         depotsUSD: filtered
           .filter((e) => e.devise === Devise.USD)
           .reduce((sum, e) => sum + Number(e.montant), 0),
+        retraitsUSD: filteredRetraits
+          .filter((r) => r.devise === Devise.USD)
+          .reduce((sum, r) => sum + Number(r.montant), 0),
         creditsUSD: credits
           .filter((c) => c.devise === Devise.USD && c.dateDebut.toISOString().startsWith(month))
           .reduce((sum, c) => sum + Number(c.montant), 0),
         depotsFC: filtered
           .filter((e) => e.devise === Devise.FC)
           .reduce((sum, e) => sum + Number(e.montant), 0),
+        retraitsFC: filteredRetraits
+          .filter((r) => r.devise === Devise.FC)
+          .reduce((sum, r) => sum + Number(r.montant), 0),
         creditsFC: credits
           .filter((c) => c.devise === Devise.FC && c.dateDebut.toISOString().startsWith(month))
           .reduce((sum, c) => sum + Number(c.montant), 0),
@@ -687,7 +822,7 @@ export class BalancesService {
     const ninetyDaysAgo = new Date();
     ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
 
-    const [epargnes, credits, remboursements] = await Promise.all([
+    const [epargnes, retraits, credits, remboursements] = await Promise.all([
       this.prisma.epargne.findMany({
         where: {
           dateOperation: { gte: ninetyDaysAgo },
@@ -704,6 +839,23 @@ export class BalancesService {
           dateOperation: true,
           montant: true,
           typeOperation: true,
+          devise: true,
+        },
+      }),
+      this.prisma.retrait.findMany({
+        where: {
+          dateOperation: { gte: ninetyDaysAgo },
+          statut: 'COMPLETED',
+          NOT: [
+            { compte: { contains: 'SECTION-0000' } },
+            { compte: { contains: 'REVENUS' } },
+            { compte: { contains: 'CREDITS' } },
+            { compte: { contains: 'TRESORERIE' } },
+          ],
+        },
+        select: {
+          dateOperation: true,
+          montant: true,
           devise: true,
         },
       }),
@@ -731,6 +883,9 @@ export class BalancesService {
       const dayEpargnes = epargnes.filter((e) =>
         e.dateOperation.toISOString().startsWith(dateStr),
       );
+      const dayRetraits = retraits.filter((r) =>
+        r.dateOperation.toISOString().startsWith(dateStr),
+      );
       const dayCredits = credits.filter((c) =>
         c.dateDebut.toISOString().startsWith(dateStr),
       );
@@ -743,12 +898,18 @@ export class BalancesService {
         epargneUSD: dayEpargnes
           .filter((e) => e.devise === Devise.USD)
           .reduce((sum, e) => sum + Number(e.montant), 0),
+        retraitUSD: dayRetraits
+          .filter((r) => r.devise === Devise.USD)
+          .reduce((sum, r) => sum + Number(r.montant), 0),
         creditUSD: dayCredits
           .filter((c) => c.devise === 'USD')
           .reduce((sum, c) => sum + Number(c.montant), 0),
         epargneFC: dayEpargnes
           .filter((e) => e.devise === Devise.FC)
           .reduce((sum, e) => sum + Number(e.montant), 0),
+        retraitFC: dayRetraits
+          .filter((r) => r.devise === Devise.FC)
+          .reduce((sum, r) => sum + Number(r.montant), 0),
         creditFC: dayCredits
           .filter((c) => c.devise === 'FC')
           .reduce((sum, c) => sum + Number(c.montant), 0),
@@ -796,11 +957,11 @@ export class BalancesService {
     const data = comptes.map((c) => {
       const initials = c.membre?.nomComplet
         ? c.membre.nomComplet
-            .split(' ')
-            .map((n) => n[0])
-            .join('')
-            .toUpperCase()
-            .substring(0, 2)
+          .split(' ')
+          .map((n) => n[0])
+          .join('')
+          .toUpperCase()
+          .substring(0, 2)
         : '??';
 
       return {

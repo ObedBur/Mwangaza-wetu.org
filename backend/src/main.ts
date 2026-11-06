@@ -21,12 +21,18 @@ async function bootstrap() {
   // Pas de setGlobalPrefix car les contrôleurs utilisent déjà 'api/' dans leur décorateur
   // Ex: @Controller('api/membres'), @Controller('api/auth'), etc.
 
+  const envOrigins = (process.env.FRONTEND_URL || 'http://localhost:5000')
+    .split(',')
+    .map((origin) => origin.trim().replace(/^["']|["']$/g, ''))
+    .filter(Boolean);
+
+  if (!envOrigins.includes('http://localhost:5000')) {
+    envOrigins.push('http://localhost:5000');
+  }
+
   // Activer CORS pour permettre les requêtes depuis le frontend Next.js
   app.enableCors({
-    origin: (process.env.FRONTEND_URL || 'http://localhost:5000')
-      .split(',')
-      .map((origin) => origin.trim())
-      .filter(Boolean),
+    origin: envOrigins,
     credentials: true, // Nécessaire pour envoyer les cookies d'authentification
   });
 

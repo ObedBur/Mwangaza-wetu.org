@@ -129,26 +129,95 @@ export class CreditsService {
     const credits = await this.prisma.credit.findMany({
       where: {
         statut: { in: [StatutCredit.actif, StatutCredit.en_retard] },
-        dateEcheance: { gte: from, lte: until },
+        dateEcheance: { lte: until },
       },
       orderBy: { dateEcheance: 'asc' },
-      take: limit,
-      include: { membre: { select: { nomComplet: true } } },
+      take: limit * 2,
+      include: {
+        membre: {
+          select: { id: true, nomComplet: true, telephone: true, email: true },
+        },
+      },
     });
 
-    return {
-      data: credits.map((credit) => ({
-        id: credit.id,
-        memberName: credit.membre.nomComplet,
-        dueDate: credit.dateEcheance!.toISOString(),
-        amountRemaining: Math.max(
+    const now = new Date();
+    const data = credits
+      .map((credit) => {
+        const totalDue =
+          Number(credit.montant) * (1 + Number(credit.tauxInteret) / 100);
+        const amountRemaining = Math.max(
           0,
-          Number(credit.montant) * (1 + Number(credit.tauxInteret) / 100) -
-            Number(credit.montantRembourse),
-        ),
-        currency: credit.devise,
-        status: credit.statut,
-      })),
+          totalDue - Number(credit.montantRembourse),
+        );
+        const dueDate = credit.dateEcheance
+          ? new Date(credit.dateEcheance)
+          : now;
+        const diffDays = Math.ceil(
+          (dueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24),
+        );
+        const isOverdue =
+          credit.statut === StatutCredit.en_retard || diffDays < 0;
+
+        return {
+          id: credit.id,
+          memberId: credit.membre.id,
+          memberName: credit.membre.nomComplet,
+          telephone: credit.membre.telephone,
+          dueDate: dueDate.toISOString(),
+          amountRemaining,
+          currency: credit.devise,
+          status: credit.statut,
+          diffDays,
+          isOverdue,
+        };
+      })
+      .filter((item) => item.amountRemaining > 0)
+      .slice(0, limit);
+
+    return { data };
+  }
+
+  async relancerEcheance(creditId: number, adminUser?: any) {
+    const credit = await this.prisma.credit.findUnique({
+      where: { id: creditId },
+      include: { membre: true },
+    });
+    if (!credit) {
+      throw new NotFoundException(`Crédit #${creditId} introuvable.`);
+    }
+
+    const totalDue =
+      Number(credit.montant) * (1 + Number(credit.tauxInteret) / 100);
+    const remaining = Math.max(
+      0,
+      totalDue - Number(credit.montantRembourse),
+    );
+
+    const echeanceStr = credit.dateEcheance
+      ? new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(
+          new Date(credit.dateEcheance),
+        )
+      : 'prochainement';
+
+    await this.prisma.notifications.create({
+      data: {
+        membre_id: credit.membre.id,
+        titre: 'Rappel d’échéance de crédit',
+        message: `Cher(e) ${credit.membre.nomComplet}, nous vous rappelons que votre crédit #${credit.id} a un solde restant de ${remaining} ${credit.devise} attendu pour le ${echeanceStr}. Merci de régulariser au guichet Mwangaza Wetu.`,
+        type: 'warning',
+      },
+    });
+
+    this.logger.log(
+      `📢 Rappel envoyé au membre #${credit.membre.id} (${credit.membre.nomComplet}) pour le crédit #${credit.id}`,
+    );
+
+    return {
+      success: true,
+      creditId: credit.id,
+      memberId: credit.membre.id,
+      memberName: credit.membre.nomComplet,
+      message: `Rappel d'échéance envoyé avec succès à ${credit.membre.nomComplet}`,
     };
   }
 

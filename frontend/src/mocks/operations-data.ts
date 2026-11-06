@@ -11,7 +11,7 @@ export type PaymentMethod =
   | "Airtel Money"
   | "Orange Money"
   | "Virement";
-export type DepositKind = "Dépôt" | "Cotisation";
+export type DepositKind = "Dépôt" | "Epargne";
 export type WithdrawalStatus = "En attente" | "Approuvé" | "Payé" | "Rejeté";
 export type DepositRecord = {
   id: string;
@@ -81,31 +81,31 @@ const depositAccounts: AccountSlug[] = [
 ];
 const depositKinds: DepositKind[] = [
   "Dépôt",
-  "Cotisation",
+  "Epargne",
   "Dépôt",
   "Dépôt",
-  "Cotisation",
+  "Epargne",
   "Dépôt",
-  "Cotisation",
+  "Epargne",
   "Dépôt",
-  "Cotisation",
-  "Dépôt",
-  "Dépôt",
-  "Cotisation",
-  "Dépôt",
-  "Cotisation",
+  "Epargne",
   "Dépôt",
   "Dépôt",
-  "Cotisation",
+  "Epargne",
   "Dépôt",
-  "Cotisation",
+  "Epargne",
   "Dépôt",
   "Dépôt",
-  "Cotisation",
+  "Epargne",
   "Dépôt",
-  "Cotisation",
+  "Epargne",
   "Dépôt",
-  "Cotisation",
+  "Dépôt",
+  "Epargne",
+  "Dépôt",
+  "Epargne",
+  "Dépôt",
+  "Epargne",
   "Dépôt",
   "Dépôt",
 ];
@@ -197,8 +197,8 @@ export const mockDeposits: DepositRecord[] = depositAccounts.map(
       status: depositStatuses[index],
       transactionReference: `TRX-${String(73620 + index * 37)}`,
       note:
-        depositKinds[index] === "Cotisation"
-          ? "Cotisation mensuelle"
+        depositKinds[index] === "Epargne"
+          ? "Epargne mensuelle"
           : "Versement au guichet",
     };
   },

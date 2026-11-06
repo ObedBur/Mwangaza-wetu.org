@@ -182,6 +182,36 @@ describe('WithdrawalsModule production rules', () => {
     expect(prisma.$transaction).toBeUndefined();
   });
 
+  it('blocks withdrawals for field-enrolled members until their fingerprint is registered', async () => {
+    const { service, zktecoService } = createService({
+      retrait: { findUnique: jest.fn().mockResolvedValue(null) },
+      membre: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: 33,
+          numeroCompte: 'MW-P-100',
+          nomComplet: 'Membre Terrain',
+          typeCompte: 'PRINCIPAL',
+          statut: 'actif',
+          userId: null,
+          delegues: [],
+        }),
+      },
+    });
+
+    await expect(
+      service.create(
+        {
+          compte: 'MW-P-100',
+          devise: 'USD',
+          montant: 10,
+          idempotencyKey: '00000000-0000-4000-8000-000000000002',
+        } as any,
+        { userId: 12, role: 'agent' },
+      ),
+    ).rejects.toThrow(/empreinte du membre doit d'abord être capturée au bureau/);
+    expect(zktecoService.captureFingerprint).not.toHaveBeenCalled();
+  });
+
   it('runs the balance and cash debit under member and cashbox row locks', async () => {
     const record = {
       id: 9,

@@ -48,6 +48,7 @@ import {
   Database,
   Download,
   Eye,
+  FileSpreadsheet,
   FileText,
   Filter,
   Fingerprint,
@@ -65,6 +66,7 @@ import {
   Pencil,
   PiggyBank,
   Plus,
+  Printer,
   Receipt,
   RotateCw,
   RefreshCw,
@@ -134,6 +136,7 @@ export const IconDashboard = createIcon(LayoutDashboard);
 export const IconDatabaseOff = createIcon(Database);
 export const IconDownload = createIcon(Download);
 export const IconEye = createIcon(Eye);
+export const IconFileSpreadsheet = createIcon(FileSpreadsheet);
 export const IconFileText = createIcon(FileText);
 export const IconFilter = createIcon(Filter);
 export const IconFingerprint = createIcon(Fingerprint);
@@ -149,6 +152,7 @@ export const IconMoon = createIcon(Moon);
 export const IconPencil = createIcon(Pencil);
 export const IconPigMoney = createIcon(PiggyBank);
 export const IconPlus = createIcon(Plus);
+export const IconPrinter = createIcon(Printer);
 export const IconReceipt = createIcon(Receipt);
 export const IconRefresh = createIcon(RotateCw);
 export const IconReload = createIcon(RefreshCw);

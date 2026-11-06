@@ -31,7 +31,7 @@ export const cooperativeCopy = {
   activeMembers: "Membres actifs",
   overdueMembers: "En retard de paiement",
   newThisMonth: "Nouveaux ce mois",
-  searchMembers: "Nom, numéro ou téléphone…",
+  searchMembers: "Nom, numéro, téléphone ou e-mail…",
   statusFilter: "Tous les statuts",
   accountFilter: "Tous les comptes",
   sortBy: "Trier par",

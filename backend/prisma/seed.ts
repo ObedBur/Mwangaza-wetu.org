@@ -20,12 +20,16 @@ async function main() {
 
     // Création du Super Admin
     const superAdmin = await prisma.administrateur.upsert({
-        where: { email: 'superadmin@mwangaza.cd' },
-        update: {},
+        where: { userId: 'SA-001' },
+        update: {
+            email: 'obedburindi@gmail.com',
+            role: 'superadmin',
+            actif: true,
+        },
         create: {
             nom: 'MWANGAZA',
             prenom: 'SuperAdmin',
-            email: 'superadmin@mwangaza.cd',
+            email: 'obedburindi@gmail.com',
             telephone: '+243000000000',
             motDePasse: hashedSuperAdminPassword,
             role: 'superadmin',
@@ -40,12 +44,16 @@ async function main() {
 
     // Création d'un Admin standard
     const admin = await prisma.administrateur.upsert({
-        where: { email: 'admin@mwangaza.cd' },
-        update: {},
+        where: { userId: 'AD-001' },
+        update: {
+            email: 'makasimumbere22@gmail.com',
+            role: 'admin',
+            actif: true,
+        },
         create: {
             nom: 'KASANGA',
             prenom: 'Jean',
-            email: 'admin@mwangaza.cd',
+            email: 'makasimumbere22@gmail.com',
             telephone: '+243999999999',
             motDePasse: hashedAdminPassword,
             role: 'admin',
@@ -55,14 +63,34 @@ async function main() {
     });
     console.log(`✅ Admin created: ${admin.email}`);
 
+    const secondAdmin = await prisma.administrateur.upsert({
+        where: { userId: 'AD-002' },
+        update: {
+            email: 'kitavulameschack@gmail.com',
+            role: 'admin',
+            actif: true,
+        },
+        create: {
+            nom: 'KITAVULA',
+            prenom: 'Meschack',
+            email: 'kitavulameschack@gmail.com',
+            telephone: '+243999999998',
+            motDePasse: hashedAdminPassword,
+            role: 'admin',
+            actif: true,
+            userId: 'AD-002',
+        },
+    });
+    console.log(`✅ Admin created: ${secondAdmin.email}`);
+
     // Création d'un agent (caissier/guichet) de démonstration
     const hashedAgentPassword = await bcrypt.hash('Agent@123', 10);
     const agent = await prisma.agent.upsert({
-        where: { email: 'agent@mwangaza.cd' },
+        where: { email: 'agent-mwangaza@gmail.com' },
         update: {},
         create: {
             nom: 'Agent Démo',
-            email: 'agent@mwangaza.cd',
+            email: 'agent-mwangaza@gmail.com',
             telephone: '+243800000001',
             guichetAssigne: 'Guichet 1',
             soldeInitial: 0,
