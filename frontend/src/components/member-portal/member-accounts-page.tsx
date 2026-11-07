@@ -19,7 +19,7 @@ export function MemberAccountsPage() {
         <Panel title="Épargne disponible · USD" className="account-total-card account-total-hero" action={<span className="account-total-icon"><IconWallet size={19} aria-hidden="true" /></span>}>
           <AccountAmount amount={savings.USD} currency="USD" />
           <span className="account-total-meta">Compte principal · {dashboard.profile.numeroCompte}</span>
-          <div className="account-total-actions"><Link href="/deposer"><IconArrowDown size={15} aria-hidden="true" />Faire un dépôt</Link><Link href="/retirer"><IconArrowUp size={15} aria-hidden="true" />Demander un retrait</Link></div>
+          <div className="account-total-actions"><Link href="/transactions"><IconWallet size={15} aria-hidden="true" />Historique des opérations</Link></div>
         </Panel>
         <Panel title="Épargne disponible · FC" className="account-total-card account-total-fc" action={<span className="account-total-icon"><IconPigMoney size={19} aria-hidden="true" /></span>}>
           <AccountAmount amount={savings.FC} currency="FC" />

@@ -1,3 +1,4 @@
+:root,
 .mw-app {
   /* Charte officielle Mwangaza Wetu : Épargne • Crédit • Développement */
   --mw-ink: #2D3748;             /* Gris anthracite */
@@ -22,21 +23,10 @@
   --mw-green-soft: #DCFCE7;
   --mw-red: #DC2626;
   --mw-red-soft: #FEE2E2;
-
-  display: flex;
-  height: 100vh;
-  height: 100dvh;
-  max-height: 100vh;
-  max-height: 100dvh;
-  width: 100%;
-  overflow: hidden;
-  background: var(--mw-canvas);
-  color: var(--mw-ink);
-  font-family: "Inter Variable", Inter, sans-serif;
-  font-size: 13px;
-  line-height: 1.45;
 }
 
+:root.dark,
+[data-theme="dark"],
 .mw-app[data-theme="dark"] {
   --mw-ink: #F1F5F9;
   --mw-muted: #94A3B8;
@@ -56,6 +46,21 @@
   --mw-green-soft: rgba(74, 222, 128, 0.15);
   --mw-red: #F87171;
   --mw-red-soft: rgba(248, 113, 113, 0.15);
+}
+
+.mw-app {
+  display: flex;
+  height: 100vh;
+  height: 100dvh;
+  max-height: 100vh;
+  max-height: 100dvh;
+  width: 100%;
+  overflow: hidden;
+  background: var(--mw-canvas);
+  color: var(--mw-ink);
+  font-family: "Inter Variable", Inter, sans-serif;
+  font-size: 13px;
+  line-height: 1.45;
 }
 
 .mw-app * {

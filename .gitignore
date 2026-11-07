@@ -8,6 +8,10 @@ package-lock.json
 yarn.lock
 # Fichiers pnpm temporaires
 *.1979914566
+.Agents
+.claude
+.agents
+
 
 # ─── Build outputs ────────────────────────────────────────────────────────────
 dist/

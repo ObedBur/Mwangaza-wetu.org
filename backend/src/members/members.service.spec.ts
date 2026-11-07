@@ -3,6 +3,7 @@ import { MembersService } from './members.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CloudinaryService } from './cloudinary.service';
 import { MemberMailService } from './member-mail.service';
+import { ComptabiliteService } from '../comptabilite/comptabilite.service';
 import { CreateMemberDto, Sexe, StatutMembre } from './dto/create-member.dto';
 import { BadRequestException } from '@nestjs/common';
 
@@ -14,6 +15,7 @@ describe('MembersService', () => {
       providers: [
         MembersService,
         { provide: PrismaService, useValue: {} },
+        { provide: ComptabiliteService, useValue: { enregistrerAdhesion: jest.fn() } },
         { provide: CloudinaryService, useValue: {} },
         { provide: MemberMailService, useValue: { isConfigured: () => false } },
       ],

@@ -5,6 +5,7 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  IsIn,
   MinLength,
   ValidateNested,
 } from 'class-validator';
@@ -59,6 +60,14 @@ export class CreateMemberDto {
   @IsString()
   @IsNotEmpty()
   dateAdhesion: string;
+
+  @IsOptional()
+  @IsIn([1, 3, 6, 12])
+  dureeAdhesionMois?: number;
+
+  @IsOptional()
+  @IsIn(['FC', 'USD'])
+  deviseAdhesion?: 'FC' | 'USD';
 
   @IsString()
   @IsNotEmpty()

@@ -84,7 +84,7 @@ export function MemberTransactionsPage() {
               <span className="transactions-empty-icon">{mapped.length === 0 ? <IconDatabaseOff size={20} aria-hidden="true" /> : <IconSearch size={20} aria-hidden="true" />}</span>
               <strong>{mapped.length === 0 ? 'Aucune opération enregistrée' : 'Aucun mouvement ne correspond à ces filtres'}</strong>
               <p>{mapped.length === 0 ? 'Vos dépôts et retraits apparaîtront ici après leur enregistrement.' : 'Modifiez vos critères ou réinitialisez les filtres pour revoir les opérations.'}</p>
-              {mapped.length === 0 ? <Link href="/deposer">Faire un dépôt</Link> : <button type="button" onClick={resetFilters}>Réinitialiser les filtres</button>}
+              {mapped.length === 0 ? null : <button type="button" onClick={resetFilters}>Réinitialiser les filtres</button>}
             </div>
           ) : <>
           <div className="activity-table-wrap"><table className="activity-table"><thead><tr><th>Date et heure</th><th>Description</th><th>Compte membre</th><th>Type</th><th>Montant</th><th>Statut</th></tr></thead><tbody>{filtered.map((row) => {

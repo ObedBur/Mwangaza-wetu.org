@@ -8,6 +8,7 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { ComptabiliteService } from '../comptabilite/comptabilite.service';
 import { CreateSavingsDto, TypeOperation } from './dto/create-savings.dto';
 import {
   Devise,
@@ -17,6 +18,7 @@ import { ParametresService } from '../parametres/parametres.service';
 import { ZktecoService } from '../zkteco/zkteco.service';
 import type { AuthUser } from '../common/types/auth-request';
 import { randomUUID } from 'node:crypto';
+import { getSectionTrigram } from '../common/constants/sections';
 
 type DepositBiometricVerification = {
   memberId: number;
@@ -35,6 +37,7 @@ export class SavingsService {
     private prisma: PrismaService,
     private parametresService: ParametresService,
     private zktecoService: ZktecoService,
+    private comptabiliteService: ComptabiliteService,
   ) {}
 
   private async notifyMemberOfDeposit(
@@ -527,15 +530,35 @@ export class SavingsService {
 
     if (actor.role !== 'agent') {
       if (typeOperation !== TypeOperation.depot) {
-        return this.prisma.epargne.create({
-          data: {
-            compte: createDto.compte,
-            typeOperation: createDto.typeOperation,
-            devise: createDto.devise,
+        const member = await this.prisma.membre.findUnique({
+          where: { numeroCompte: createDto.compte },
+          select: { numeroCompte: true, typeCompte: true, statut: true },
+        });
+        if (!member || member.statut !== 'actif') throw new NotFoundException('Compte membre actif introuvable.');
+        if (createDto.typeOperation !== TypeOperation.retrait) throw new BadRequestException('Type d’opération non pris en charge.');
+        return this.prisma.$transaction(async (tx) => {
+          const operation = await tx.epargne.create({
+            data: {
+              compte: createDto.compte,
+              typeOperation: createDto.typeOperation,
+              devise: createDto.devise,
+              montant: createDto.montant,
+              dateOperation: new Date(createDto.dateOperation),
+              description: createDto.description,
+            },
+          });
+          await this.comptabiliteService.enregistrerRetraitEpargne(tx, {
             montant: createDto.montant,
+            frais: 0,
+            devise: createDto.devise,
+            numeroCompte: member.numeroCompte,
+            codeSection: `MW-${getSectionTrigram(member.typeCompte)}`,
+            executeParId: actor.userId,
+            executeParRole: actor.role,
             dateOperation: new Date(createDto.dateOperation),
-            description: createDto.description,
-          },
+            idempotencyKey: `epargne-${operation.id}`,
+          });
+          return operation;
         });
       }
 
@@ -544,6 +567,7 @@ export class SavingsService {
         select: {
           id: true,
           numeroCompte: true,
+          typeCompte: true,
           statut: true,
           userId: true,
           delegues: { select: { userId: true } },
@@ -586,7 +610,7 @@ export class SavingsService {
         `;
         const currentMember = await tx.membre.findUnique({
           where: { id: member.id },
-          select: { numeroCompte: true, statut: true, userId: true, delegues: { select: { userId: true } } },
+          select: { numeroCompte: true, typeCompte: true, statut: true, userId: true, delegues: { select: { userId: true } } },
         });
         if (!currentMember || currentMember.statut !== 'actif') {
           throw new NotFoundException('Compte membre introuvable ou inactif.');
@@ -606,6 +630,16 @@ export class SavingsService {
             executeParId: actor.userId ?? null,
             executeParRole: actor.role ?? null,
           },
+        });
+        await this.comptabiliteService.enregistrerDepotEpargne(tx, {
+          montant,
+          devise,
+          numeroCompte: currentMember.numeroCompte,
+          codeSection: `MW-${getSectionTrigram(currentMember.typeCompte)}`,
+          executeParId: actor.userId ?? undefined,
+          executeParRole: actor.role,
+          dateOperation: new Date(createDto.dateOperation),
+          idempotencyKey: `epargne-${operation.id}`,
         });
         await tx.adminLog.create({
           data: {
@@ -627,6 +661,7 @@ export class SavingsService {
       select: {
         id: true,
         numeroCompte: true,
+        typeCompte: true,
         statut: true,
         userId: true,
         delegues: { select: { userId: true } },
@@ -715,6 +750,16 @@ export class SavingsService {
           executeParRole: 'agent',
         },
       });
+      await this.comptabiliteService.enregistrerDepotEpargne(tx, {
+        montant,
+        devise,
+        numeroCompte: member.numeroCompte,
+        codeSection: `MW-${getSectionTrigram(member.typeCompte)}`,
+        executeParId: agentId,
+        executeParRole: 'agent',
+        dateOperation,
+        idempotencyKey: `epargne-${operation.id}`,
+      });
       const avant = Number(caisse.solde);
       const apres = avant + montant;
       await tx.caisseAgent.update({ where: { id: caisse.id }, data: { solde: { increment: montant } } });
@@ -748,7 +793,22 @@ export class SavingsService {
   }
 
   async remove(id: number) {
-    return this.prisma.epargne.delete({ where: { id } });
+    return this.prisma.$transaction(async (tx) => {
+      const epargne = await tx.epargne.findUnique({ where: { id } });
+      if (!epargne) throw new NotFoundException('Opération d’épargne introuvable.');
+      if (epargne.remboursementId) {
+        throw new BadRequestException('Cette ligne dépend d’un remboursement. Annulez le remboursement depuis son parcours dédié.');
+      }
+      const key = epargne.description?.split(' — ').at(-1);
+      if (key && await tx.retrait.findUnique({ where: { idempotencyKey: key } })) {
+        throw new BadRequestException('Cette ligne dépend d’un retrait payé. Annulez le retrait depuis son parcours dédié.');
+      }
+      await this.comptabiliteService.contrepasser(tx, {
+        idempotencyKey: `epargne-${id}`,
+        motif: `Suppression administrative de la ligne d’épargne #${id}`,
+      });
+      return tx.epargne.delete({ where: { id } });
+    });
   }
 
   async getSoldeByTypeCompte(type: string) {

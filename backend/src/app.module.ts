@@ -24,6 +24,7 @@ import { ServeStaticModule } from '@nestjs/serve-static';
 import { join } from 'path';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
+import { ComptabiliteModule } from './comptabilite/comptabilite.module';
 
 @Module({
   imports: [
@@ -38,6 +39,7 @@ import { RolesGuard } from './common/guards/roles.guard';
       ],
     }),
     PrismaModule,
+    ComptabiliteModule,
     MembersModule,
     SavingsModule,
     CreditsModule,

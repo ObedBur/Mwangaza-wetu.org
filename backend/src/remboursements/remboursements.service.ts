@@ -6,6 +6,7 @@ import {
   InternalServerErrorException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { ComptabiliteService } from '../comptabilite/comptabilite.service';
 import type { AuthUser } from '../common/types/auth-request';
 import { CreateRemboursementDto } from './dto/create-remboursement.dto';
 import { Devise, StatutCredit, Prisma, Remboursement } from '@prisma/client';
@@ -22,6 +23,7 @@ export class RemboursementsService {
   constructor(
     private prisma: PrismaService,
     private balancesService: BalancesService,
+    private comptabiliteService: ComptabiliteService,
   ) {}
 
   // ══════════════════════════════════════════════════════════════════════
@@ -289,15 +291,14 @@ export class RemboursementsService {
           },
         });
 
-        // Écritures Intérêts : 3% crédités au membre, 12% en revenus
+        let partMembre = 0;
+        // Écritures Intérêts : ristourne au membre et produit de la coopérative
         if (partInteret > 0) {
           // Taux total d'intérêts appliqué (ex: 15)
           const tauxTotal = Number(credit.tauxInteret) || 15;
           // Fraction reversée au membre : 3 / tauxTotal
           const ratioMembre = 3 / tauxTotal;
-          const partMembre = Math.round(partInteret * ratioMembre * 100) / 100;
-          const partRevenus =
-            Math.round((partInteret - partMembre) * 100) / 100;
+          partMembre = Math.round(partInteret * ratioMembre * 100) / 100;
 
           // ── 1. Crédit 3% sur le compte collectif du membre ──────────
           await tx.epargne.create({
@@ -316,42 +317,21 @@ export class RemboursementsService {
             `💰 3% intérêts → membre (${credit.membre.numeroCompte}): +${partMembre} ${devise}`,
           );
 
-          // ── 2. Revenus 12% : compte de revenus de la section ────────
-          const revType = await tx.revenuType.findFirst({
-            where: { nom: 'Système Remboursement' },
-          });
-
-          if (revType) {
-            await tx.revenu.create({
-              data: {
-                typeCompte: credit.membre.typeCompte,
-                typeRevenuId: revType.id,
-                montant: new Decimal(partRevenus),
-                devise: devise as Devise,
-                dateOperation: dateR,
-                sourceCompte: credit.numeroCompte,
-                remboursementId: remboursement.id,
-              },
-            });
-
-            const revSection = `MW-${sectionTrigram}-REVENUS`;
-            await tx.epargne.create({
-              data: {
-                compte: revSection,
-                typeOperation: 'depot',
-                devise: devise as Devise,
-                montant: new Decimal(partRevenus),
-                dateOperation: dateR,
-                description: `Intérêts (12%) remb. #${creditId}`,
-                remboursementId: remboursement.id,
-              },
-            });
-
-            this.logger.log(
-              `📈 12% intérêts → revenus section (${revSection}): +${partRevenus} ${devise}`,
-            );
-          }
         }
+
+        await this.comptabiliteService.enregistrerRemboursementCredit(tx, {
+          montant,
+          partPrincipal,
+          partInteret,
+          partMembre,
+          devise: devise as Devise,
+          numeroCompte: credit.membre.numeroCompte,
+          codeSection: `MW-${sectionTrigram}`,
+          executeParId: actor.userId,
+          executeParRole: actor.role,
+          dateOperation: dateR,
+          idempotencyKey: finalKey,
+        });
 
         // MAJ Crédit
         const totalRembourse = Number(currentCredit.montantRembourse) + montant;
@@ -462,23 +442,12 @@ export class RemboursementsService {
         });
       }
 
-      // 3. Inversion des écritures Revenu
-      const relatedRevenus = await tx.revenu.findMany({
-        where: { remboursementId: id },
+      await this.comptabiliteService.contrepasser(tx, {
+        idempotencyKey: remboursement.idempotencyKey ?? `legacy-remboursement-${id}`,
+        executeParId: actor?.userId,
+        executeParRole: actor?.role,
+        motif: `Annulation remboursement #${id}: ${reason}`,
       });
-
-      for (const r of relatedRevenus) {
-        await tx.revenu.create({
-          data: {
-            typeCompte: r.typeCompte,
-            typeRevenuId: r.typeRevenuId,
-            montant: r.montant.negated(), // Négatif pour annuler le revenu
-            devise: r.devise,
-            dateOperation: new Date(),
-            sourceCompte: r.sourceCompte,
-          },
-        });
-      }
 
       // 4. Recalculer l'état du crédit
       await this.recalculerCredit(remboursement.creditId, tx);

@@ -40,12 +40,14 @@ describe('WithdrawalsModule production rules', () => {
       }),
     } as any;
     const zktecoService = { captureFingerprint: jest.fn() } as any;
+    const comptabiliteService = { enregistrerRetraitEpargne: jest.fn().mockResolvedValue({}), contrepasser: jest.fn().mockResolvedValue(null) } as any;
     return {
       service: new WithdrawalsService(
         prisma,
         parameterService,
         balancesService,
         zktecoService,
+        comptabiliteService,
       ),
       prisma,
       zktecoService,

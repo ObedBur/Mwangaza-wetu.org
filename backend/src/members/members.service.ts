@@ -8,6 +8,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { ComptabiliteService } from '../comptabilite/comptabilite.service';
 import { MemberMailService } from './member-mail.service';
 import { CloudinaryService } from './cloudinary.service';
 import { CreateMemberDto, Sexe } from './dto/create-member.dto';
@@ -34,6 +35,7 @@ export class MembersService {
   private readonly logger = new Logger(MembersService.name);
   constructor(
     private prisma: PrismaService,
+    private comptabiliteService: ComptabiliteService,
     private memberMail: MemberMailService,
     private cloudinary: CloudinaryService,
   ) {}
@@ -443,6 +445,12 @@ export class MembersService {
           photoProfilPublicId: memberPhoto?.publicId ?? null,
           userId,
           dateAdhesion: new Date(dateAdhesion),
+          dureeAdhesionMois: createMemberDto.dureeAdhesionMois ?? 1,
+          dateExpirationAdhesion: (() => {
+            const expiration = new Date(dateAdhesion);
+            expiration.setMonth(expiration.getMonth() + (createMemberDto.dureeAdhesionMois ?? 1));
+            return expiration;
+          })(),
           motDePasse: hashedPassword,
           dateNaissance: createMemberDto.dateNaissance
             ? new Date(createMemberDto.dateNaissance)
@@ -454,40 +462,20 @@ export class MembersService {
         },
       });
 
-      // Enregistrer le revenu d'Adhésion (2000 FC) dans la table Revenu
-      const revType = await tx.revenuType.findFirst({
-        where: { nom: 'Système Membre' },
+      const dureeAdhesionMois = createMemberDto.dureeAdhesionMois ?? 1;
+      const deviseAdhesion = createMemberDto.deviseAdhesion ?? Devise.FC;
+      const tarifsUsd: Record<number, number> = { 1: 1, 3: 2, 6: 3, 12: 4 };
+      const montantAdhesion = deviseAdhesion === Devise.USD
+        ? tarifsUsd[dureeAdhesionMois]
+        : tarifsUsd[dureeAdhesionMois] * 2500;
+      await this.comptabiliteService.enregistrerAdhesion(tx, {
+        montant: montantAdhesion,
+        devise: deviseAdhesion,
+        codeSection: `MW-${getSectionTrigram(typeNormalise)}`,
+        dateOperation: new Date(dateAdhesion),
+        tauxChange: 2500,
+        motif: `Adhésion ${dureeAdhesionMois} mois - membre ${finalNumeroCompte}`,
       });
-
-      if (revType) {
-        // 1. Enregistrement dans la table Revenu (Nouvelle architecture)
-        await tx.revenu.create({
-          data: {
-            typeCompte: typeNormalise,
-            typeRevenuId: revType.id,
-            montant: 2000,
-            devise: Devise.FC,
-            dateOperation: new Date(dateAdhesion),
-            sourceCompte: finalNumeroCompte,
-          },
-        });
-
-        // 2. Enregistrement sur le compte de REVENUS de la section
-        const sectionTrigram = getSectionTrigram(typeNormalise);
-        const revenueAccount = `MW-${sectionTrigram}-REVENUS`;
-
-        await tx.epargne.create({
-          data: {
-            compte: revenueAccount,
-            typeOperation: 'depot',
-            devise: Devise.FC,
-            montant: 2000,
-            dateOperation: new Date(dateAdhesion),
-            description: `Frais d'adhésion membre ${finalNumeroCompte}`,
-          },
-        });
-
-      }
 
       // 2. Gérer le délégué
       if (delegue) {

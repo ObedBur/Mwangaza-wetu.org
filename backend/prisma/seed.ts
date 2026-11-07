@@ -116,7 +116,6 @@ async function main() {
     for (const sec of sections) {
         const sectionTrigram = sec.code;
         const compteCollectif = `MW-${sectionTrigram}-SECTION-0000`;
-        const revenueAccount = `MW-${sectionTrigram}-REVENUS`;
 
         // 1. Créer/Mettre à jour la Section
         await prisma.section.upsert({
@@ -143,21 +142,7 @@ async function main() {
             }
         });
 
-        // 3. Créer le compte de REVENUS de la section
-        await prisma.membre.upsert({
-            where: { numeroCompte: revenueAccount },
-            update: {},
-            create: {
-                numeroCompte: revenueAccount,
-                nomComplet: `REVENUS ${sec.nom}`,
-                typeCompte: sec.nom,
-                telephone: `SYS-${revenueAccount}`, // Unicité garantie
-                dateAdhesion: new Date(),
-                statut: 'actif',
-            }
-        });
-
-        // 4. Créer le compte de CRÉDITS (transit trésorerie) de la section
+        // 3. Créer le compte de CRÉDITS (transit trésorerie) de la section
         const creditAccount = `MW-${sectionTrigram}-CREDITS`;
         await prisma.membre.upsert({
             where: { numeroCompte: creditAccount },
@@ -172,7 +157,7 @@ async function main() {
             }
         });
 
-        console.log(`✅ Section ${sec.nom} prête (Collectif: ${compteCollectif}, Revenus: ${revenueAccount}, Crédits: ${creditAccount})`);
+        console.log(`✅ Section ${sec.nom} prête (Collectif: ${compteCollectif}, Crédits: ${creditAccount})`);
     }
 
     // --- INITIALISATION DES TYPES DE REVENUS ---
@@ -196,18 +181,11 @@ async function main() {
     }
     console.log('✅ Types de revenus prêts.');
 
-    // Création du compte GLOBAL CONSOLIDÉ (REVENUS)
-    await prisma.membre.upsert({
-        where: { numeroCompte: 'MW-REVENUS-GLOBAL' },
-        update: {},
-        create: {
-            numeroCompte: 'MW-REVENUS-GLOBAL',
-            nomComplet: 'REVENUS GLOBAL CONSOLIDÉ',
-            typeCompte: 'SYSTEME',
-            telephone: 'SYS-GLOBAL-REV',
-            dateAdhesion: new Date(),
-            statut: 'actif'
-        }
+    // Les anciens pseudo-membres de revenus sont conservés pour les clés étrangères,
+    // mais désactivés. Les revenus futurs proviennent du compte de résultat.
+    await prisma.membre.updateMany({
+        where: { OR: [{ numeroCompte: { contains: '-REVENUS' } }, { numeroCompte: 'MW-REVENUS-GLOBAL' }] },
+        data: { statut: 'inactif' },
     });
 
     // Création du compte GLOBAL TRÉSORERIE CRÉDITS

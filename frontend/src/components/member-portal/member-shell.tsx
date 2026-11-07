@@ -2,13 +2,19 @@
 
 import {
   IconBell,
+  IconCalendar,
+  IconChevronDown,
   IconChevronRight,
   IconFilter,
   IconMoon,
+  IconLogout,
+  IconPanelLeftClose,
   IconPanelLeftOpen,
+  IconPlus,
+  IconSearch,
   IconSun,
 } from "@/lib/tabler-icons";
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -48,10 +54,26 @@ export function useMemberSearch() {
 function MemberLogo({
   compact = false,
   onClick,
+  onExpand,
 }: {
   compact?: boolean;
   onClick?: () => void;
+  onExpand?: () => void;
 }) {
+  if (compact) {
+    return (
+      <button
+        type="button"
+        className="member-logo member-logo-expand"
+        aria-label="Développer la barre latérale"
+        title="Développer la barre latérale"
+        onClick={onExpand}
+      >
+        <Image src="/logo.png" alt="" width={38} height={38} className="member-logo-image" priority />
+      </button>
+    );
+  }
+
   return (
     <Link
       href="/accueil"
@@ -60,12 +82,10 @@ function MemberLogo({
       onClick={onClick}
     >
       <Image src="/logo.png" alt="" width={38} height={38} className="member-logo-image" priority />
-      {!compact ? (
-        <span className="member-brand-copy">
-          <span>Mwangaza <strong>Wetu</strong></span>
-          <small>ESPACE MEMBRE</small>
-        </span>
-      ) : null}
+      <span className="member-brand-copy">
+        <span>Mwangaza <strong>Wetu</strong></span>
+        <small>ESPACE MEMBRE</small>
+      </span>
     </Link>
   );
 }
@@ -104,7 +124,22 @@ function MemberSidebar({
       className={`member-sidebar${collapsed ? " is-collapsed" : ""}${isMobile ? " is-mobile" : ""}`}
     >
       <div className="sidebar-brand-row">
-        <MemberLogo compact={collapsed} onClick={onNavigate} />
+        <MemberLogo
+          compact={collapsed}
+          onClick={onNavigate}
+          onExpand={() => setCollapsed(false)}
+        />
+        {!isMobile && !collapsed && (
+          <button
+            type="button"
+            className="sidebar-collapse"
+            onClick={() => setCollapsed(!collapsed)}
+            aria-label={collapsed ? "Développer la barre latérale" : "Réduire la barre latérale"}
+            title={collapsed ? "Développer la barre latérale" : "Réduire la barre latérale"}
+          >
+            <IconPanelLeftClose size={17} />
+          </button>
+        )}
       </div>
       <nav className="sidebar-navigation" aria-label="Navigation principale">
         {navigationGroups.map((group) => (
@@ -161,43 +196,84 @@ function MemberSidebar({
             className="sidebar-logout"
             type="button"
             onClick={handleLogout}
+            aria-label="Déconnexion"
+            title="Déconnexion"
           >
-            {collapsed ? "Sortir" : "Déconnexion"}
+            <IconLogout size={17} aria-hidden="true" />
           </button>
         </div>
-        <button
-          className="sidebar-collapse"
-          type="button"
-          aria-label={
-            collapsed
-              ? "Développer la barre latérale"
-              : "Réduire la barre latérale"
-          }
-          title={
-            collapsed
-              ? "Développer la barre latérale"
-              : "Réduire la barre latérale"
-          }
-          onClick={() => setCollapsed((value) => !value)}
-        >
-          {collapsed ? "Développer" : "Réduire la sidebar"}
-        </button>
       </div>
     </aside>
+  );
+}
+
+function MemberPageToolbar({ activePath }: { activePath: string }) {
+  const { onlyPending, setOnlyPending } = useMemberSearch();
+  const activeItem = memberNavigation.find((item) => item.href === activePath);
+  const activeTitle = activeItem?.label ?? "Accueil";
+  const authUser = getAuthUser();
+  const displayName = authUser?.fullName || member.name;
+  const firstName = authUser?.firstName || displayName.split(" ")[0];
+
+  return (
+    <div className="page-toolbar">
+      <div className="page-heading">
+        {activePath !== "/accueil" ? (
+          <div className="breadcrumbs">
+            <Link href="/accueil">Accueil</Link>
+            <IconChevronRight size={13} aria-hidden="true" />
+            <span>{activeTitle}</span>
+          </div>
+        ) : null}
+        {activePath === "/accueil" ? (
+          <>
+            <h1>Bonjour, {firstName}</h1>
+            <div className="member-greeting-date">
+              <IconCalendar size={13} aria-hidden="true" />
+              <span>{new Intl.DateTimeFormat("fr-FR", { dateStyle: "full" }).format(new Date())}</span>
+            </div>
+          </>
+        ) : <h1>{activeTitle}</h1>}
+      </div>
+      {activePath === "/transactions" ? (
+        <div className="toolbar-controls">
+          <button
+            type="button"
+            className={`filter-button${onlyPending ? " is-selected" : ""}`}
+            aria-label={onlyPending ? "Afficher toutes les opérations" : "Filtrer les opérations en attente"}
+            aria-pressed={onlyPending}
+            onClick={() => setOnlyPending(!onlyPending)}
+          >
+            <IconFilter size={15} aria-hidden="true" />
+            <span>{onlyPending ? "En attente" : "Filtrer"}</span>
+          </button>
+        </div>
+      ) : null}
+    </div>
   );
 }
 
 function MemberTopbar({ activePath }: { activePath: string }) {
   const [isDark, setIsDark] = useState(false);
   const [notificationOpen, setNotificationOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const [unreadCount, setUnreadCount] = useState(0);
-  const { onlyPending, setOnlyPending } = useMemberSearch();
+  const { query, setQuery } = useMemberSearch();
   const activeItem = memberNavigation.find((item) => item.href === activePath);
   const activeTitle = activeItem?.label ?? "Accueil";
   const authUser = getAuthUser();
   const displayName = authUser?.fullName || member.name;
-  const firstName = displayName.split(" ")[0];
+  const displayNumber = authUser?.accountNumber || member.number;
+  const initials = displayName
+    .split(" ")
+    .map((part: string) => part[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase() || member.initials;
+
   useEffect(() => {
     setIsDark(document.documentElement.classList.contains("dark"));
     let active = true;
@@ -212,105 +288,179 @@ function MemberTopbar({ activePath }: { activePath: string }) {
     };
   }, []);
 
+  useEffect(() => {
+    function handleSearchShortcut(event: KeyboardEvent) {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLocaleLowerCase() === "k") {
+        event.preventDefault();
+        setMobileSearchOpen(true);
+        window.requestAnimationFrame(() => searchInputRef.current?.focus());
+      }
+      if (event.key === "Escape") {
+        setProfileOpen(false);
+        setNotificationOpen(false);
+        setMobileSearchOpen(false);
+        searchInputRef.current?.blur();
+      }
+    }
+    window.addEventListener("keydown", handleSearchShortcut);
+    return () => window.removeEventListener("keydown", handleSearchShortcut);
+  }, []);
+
   function toggleTheme() {
     const nextIsDark = !document.documentElement.classList.contains("dark");
     document.documentElement.classList.toggle("dark", nextIsDark);
     document.documentElement.classList.toggle("light", !nextIsDark);
+    document.documentElement.setAttribute("data-theme", nextIsDark ? "dark" : "light");
     document.documentElement.style.colorScheme = nextIsDark ? "dark" : "light";
     window.localStorage.setItem("theme", nextIsDark ? "dark" : "light");
     setIsDark(nextIsDark);
   }
 
   return (
-    <header className="member-topbar">
-      <div className="desktop-topbar">
-        <div className="topbar-leading">
-          <Sheet open={mobileSidebarOpen} onOpenChange={setMobileSidebarOpen}>
-            <SheetTrigger asChild>
-              <button
-                type="button"
-                className="icon-button mobile-sidebar-trigger"
-                aria-label="Ouvrir le menu de navigation"
-              >
-                <IconPanelLeftOpen size={19} aria-hidden="true" />
-              </button>
-            </SheetTrigger>
-            <SheetContent side="left" className="mobile-sidebar-sheet">
-              <SheetTitle className="sr-only">Navigation du membre</SheetTitle>
-              <MemberSidebar
-                activePath={activePath}
-                isMobile
-                onNavigate={() => setMobileSidebarOpen(false)}
-              />
-            </SheetContent>
-          </Sheet>
-          <span className="topbar-context">Espace membre</span>
-        </div>
-        <div className="topbar-actions">
-          <button
-            type="button"
-            className="icon-button notification-trigger"
-            aria-label={`Notifications, ${unreadCount} non lue(s)`}
-            aria-pressed={notificationOpen}
-            onClick={() => setNotificationOpen((value) => !value)}
-          >
-            <IconBell size={19} aria-hidden="true" />
-            {unreadCount > 0 ? <span className="notification-dot" aria-hidden="true" /> : null}
-          </button>
-          <span className="topbar-locale" aria-label="Langue : français">FR</span>
-          <button
-            type="button"
-            className="icon-button"
-            aria-label={isDark ? "Activer le thème clair" : "Activer le thème sombre"}
-            onClick={toggleTheme}
-          >
-            {isDark ? <IconSun size={18} aria-hidden="true" /> : <IconMoon size={18} aria-hidden="true" />}
-          </button>
-        </div>
-      </div>
-      {notificationOpen ? (
-        <div className="notification-popover" role="status">
-          <span className="notification-popover-mark">
-            <IconBell size={16} aria-hidden="true" />
-          </span>
-          <Link href="/annonces">{unreadCount ? `${unreadCount} notification(s) non lue(s). Voir les annonces.` : "Aucune notification non lue."}</Link>
-        </div>
-      ) : null}
-      <div className="page-toolbar">
-        <div className="page-heading">
-          {activePath !== "/accueil" ? (
-            <div className="breadcrumbs">
-              <Link href="/accueil">Accueil</Link>
-              <IconChevronRight size={13} aria-hidden="true" />
-              <span>{activeTitle}</span>
-            </div>
-          ) : null}
-          {activePath === "/accueil" ? (
-            <>
-              <h1>Bonjour, {firstName} !</h1>
-              <p className="welcome-subtitle">Gérez votre épargne en toute simplicité</p>
-            </>
-          ) : <h1>{activeTitle}</h1>}
-        </div>
-        {activePath === "/accueil" || activePath === "/transactions" ? (
-          <div className="toolbar-controls">
+    <header className="mw-topbar">
+      <div className="mw-top-left">
+        <Sheet open={mobileSidebarOpen} onOpenChange={setMobileSidebarOpen}>
+          <SheetTrigger asChild>
             <button
               type="button"
-              className={`filter-button${onlyPending ? " is-selected" : ""}`}
-              aria-label={
-                onlyPending
-                  ? "Afficher toutes les opérations"
-                  : "Filtrer les opérations en attente"
-              }
-              aria-pressed={onlyPending}
-              onClick={() => setOnlyPending(!onlyPending)}
+              className="mw-icon-button mw-mobile-menu"
+              aria-label="Ouvrir le menu de navigation"
             >
-              <IconFilter size={15} aria-hidden="true" />
-              <span>{onlyPending ? "En attente" : "Filtrer"}</span>
+              <IconPanelLeftOpen size={19} />
             </button>
-          </div>
-        ) : null}
+          </SheetTrigger>
+          <SheetContent side="left" className="mobile-sidebar-sheet">
+            <SheetTitle className="sr-only">Navigation du membre</SheetTitle>
+            <MemberSidebar
+              activePath={activePath}
+              isMobile
+              onNavigate={() => setMobileSidebarOpen(false)}
+            />
+          </SheetContent>
+        </Sheet>
+        <button
+          type="button"
+          className="mw-icon-button mw-mobile-search-trigger"
+          aria-label="Ouvrir la recherche"
+          aria-expanded={mobileSearchOpen}
+          onClick={() => {
+            if (mobileSearchOpen) {
+              setMobileSearchOpen(false);
+              searchInputRef.current?.blur();
+            } else {
+              setMobileSearchOpen(true);
+              window.requestAnimationFrame(() => searchInputRef.current?.focus());
+            }
+          }}
+        >
+          <IconSearch aria-hidden="true" />
+        </button>
+        <label className={`mw-search${mobileSearchOpen ? " is-open" : ""}`}>
+          <IconSearch aria-hidden="true" />
+          <input
+            ref={searchInputRef}
+            aria-label="Rechercher dans la coopérative..."
+            placeholder="Rechercher dans la coopérative..."
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+          <kbd className="mw-search-shortcut">Ctrl K</kbd>
+        </label>
       </div>
+      <div className="mw-top-context" aria-label="Emplacement actuel">
+        <span>Espace membre</span>
+        {activeTitle && (
+          <>
+            <i aria-hidden="true">/</i>
+            <strong>{activeTitle}</strong>
+          </>
+        )}
+      </div>
+      <div className="mw-top-right">
+        <button
+          type="button"
+          className="mw-icon-button"
+          aria-label={`Notifications, ${unreadCount} non lue(s)`}
+          title="Notifications"
+          aria-expanded={notificationOpen}
+          onClick={() => {
+            setNotificationOpen((open) => !open);
+            setProfileOpen(false);
+          }}
+        >
+          <IconBell />
+          {unreadCount > 0 && <span className="mw-notice-dot" />}
+        </button>
+        <span
+          className="mw-language"
+          aria-label="Langue sélectionnée : français"
+          title="Langue actuellement utilisée : français"
+        >
+          FR
+        </span>
+        <button
+          type="button"
+          className="mw-icon-button"
+          aria-label={isDark ? "Activer le thème clair" : "Activer le thème sombre"}
+          title={isDark ? "Activer le thème clair" : "Activer le thème sombre"}
+          onClick={toggleTheme}
+        >
+          {isDark ? <IconSun /> : <IconMoon />}
+        </button>
+        <div className="mw-profile-menu">
+          <button
+            type="button"
+            className="mw-profile-trigger"
+            aria-label={`Profil de ${displayName}`}
+            aria-expanded={profileOpen}
+            aria-haspopup="menu"
+            onClick={() => {
+              setProfileOpen((open) => !open);
+              setNotificationOpen(false);
+            }}
+          >
+            <span className="mw-profile-avatar" aria-hidden="true">
+              {initials}
+            </span>
+            <span className="mw-profile-trigger-copy">
+              <strong>{displayName}</strong>
+              <small>Membre</small>
+            </span>
+            <IconChevronDown size={15} aria-hidden="true" />
+          </button>
+          {profileOpen && (
+            <div className="mw-profile-pop" role="menu" aria-label="Menu du profil">
+              <div className="mw-profile-pop-heading">
+                <strong>{displayName}</strong>
+                <span>{displayNumber || authUser?.email || "Membre"}</span>
+              </div>
+              <Link href="/profil" role="menuitem" onClick={() => setProfileOpen(false)}>
+                Gérer mon profil
+              </Link>
+              <button type="button" role="menuitem" onClick={logout}>
+                <IconLogout size={16} aria-hidden="true" /> Déconnexion
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+      {notificationOpen && (
+        <div className="mw-notification-pop" role="status">
+          <strong>Notifications</strong>
+          <p>
+            {unreadCount
+              ? `${unreadCount} notification(s) non lue(s).`
+              : "Aucune nouvelle notification."}
+          </p>
+          <Link
+            className="mw-notification-link"
+            href="/annonces"
+            onClick={() => setNotificationOpen(false)}
+          >
+            Voir les annonces
+          </Link>
+        </div>
+      )}
     </header>
   );
 }
@@ -330,7 +480,10 @@ export function MemberShell({ children }: { children: React.ReactNode }) {
           <MemberSidebar activePath={activePath} />
           <main className="member-main">
             <MemberTopbar activePath={activePath} />
-            <div className="member-content">{children}</div>
+            <div className="member-content">
+              <MemberPageToolbar activePath={activePath} />
+              {children}
+            </div>
           </main>
         </div>
       </div>

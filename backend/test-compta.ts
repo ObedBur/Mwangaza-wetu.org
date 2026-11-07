@@ -10,13 +10,14 @@ async function main() {
   const service = new ComptabiliteService(prismaService);
 
   try {
-    console.log("Test 1 : Enregistrement frais d'adhésion 2000 FC - Section BIASHARA (MW-BIA)");
-    const op = await service.enregistrerAdhesion({
-      montant: 2000,
+    console.log("Test 1 : Enregistrement frais d'adhésion FC - Section BIASHARA (MW-BIA)");
+    const op = await prismaService.$transaction((tx) => service.enregistrerAdhesion(tx, {
+      montant: 2500,
       devise: 'FC' as any,
       codeSection: 'MW-BIA',
+      tauxChange: 2500,
       motif: "Test adhésion BIASHARA",
-    });
+    }));
 
     console.log('Opération créée:', op.reference, '| statut:', op.statut);
 

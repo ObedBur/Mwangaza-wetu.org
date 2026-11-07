@@ -4,6 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { ComptabiliteService } from '../comptabilite/comptabilite.service';
 import { CreateAgentDto } from './dto/create-agent.dto';
 import { UpdateAgentDto } from './dto/update-agent.dto';
 import { ChangeAgentPasswordDto } from './dto/change-agent-password.dto';
@@ -30,8 +31,9 @@ const AGENT_SELECT = {
 @Injectable()
 export class AgentsService {
   constructor(
-    private prisma: PrismaService,
-    private cloudinary: CloudinaryService,
+    private readonly prisma: PrismaService,
+    private readonly comptabiliteService: ComptabiliteService,
+    private readonly cloudinary: CloudinaryService,
   ) {}
 
   async create(dto: CreateAgentDto) {
@@ -111,6 +113,14 @@ export class AgentsService {
               soldeApres: ouverture,
               motif: 'Fonds initiaux saisis à la création de l’agent',
             },
+          });
+          await this.comptabiliteService.enregistrerOuvertureCaisse(tx, {
+            montant: ouverture,
+            devise,
+            executeParRole: 'admin',
+            dateOperation: new Date(),
+            idempotencyKey: `agent-opening-${created.id}-${devise}`,
+            motif: `Ouverture de caisse agent #${created.id}`,
           });
         }
       }

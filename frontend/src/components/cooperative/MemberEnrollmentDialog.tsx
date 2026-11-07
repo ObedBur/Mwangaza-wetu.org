@@ -14,10 +14,6 @@ type DelegateDraft = {
   userId?: string;
 };
 
-type DatBaremeResponse = {
-  durees: { dureeMois: number; tauxPeriode: number; minFc: number; minUsd: number }[];
-};
-
 type ApiErrorShape = { message?: string | string[]; details?: string };
 
 function getApiError(error: unknown) {
@@ -102,7 +98,7 @@ export const memberEnrollmentFrenchCopy: Record<string, string> = {
   accountTypeTitle: 'Type de Compte', chooseAccountType: 'Sélectionnez le type de compte', principal: 'PRINCIPAL', kelasi: 'KELASI', nyumba: 'NYUMBA', hopital: 'HOPITAL', mutoto: 'MUTOTO', biashara: 'BIASHARA',
   assignedAccount: 'Numéro de compte attribué', accountNumberHelp: 'Ce numéro est généré automatiquement avec un code de section et un identifiant aléatoire.', refreshAccountNumber: 'Régénérer', accountNumberLoading: 'Génération du numéro…', accountNumberUnavailable: 'Aperçu indisponible',
   fieldRequiredError: 'Ce champ est obligatoire.', nameFieldError: 'Saisissez au moins 2 caractères.', phoneFieldError: 'Saisissez un numéro valide (au moins 7 chiffres).', emailFieldError: 'Saisissez une adresse e-mail valide.', selectFieldError: 'Sélectionnez une option.', dateFieldError: 'Saisissez une date valide.', nationalIdFieldError: 'Saisissez au moins 4 caractères pour la pièce d’identité.', formInvalidNotice: 'Complétez les champs en rouge pour activer la création.',
-  memberIdentity: 'Identité du Membre', photoMember: 'Photo Membre', changePhoto: 'Clic pour changer', fullName: 'Nom complet', requiredPhone: 'Téléphone', emailAddress: 'Adresse e-mail', emailCredentialNotice: 'Un mot de passe temporaire sera envoyé à cette adresse.', sex: 'Sexe', selectSex: 'Sélectionner', male: 'Masculin', female: 'Féminin', sexOther: 'Autre', joinDate: 'Date d’adhésion', contactsMore: 'Coordonnées & Plus', address: 'Adresse physique', addressPlaceholder: 'Bâtiment, Rue, Quartier, Ville', nationalId: 'ID Nationale / Pièce ID', moreOptions: '+ Plus d’options (Naissance)', birthDate: 'Date de naissance', bioFees: 'Biométrie & Frais', membershipFee: 'Frais d’Adhésion', datPreview: 'Barème DAT (aperçu)', datMonths: 'mois', datMinimum: 'Minimum DAT pour', datPreviewHint: 'Choix définitif après le premier dépôt, à l’ouverture du DAT.', datBaremeLoading: 'Chargement du barème…', datBaremeError: 'Barème DAT indisponible. Réessayez plus tard.', feeNote: 'Frais d’adhésion comptabilisés au compte collectif. Le DAT se choisit séparément après un premier dépôt.',
+  memberIdentity: 'Identité du Membre', photoMember: 'Photo Membre', changePhoto: 'Clic pour changer', fullName: 'Nom complet', requiredPhone: 'Téléphone', emailAddress: 'Adresse e-mail', emailCredentialNotice: 'Un mot de passe temporaire sera envoyé à cette adresse.', sex: 'Sexe', selectSex: 'Sélectionner', male: 'Masculin', female: 'Féminin', sexOther: 'Autre', joinDate: 'Date d’adhésion', contactsMore: 'Coordonnées & Plus', address: 'Adresse physique', addressPlaceholder: 'Bâtiment, Rue, Quartier, Ville', nationalId: 'ID Nationale / Pièce ID', moreOptions: '+ Plus d’options (Naissance)', birthDate: 'Date de naissance', bioFees: 'Biométrie & Frais', membershipFee: 'Frais d’Adhésion', adhesionDuration: 'Durée de couverture', paymentCurrency: 'Devise de paiement', datPreview: 'Barème DAT (aperçu)', datMonths: 'mois', datMinimum: 'Minimum DAT pour', datPreviewHint: 'Choix définitif après le premier dépôt, à l’ouverture du DAT.', datBaremeLoading: 'Chargement du barème…', datBaremeError: 'Barème DAT indisponible. Réessayez plus tard.', feeNote: 'Choisissez la période couverte et la devise encaissée. Taux de référence : 2 500 FC pour 1 USD.',
   delegateOptional: 'Délégué (Optionnel)', addDelegate: 'Ajouter un délégué autorisé', editDelegate: 'Modifier le délégué', delegateName: 'Nom complet du délégué', delegatePhone: 'Téléphone du délégué', delegateRelation: 'Lien avec le membre', delegateNationalId: 'ID Nationale / Pièce ID', delegateFingerprint: 'Empreinte du délégué', captureFingerprint: 'Capturer l’empreinte', recaptureFingerprint: 'Capturer à nouveau', fingerprintReady: 'Empreinte capturée', fingerprintChecking: 'Vérification de l’identifiant…', fingerprintAvailable: 'Empreinte disponible pour ce membre.', fingerprintAlreadyUsed: 'Cet identifiant biométrique est déjà utilisé.', fingerprintReadStarted: 'Placez le doigt sur le lecteur. La capture peut prendre quelques secondes.', fingerprintApiUnavailable: 'Le serveur backend ne répond pas. Vérifiez qu’il est démarré, NEXT_PUBLIC_API_URL pointe vers son adresse /api et CORS autorise cette page.', fingerprintHint: 'Capture facultative via le lecteur biométrique connecté.', fingerprintWaiting: 'En attente du doigt sur le lecteur…', fingerprintUnavailable: 'Capture impossible. Vérifiez que le lecteur est connecté, puis réessayez.', memberFingerprint: 'Empreinte du membre', memberFingerprintHint: 'Les dépôts sont possibles sans lecteur. L’empreinte devra être enregistrée au bureau avant tout retrait.', memberActivity: 'Activité principale', memberActivityPlaceholder: 'Ex. Agriculture, commerce, élevage', createFailed: 'La création du membre a échoué. Vérifiez les informations et réessayez.', creatingMember: 'Création en cours…', createMember: 'Créer le membre',
 };
 export function MemberEnrollmentDialog({
@@ -119,6 +115,8 @@ export function MemberEnrollmentDialog({
   onCreated: (credentials: { numeroCompte: string; nomComplet: string; email: string; motDePasseTemporaire: string; credentialsSent: boolean }) => void;
 }) {
   const [accountType, setAccountType] = useState("PRINCIPAL");
+  const [adhesionMonths, setAdhesionMonths] = useState(1);
+  const [adhesionCurrency, setAdhesionCurrency] = useState<'FC' | 'USD'>('FC');
   const [generatedAccountNumber, setGeneratedAccountNumber] = useState("");
   const [generatingAccountNumber, setGeneratingAccountNumber] = useState(false);
   const [accountNumberError, setAccountNumberError] = useState("");
@@ -137,10 +135,6 @@ export function MemberEnrollmentDialog({
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [touchedFields, setTouchedFields] = useState<Record<string, boolean>>({});
   const [memberFormValid, setMemberFormValid] = useState(false);
-  const [datBareme, setDatBareme] = useState<DatBaremeResponse | null>(null);
-  const [datPreviewDuration, setDatPreviewDuration] = useState(1);
-  const [datBaremeError, setDatBaremeError] = useState(false);
-  const datBaremeLoading = open && !datBareme && !datBaremeError;
   const memberFormRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {
@@ -168,9 +162,6 @@ export function MemberEnrollmentDialog({
       setFieldErrors({});
       setTouchedFields({});
       setMemberFormValid(false);
-      setDatBareme(null);
-      setDatPreviewDuration(1);
-      setDatBaremeError(false);
     }
   }
 
@@ -199,24 +190,6 @@ export function MemberEnrollmentDialog({
     });
     return () => { active = false; };
   }, [open, refreshAccountNumber]);
-
-  useEffect(() => {
-    if (!open) return;
-    let cancelled = false;
-    apiClient.get<DatBaremeResponse>("/dat/bareme")
-      .then(({ data }) => {
-        if (!cancelled) {
-          setDatBareme(data);
-          setDatPreviewDuration((current) =>
-            data.durees.some((item) => item.dureeMois === current)
-              ? current
-              : data.durees[0]?.dureeMois ?? 1,
-          );
-        }
-      })
-      .catch(() => { if (!cancelled) setDatBaremeError(true); });
-    return () => { cancelled = true; };
-  }, [open]);
 
   function validateMemberForm(form: HTMLFormElement, touchAll = false, touchedName?: string) {
     const nextErrors: Record<string, string> = {};
@@ -345,6 +318,8 @@ export function MemberEnrollmentDialog({
       email: String(data.get("memberEmail") || "").trim(),
       sexe: String(data.get("memberSex") || ""),
       dateAdhesion: String(data.get("joinDate") || ""),
+      dureeAdhesionMois: adhesionMonths,
+      deviseAdhesion: adhesionCurrency,
       typeCompte: accountType,
       statut: "actif",
       adresse: String(data.get("address") || "").trim() || undefined,
@@ -676,32 +651,28 @@ export function MemberEnrollmentDialog({
                 </div>
                 <div className="mw-fee-card">
                   <span className="mw-form-label">{t.membershipFee}</span>
-                  <strong>2 000 FC</strong>
-                  <p>{t.feeNote}</p>
-                  <div className="mw-dat-preview">
-                    <label className="mw-form-label" htmlFor="mw-dat-preview-duration">{t.datPreview}</label>
-                    {datBaremeLoading ? <p role="status">{t.datBaremeLoading}</p> : datBaremeError || !datBareme ? <p role="status">{t.datBaremeError}</p> : <>
-                      <div className="mw-dat-duration-options" role="group" aria-label={t.datPreview}>
-                        {datBareme.durees.map((item) => <button
-                          key={item.dureeMois}
-                          id={item.dureeMois === 1 ? "mw-dat-preview-duration" : undefined}
-                          type="button"
-                          aria-pressed={datPreviewDuration === item.dureeMois}
-                          className={datPreviewDuration === item.dureeMois ? "is-selected" : ""}
-                          onClick={() => setDatPreviewDuration(item.dureeMois)}
-                        >{item.dureeMois} {t.datMonths}</button>)}
-                      </div>
-                      {(() => {
-                        const selected = datBareme.durees.find((item) => item.dureeMois === datPreviewDuration);
-                        return selected ? <div className="mw-dat-minimum" aria-live="polite">
-                          <span>{t.datMinimum} {selected.dureeMois} {t.datMonths}</span>
-                          <strong>{selected.minFc.toLocaleString("fr-FR")} FC <small>· ${selected.minUsd.toLocaleString("en-US")} USD</small></strong>
-                          <span>Taux : {selected.tauxPeriode}%</span>
-                        </div> : null;
-                      })()}
-                    </>}
-                    <p>{t.datPreviewHint}</p>
+                  <span className="mw-form-label">{t.adhesionDuration}</span>
+                  <div className="mw-dat-duration-options" role="group" aria-label={t.adhesionDuration}>
+                    {[1, 3, 6, 12].map((months) => <button
+                      key={months}
+                      type="button"
+                      className={adhesionMonths === months ? 'is-selected' : undefined}
+                      aria-pressed={adhesionMonths === months}
+                      onClick={() => setAdhesionMonths(months)}
+                    >{months} {t.datMonths}</button>)}
                   </div>
+                  <span className="mw-form-label">{t.paymentCurrency}</span>
+                  <div className="mw-dat-duration-options" role="group" aria-label={t.paymentCurrency}>
+                    {(['FC', 'USD'] as const).map((currency) => <button
+                      key={currency}
+                      type="button"
+                      className={adhesionCurrency === currency ? 'is-selected' : undefined}
+                      aria-pressed={adhesionCurrency === currency}
+                      onClick={() => setAdhesionCurrency(currency)}
+                    >{currency}</button>)}
+                  </div>
+                  <strong>{(({ 1: 1, 3: 2, 6: 3, 12: 4 } as Record<number, number>)[adhesionMonths] * (adhesionCurrency === 'FC' ? 2500 : 1)).toLocaleString('fr-FR')} {adhesionCurrency}</strong>
+                  <p>{t.feeNote}</p>
                 </div>
               </div>
             </section>

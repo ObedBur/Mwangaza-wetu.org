@@ -4,6 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CloudinaryService } from '../members/cloudinary.service';
 import { AgentsService } from './agents.service';
 import { CreateAgentDto } from './dto/create-agent.dto';
+import { ComptabiliteService } from '../comptabilite/comptabilite.service';
 
 describe('AgentsService', () => {
   let service: AgentsService;
@@ -19,6 +20,7 @@ describe('AgentsService', () => {
           useValue: { agent: { findUnique } },
         },
         { provide: CloudinaryService, useValue: {} },
+        { provide: ComptabiliteService, useValue: { enregistrerOuvertureCaisse: jest.fn() } },
       ],
     }).compile();
 

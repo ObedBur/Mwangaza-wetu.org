@@ -5,6 +5,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { ComptabiliteService } from '../comptabilite/comptabilite.service';
 import { BalancesService } from '../balances/balances.service';
 import { CreateCreditDto, StatutCredit } from './dto/create-credit.dto';
 import { Devise } from '@prisma/client';
@@ -17,6 +18,7 @@ export class CreditsService {
   constructor(
     private prisma: PrismaService,
     private balancesService: BalancesService,
+    private comptabiliteService: ComptabiliteService,
   ) {}
 
   async findAll() {
@@ -374,6 +376,14 @@ export class CreditsService {
           dateOperation: dateD,
           description: `Décaissement crédit #${credit.id} pour ${numeroCompte} (${membre.nomComplet})`,
         },
+      });
+
+      await this.comptabiliteService.enregistrerDecaissementCredit(tx, {
+        montant,
+        devise: devise as Devise,
+        numeroCompte,
+        codeSection: `MW-${sectionTrigram}`,
+        dateOperation: dateD,
       });
 
       this.logger.log(

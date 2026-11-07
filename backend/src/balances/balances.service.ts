@@ -5,6 +5,8 @@ import {
   StatutCredit,
   StatutProjet,
   TypeOperationEpargne,
+  SensEcriture,
+  StatutOperation,
 } from '@prisma/client';
 import { Prisma } from '@prisma/client';
 
@@ -101,24 +103,18 @@ export class BalancesService {
       return item ? item._sum.frais || 0 : 0;
     };
 
-    // Le compte global est une vue consolidée, pas un compte comptable
-    // supplémentaire : le total est donc calculé uniquement depuis les
-    // comptes de revenus de section.
-    const revenusSections = await this.prisma.epargne.groupBy({
-      by: ['devise', 'typeOperation'],
-      where: { compte: { endsWith: '-REVENUS' } },
+    // Le total consolidé est calculé à partir des produits de classe 7.
+    const revenusComptables = await this.prisma.ecritureComptable.groupBy({
+      by: ['devise', 'sens'],
+      where: {
+        compte: { planCompte: { numero: { startsWith: '7' } } },
+        operation: { statut: StatutOperation.VALIDEE },
+      },
       _sum: { montant: true },
     });
     const netRevenue = (devise: Devise) =>
-      revenusSections
-        .filter((row) => row.devise === devise)
-        .reduce(
-          (sum, row) =>
-            sum +
-            Number(row._sum.montant || 0) *
-            (row.typeOperation === TypeOperationEpargne.depot ? 1 : -1),
-          0,
-        );
+      Number(revenusComptables.find((row) => row.devise === devise && row.sens === SensEcriture.CREDIT)?._sum.montant ?? 0) -
+      Number(revenusComptables.find((row) => row.devise === devise && row.sens === SensEcriture.DEBIT)?._sum.montant ?? 0);
 
     return {
       fc: {
@@ -396,12 +392,13 @@ export class BalancesService {
     const dailyHistory = await this.getDailyHistory();
 
     // Détail des revenus
-    const revenusData = await this.prisma.revenu.groupBy({
-      by: ['typeRevenuId', 'devise'],
-      _sum: { montant: true },
+    const revenusComptables = await this.prisma.ecritureComptable.findMany({
+      where: {
+        compte: { planCompte: { numero: { startsWith: '7' } } },
+        operation: { statut: StatutOperation.VALIDEE },
+      },
+      include: { compte: { include: { planCompte: true } } },
     });
-
-    const typesRevenu = await this.prisma.revenuType.findMany();
     const [activeProjectsCount, activityGroups, creditsForKpis, activeDats, rawComptesEpargne, epargnesByType, agentsWithCaisses] = await Promise.all([
       this.prisma.projet.count({
         where: { statut: StatutProjet.EN_COURS },
@@ -555,21 +552,23 @@ export class BalancesService {
       },
     }));
 
-    const revenusDetails = typesRevenu.map((tr) => {
-      const fc =
-        revenusData.find((r) => r.typeRevenuId === tr.id && r.devise === 'FC')
-          ?._sum.montant || 0;
-      const usd =
-        revenusData.find((r) => r.typeRevenuId === tr.id && r.devise === 'USD')
-          ?._sum.montant || 0;
-      return {
-        id: tr.id,
-        nom: tr.nom,
-        description: tr.description,
-        totalFC: Number(fc),
-        totalUSD: Number(usd),
+    const revenusParCompte = new Map<number, { id: number; nom: string; totalFC: number; totalUSD: number }>();
+    for (const ligne of revenusComptables) {
+      const item = revenusParCompte.get(ligne.compteId) ?? {
+        id: ligne.compteId,
+        nom: ligne.compte.planCompte.libelle,
+        totalFC: 0,
+        totalUSD: 0,
       };
-    });
+      const net = Number(ligne.montant) * (ligne.sens === SensEcriture.CREDIT ? 1 : -1);
+      if (ligne.devise === Devise.FC) item.totalFC += net;
+      else item.totalUSD += net;
+      revenusParCompte.set(ligne.compteId, item);
+    }
+    const revenusDetails = [...revenusParCompte.values()].map((item) => ({
+      ...item,
+      description: null,
+    }));
 
     return {
       overview: {

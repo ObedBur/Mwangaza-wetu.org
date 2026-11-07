@@ -5,6 +5,7 @@ describe('SavingsService deposits', () => {
   const member = {
     id: 12,
     numeroCompte: 'MW-PRI-001',
+    typeCompte: 'PRINCIPAL',
     statut: 'actif',
     userId: null,
     delegues: [],
@@ -32,12 +33,14 @@ describe('SavingsService deposits', () => {
       }),
     };
     const zktecoService = { captureFingerprint: jest.fn() };
+    const comptabiliteService = { enregistrerDepotEpargne: jest.fn().mockResolvedValue({}), enregistrerRetraitEpargne: jest.fn().mockResolvedValue({}), contrepasser: jest.fn().mockResolvedValue(null) };
     const service = new SavingsService(
       prisma as never,
       parametresService as never,
       zktecoService as never,
+      comptabiliteService as never,
     );
-    return { service, prisma, tx, parametresService, zktecoService };
+    return { service, prisma, tx, parametresService, zktecoService, comptabiliteService };
   }
 
   it('allows an administrator to deposit using the required account number without a fingerprint', async () => {

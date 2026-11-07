@@ -3,15 +3,21 @@
 import Link from 'next/link';
 import {
   IconAlertTriangle,
+  IconArrowDown,
+  IconArrowsExchange,
+  IconArrowUp,
   IconBuildingBank,
   IconCalendar,
   IconCheck,
+  IconChevronRight,
   IconClock,
+  IconCreditCard,
   IconCurrencyDollar,
   IconPigMoney,
   IconSearch,
   IconSend,
   IconTrendingUp,
+  IconUserPlus,
   IconUsers,
   IconWallet,
 } from "@tabler/icons-react";
@@ -436,8 +442,22 @@ const [toast, setToast] = useState("");
   const t = copy[language];
 
   const authUser = getAuthUser();
+  const isAdmin = authUser?.role === "admin" || authUser?.role === "superadmin";
+  const isAgent = authUser?.role === "agent";
   const greetingName = authUser?.firstName || authUser?.fullName?.split(" ")[0] || "Aline";
   const greeting = language === "FR" ? `Bonjour, ${greetingName}` : `Welcome back, ${greetingName}`;
+
+  const myCaisse = useMemo(() => {
+    if (!dashboard?.agentsCaisses || dashboard.agentsCaisses.length === 0) return null;
+    return (
+      dashboard.agentsCaisses.find(
+        (ag) =>
+          ag.id === authUser?.id ||
+          ag.nom.toLowerCase() === authUser?.fullName?.toLowerCase() ||
+          (authUser?.guichet && ag.guichetAssigne.toLowerCase() === authUser.guichet.toLowerCase())
+      ) || dashboard.agentsCaisses[0]
+    );
+  }, [dashboard, authUser]);
 
 useEffect(() => {
     let active = true;
@@ -606,132 +626,218 @@ useEffect(() => {
           </div>
         </div>
         <div className="coop-page-actions" style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
-          <a href="#mw-guichets-section" className="mw-dialog-cancel" style={{ display: "inline-flex", alignItems: "center", gap: "6px", textDecoration: "none" }}>
-            <IconBuildingBank size={15} />
-            <span>Guichets ({dashboard?.agentsCaisses?.length || 0})</span>
-          </a>
+          {isAdmin ? (
+            <a href="#mw-guichets-section" className="mw-dialog-cancel" style={{ display: "inline-flex", alignItems: "center", gap: "6px", textDecoration: "none" }}>
+              <IconBuildingBank size={15} />
+              <span>Guichets ({dashboard?.agentsCaisses?.length || 0})</span>
+            </a>
+          ) : (
+            <div className="mw-dialog-cancel" style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+              <IconBuildingBank size={15} />
+              <span>{authUser?.guichet || myCaisse?.guichetAssigne || "Guichet Opérations"}</span>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* ── KPI Cards (Bento 5) ──────────────────────────────────── */}
-      <section className="mw-kpis mw-kpis-5" aria-label={t.overview}>
-        {/* Carte 1 : Membres */}
-        <article className="mw-kpi mw-kpi-bento">
-          <div className="mw-kpi-top">
-            <span className="mw-kpi-title">{t.members}</span>
-            <span className="mw-kpi-icon blue">
-              <IconUsers />
-            </span>
-          </div>
-          <div className="mw-kpi-main">
-            <div className="mw-kpi-value">{loading ? "…" : memberCount.toLocaleString("fr-FR")}</div>
-            <div className="mw-kpi-sub">
-              <span className="mw-kpi-subtext">{dashboard?.overview.activeMembersCount ?? 0} adhérents actifs</span>
-            </div>
-          </div>
-        </article>
-
-        {/* Carte 2 : Total Épargne */}
-        <article className="mw-kpi mw-kpi-bento">
-          <div className="mw-kpi-top">
-            <span className="mw-kpi-title">{t.savings}</span>
-            <span className="mw-kpi-icon gold">
-              <IconPigMoney />
-            </span>
-          </div>
-          <div className="mw-kpi-main">
-            <div className="mw-kpi-value">
-              {loading ? "…" : formatMoney(dashboard?.overview.totalEpargne.usd || 0, dashboard?.overview.totalEpargne.fc || 0).primary}
-            </div>
-            <div className="mw-kpi-sub" style={{ display: "flex", gap: "6px", flexWrap: "wrap", alignItems: "center" }}>
-              <span className="mw-kpi-badge-secondary">
-                {formatMoney(dashboard?.overview.totalEpargne.usd || 0, dashboard?.overview.totalEpargne.fc || 0).secondary}
+      {/* ── KPI Cards ──────────────────────────────────── */}
+      {isAdmin ? (
+        <section className="mw-kpis mw-kpis-5" aria-label={t.overview}>
+          {/* Carte 1 : Membres */}
+          <article className="mw-kpi mw-kpi-bento">
+            <div className="mw-kpi-top">
+              <span className="mw-kpi-title">{t.members}</span>
+              <span className="mw-kpi-icon blue">
+                <IconUsers />
               </span>
-              {(dashboard?.overview.datStats?.activeCount ?? 0) > 0 && (
-                <span className="mw-kpi-badge-gold" title="Capital bloqué sous Dépôt à terme">
-                  DAT: {money(currency === "USD" ? (dashboard?.overview.datStats?.totalCapitalUSD || 0) : (dashboard?.overview.datStats?.totalCapitalFC || 0), currency)}
+            </div>
+            <div className="mw-kpi-main">
+              <div className="mw-kpi-value">{loading ? "…" : memberCount.toLocaleString("fr-FR")}</div>
+              <div className="mw-kpi-sub">
+                <span className="mw-kpi-subtext">{dashboard?.overview.activeMembersCount ?? 0} adhérents actifs</span>
+              </div>
+            </div>
+          </article>
+
+          {/* Carte 2 : Total Épargne */}
+          <article className="mw-kpi mw-kpi-bento">
+            <div className="mw-kpi-top">
+              <span className="mw-kpi-title">{t.savings}</span>
+              <span className="mw-kpi-icon gold">
+                <IconPigMoney />
+              </span>
+            </div>
+            <div className="mw-kpi-main">
+              <div className="mw-kpi-value">
+                {loading ? "…" : formatMoney(dashboard?.overview.totalEpargne.usd || 0, dashboard?.overview.totalEpargne.fc || 0).primary}
+              </div>
+              <div className="mw-kpi-sub" style={{ display: "flex", gap: "6px", flexWrap: "wrap", alignItems: "center" }}>
+                <span className="mw-kpi-badge-secondary">
+                  {formatMoney(dashboard?.overview.totalEpargne.usd || 0, dashboard?.overview.totalEpargne.fc || 0).secondary}
                 </span>
-              )}
+                {(dashboard?.overview.datStats?.activeCount ?? 0) > 0 && (
+                  <span className="mw-kpi-badge-gold" title="Capital bloqué sous Dépôt à terme">
+                    DAT: {money(currency === "USD" ? (dashboard?.overview.datStats?.totalCapitalUSD || 0) : (dashboard?.overview.datStats?.totalCapitalFC || 0), currency)}
+                  </span>
+                )}
+              </div>
             </div>
-          </div>
-        </article>
+          </article>
 
-        {/* Carte 3 : Crédits & Recouvrement */}
-        <article className="mw-kpi mw-kpi-bento">
-          <div className="mw-kpi-top">
-            <span className="mw-kpi-title">{t.loans}</span>
-            <span className="mw-kpi-icon orange">
-              <IconCurrencyDollar />
-            </span>
-          </div>
-          <div className="mw-kpi-main">
-            <div className="mw-kpi-value">
-              {loading ? "…" : formatMoney(dashboard?.overview.activeCreditBalance.usd || 0, dashboard?.overview.activeCreditBalance.fc || 0).primary}
-            </div>
-            <div className="mw-kpi-sub" style={{ display: "flex", gap: "6px", flexWrap: "wrap", alignItems: "center" }}>
-              <span className="mw-kpi-badge-secondary">
-                {formatMoney(dashboard?.overview.activeCreditBalance.usd || 0, dashboard?.overview.activeCreditBalance.fc || 0).secondary}
-              </span>
-              <span className="mw-kpi-badge positive" title="Taux de remboursement global">
-                <IconTrendingUp size={12} />
-                {dashboard?.overview.repaymentRate ?? 0}% remboursé
+          {/* Carte 3 : Crédits & Recouvrement */}
+          <article className="mw-kpi mw-kpi-bento">
+            <div className="mw-kpi-top">
+              <span className="mw-kpi-title">{t.loans}</span>
+              <span className="mw-kpi-icon orange">
+                <IconCurrencyDollar />
               </span>
             </div>
-          </div>
-        </article>
-
-        {/* Carte 4 : Portefeuille à Risque (PAR / Impayés) */}
-        <article className="mw-kpi mw-kpi-bento">
-          <div className="mw-kpi-top">
-            <span className="mw-kpi-title">Crédits en Souffrance (PAR)</span>
-            <span className={`mw-kpi-icon ${(dashboard?.overview.overdueCreditsCount ?? 0) > 0 ? "red" : "green"}`}>
-              {(dashboard?.overview.overdueCreditsCount ?? 0) > 0 ? <IconAlertTriangle /> : <IconCheck />}
-            </span>
-          </div>
-          <div className="mw-kpi-main">
-            <div className="mw-kpi-value" style={{ color: (dashboard?.overview.overdueCreditsCount ?? 0) > 0 ? "var(--mw-red)" : "inherit" }}>
-              {loading ? "…" : `${dashboard?.overview.overdueCreditsCount ?? 0} impayé${(dashboard?.overview.overdueCreditsCount ?? 0) > 1 ? "s" : ""}`}
-            </div>
-            <div className="mw-kpi-sub">
-              {(dashboard?.overview.overdueCreditsCount ?? 0) > 0 ? (
-                <span className="mw-kpi-badge-danger">
-                  Restant dû : {formatMoney(dashboard?.overview.overdueCreditBalance?.usd || 0, dashboard?.overview.overdueCreditBalance?.fc || 0).primary}
+            <div className="mw-kpi-main">
+              <div className="mw-kpi-value">
+                {loading ? "…" : formatMoney(dashboard?.overview.activeCreditBalance.usd || 0, dashboard?.overview.activeCreditBalance.fc || 0).primary}
+              </div>
+              <div className="mw-kpi-sub" style={{ display: "flex", gap: "6px", flexWrap: "wrap", alignItems: "center" }}>
+                <span className="mw-kpi-badge-secondary">
+                  {formatMoney(dashboard?.overview.activeCreditBalance.usd || 0, dashboard?.overview.activeCreditBalance.fc || 0).secondary}
                 </span>
-              ) : (
-                <span className="mw-kpi-subtext" style={{ color: "var(--mw-green)" }}>
-                  Aucun retard constaté
+                <span className="mw-kpi-badge positive" title="Taux de remboursement global">
+                  <IconTrendingUp size={12} />
+                  {dashboard?.overview.repaymentRate ?? 0}% remboursé
                 </span>
-              )}
+              </div>
             </div>
-          </div>
-        </article>
+          </article>
 
-        {/* Carte 5 : Disponibilités Caisse */}
-        <article className="mw-kpi mw-kpi-bento">
-          <div className="mw-kpi-top">
-            <span className="mw-kpi-title">Disponibilités Caisse</span>
-            <span className="mw-kpi-icon green">
-              <IconWallet />
-            </span>
-          </div>
-          <div className="mw-kpi-main">
-            <div className="mw-kpi-value">
-              {loading ? "…" : formatMoney(dashboard?.overview.totalCaisse.usd || 0, dashboard?.overview.totalCaisse.fc || 0).primary}
-            </div>
-            <div className="mw-kpi-sub">
-              <span className="mw-kpi-badge-secondary">
-                {formatMoney(dashboard?.overview.totalCaisse.usd || 0, dashboard?.overview.totalCaisse.fc || 0).secondary}
+          {/* Carte 4 : Portefeuille à Risque (PAR / Impayés) */}
+          <article className="mw-kpi mw-kpi-bento">
+            <div className="mw-kpi-top">
+              <span className="mw-kpi-title">Crédits en Souffrance (PAR)</span>
+              <span className={`mw-kpi-icon ${(dashboard?.overview.overdueCreditsCount ?? 0) > 0 ? "red" : "green"}`}>
+                {(dashboard?.overview.overdueCreditsCount ?? 0) > 0 ? <IconAlertTriangle /> : <IconCheck />}
               </span>
             </div>
-          </div>
-        </article>
-      </section>
+            <div className="mw-kpi-main">
+              <div className="mw-kpi-value" style={{ color: (dashboard?.overview.overdueCreditsCount ?? 0) > 0 ? "var(--mw-red)" : "inherit" }}>
+                {loading ? "…" : `${dashboard?.overview.overdueCreditsCount ?? 0} impayé${(dashboard?.overview.overdueCreditsCount ?? 0) > 1 ? "s" : ""}`}
+              </div>
+              <div className="mw-kpi-sub">
+                {(dashboard?.overview.overdueCreditsCount ?? 0) > 0 ? (
+                  <span className="mw-kpi-badge-danger">
+                    Restant dû : {formatMoney(dashboard?.overview.overdueCreditBalance?.usd || 0, dashboard?.overview.overdueCreditBalance?.fc || 0).primary}
+                  </span>
+                ) : (
+                  <span className="mw-kpi-subtext" style={{ color: "var(--mw-green)" }}>
+                    Aucun retard constaté
+                  </span>
+                )}
+              </div>
+            </div>
+          </article>
+
+          {/* Carte 5 : Disponibilités Caisse */}
+          <article className="mw-kpi mw-kpi-bento">
+            <div className="mw-kpi-top">
+              <span className="mw-kpi-title">Disponibilités Caisse</span>
+              <span className="mw-kpi-icon green">
+                <IconWallet />
+              </span>
+            </div>
+            <div className="mw-kpi-main">
+              <div className="mw-kpi-value">
+                {loading ? "…" : formatMoney(dashboard?.overview.totalCaisse.usd || 0, dashboard?.overview.totalCaisse.fc || 0).primary}
+              </div>
+              <div className="mw-kpi-sub">
+                <span className="mw-kpi-badge-secondary">
+                  {formatMoney(dashboard?.overview.totalCaisse.usd || 0, dashboard?.overview.totalCaisse.fc || 0).secondary}
+                </span>
+              </div>
+            </div>
+          </article>
+        </section>
+      ) : (
+        /* Agent Bento Cards : Adaptées aux opérations et à la caisse du guichetier */
+        <section className="mw-kpis mw-kpis-4" aria-label="Aperçu du guichet" style={{ gridTemplateColumns: "repeat(4, minmax(0, 1fr))" }}>
+          {/* Caisse USD */}
+          <article className="mw-kpi mw-kpi-bento">
+            <div className="mw-kpi-top">
+              <span className="mw-kpi-title">Ma Caisse Guichet (USD)</span>
+              <span className="mw-kpi-icon green">
+                <IconWallet />
+              </span>
+            </div>
+            <div className="mw-kpi-main">
+              <div className="mw-kpi-value">
+                {loading ? "…" : money(myCaisse?.soldes.usd || 0, "USD")}
+              </div>
+              <div className="mw-kpi-sub">
+                <span className="mw-kpi-subtext">Liquidités disponibles USD</span>
+              </div>
+            </div>
+          </article>
+
+          {/* Caisse FC */}
+          <article className="mw-kpi mw-kpi-bento">
+            <div className="mw-kpi-top">
+              <span className="mw-kpi-title">Ma Caisse Guichet (FC)</span>
+              <span className="mw-kpi-icon blue">
+                <IconBuildingBank />
+              </span>
+            </div>
+            <div className="mw-kpi-main">
+              <div className="mw-kpi-value">
+                {loading ? "…" : money(myCaisse?.soldes.fc || 0, "FC")}
+              </div>
+              <div className="mw-kpi-sub">
+                <span className="mw-kpi-subtext">Liquidités disponibles FC</span>
+              </div>
+            </div>
+          </article>
+
+          {/* Membres Actifs */}
+          <article className="mw-kpi mw-kpi-bento">
+            <div className="mw-kpi-top">
+              <span className="mw-kpi-title">Membres Coopérative</span>
+              <span className="mw-kpi-icon gold">
+                <IconUsers />
+              </span>
+            </div>
+            <div className="mw-kpi-main">
+              <div className="mw-kpi-value">{loading ? "…" : memberCount.toLocaleString("fr-FR")}</div>
+              <div className="mw-kpi-sub">
+                <span className="mw-kpi-subtext">{dashboard?.overview.activeMembersCount ?? 0} adhérents actifs</span>
+              </div>
+            </div>
+          </article>
+
+          {/* Guichet & Session */}
+          <article className="mw-kpi mw-kpi-bento">
+            <div className="mw-kpi-top">
+              <span className="mw-kpi-title">Poste & Guichet</span>
+              <span className="mw-kpi-icon green">
+                <IconCheck />
+              </span>
+            </div>
+            <div className="mw-kpi-main">
+              <div className="mw-kpi-value" style={{ fontSize: "16px", fontWeight: 700 }}>
+                {authUser?.guichet || myCaisse?.guichetAssigne || "Guichet Actif"}
+              </div>
+              <div className="mw-kpi-sub">
+                <span className="mw-kpi-badge positive">
+                  <IconCheck size={12} />
+                  Session ouverte & opérationnelle
+                </span>
+              </div>
+            </div>
+          </article>
+        </section>
+      )}
 
       {/* ── Dashboard Grid ──────────────────────────────────────── */}
       <div className="mw-dashboard-grid">
         <div className="mw-main-column">
-          {/* Chart */}
-          <section className="mw-panel mw-overview-panel" aria-labelledby="mw-chart-title">
+          {/* Chart pour Admin ou Actions Rapides pour Agent */}
+          {isAdmin ? (
+            <section className="mw-panel mw-overview-panel" aria-labelledby="mw-chart-title">
             <div className="mw-panel-header" style={{ flexWrap: "wrap", gap: "10px" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                 <h2 id="mw-chart-title" style={{ margin: 0 }}>
@@ -844,6 +950,127 @@ useEffect(() => {
               </div>
             </div>
           </section>
+          ) : (
+            <section className="mw-panel mw-overview-panel" aria-labelledby="mw-agent-ops-title">
+              <div className="mw-panel-header" style={{ flexWrap: "wrap", gap: "10px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                  <span className="mw-kpi-icon blue">
+                    <IconBuildingBank size={18} />
+                  </span>
+                  <div>
+                    <h2 id="mw-agent-ops-title" style={{ margin: 0, fontSize: "14px", fontWeight: 700 }}>
+                      Opérations de Guichet & Services Rapides
+                    </h2>
+                    <span style={{ fontSize: "11px", color: "var(--mw-muted)" }}>
+                      Accès direct aux modules d&apos;encaissement, décaissement et gestion
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "12px", marginTop: "14px" }}>
+                <Link
+                  href="/operations/depots-cotisations"
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "12px",
+                    padding: "14px 16px",
+                    borderRadius: "10px",
+                    border: "1px solid var(--mw-line)",
+                    background: "var(--mw-paper)",
+                    textDecoration: "none",
+                    color: "inherit",
+                    boxShadow: "0 1px 3px rgba(0,0,0,0.03)",
+                  }}
+                >
+                  <span className="mw-kpi-icon green" style={{ width: "36px", height: "36px" }}>
+                    <IconArrowDown size={18} />
+                  </span>
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <strong style={{ display: "block", fontSize: "12.5px", color: "var(--mw-ink)" }}>Nouveau Dépôt</strong>
+                    <span style={{ fontSize: "11px", color: "var(--mw-muted)" }}>Alimenter un compte épargne</span>
+                  </div>
+                  <IconChevronRight size={15} color="var(--mw-muted)" />
+                </Link>
+
+                <Link
+                  href="/operations/retraits"
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "12px",
+                    padding: "14px 16px",
+                    borderRadius: "10px",
+                    border: "1px solid var(--mw-line)",
+                    background: "var(--mw-paper)",
+                    textDecoration: "none",
+                    color: "inherit",
+                    boxShadow: "0 1px 3px rgba(0,0,0,0.03)",
+                  }}
+                >
+                  <span className="mw-kpi-icon orange" style={{ width: "36px", height: "36px" }}>
+                    <IconArrowUp size={18} />
+                  </span>
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <strong style={{ display: "block", fontSize: "12.5px", color: "var(--mw-ink)" }}>Nouveau Retrait</strong>
+                    <span style={{ fontSize: "11px", color: "var(--mw-muted)" }}>Décaisser des fonds</span>
+                  </div>
+                  <IconChevronRight size={15} color="var(--mw-muted)" />
+                </Link>
+
+                <Link
+                  href="/operations/remboursements"
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "12px",
+                    padding: "14px 16px",
+                    borderRadius: "10px",
+                    border: "1px solid var(--mw-line)",
+                    background: "var(--mw-paper)",
+                    textDecoration: "none",
+                    color: "inherit",
+                    boxShadow: "0 1px 3px rgba(0,0,0,0.03)",
+                  }}
+                >
+                  <span className="mw-kpi-icon blue" style={{ width: "36px", height: "36px" }}>
+                    <IconArrowsExchange size={18} />
+                  </span>
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <strong style={{ display: "block", fontSize: "12.5px", color: "var(--mw-ink)" }}>Remboursement</strong>
+                    <span style={{ fontSize: "11px", color: "var(--mw-muted)" }}>Paiement d&apos;échéance crédit</span>
+                  </div>
+                  <IconChevronRight size={15} color="var(--mw-muted)" />
+                </Link>
+
+                <Link
+                  href="/membres"
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "12px",
+                    padding: "14px 16px",
+                    borderRadius: "10px",
+                    border: "1px solid var(--mw-line)",
+                    background: "var(--mw-paper)",
+                    textDecoration: "none",
+                    color: "inherit",
+                    boxShadow: "0 1px 3px rgba(0,0,0,0.03)",
+                  }}
+                >
+                  <span className="mw-kpi-icon gold" style={{ width: "36px", height: "36px" }}>
+                    <IconUserPlus size={18} />
+                  </span>
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <strong style={{ display: "block", fontSize: "12.5px", color: "var(--mw-ink)" }}>Inscrire un Membre</strong>
+                    <span style={{ fontSize: "11px", color: "var(--mw-muted)" }}>Créer une adhésion</span>
+                  </div>
+                  <IconChevronRight size={15} color="var(--mw-muted)" />
+                </Link>
+              </div>
+            </section>
+          )}
 
           {/* Transactions */}
           <section className="mw-panel" aria-labelledby="mw-transactions-title">
@@ -961,8 +1188,10 @@ useEffect(() => {
 
         {/* Right column */}
         <aside className="mw-right-column">
-          {/* Distribution Section (Comptes vs Activités) */}
-          <section className="mw-panel mw-overview-panel" aria-labelledby="mw-distribution-title">
+          {isAdmin ? (
+            <>
+              {/* Distribution Section (Comptes vs Activités) */}
+              <section className="mw-panel mw-overview-panel" aria-labelledby="mw-distribution-title">
             <div className="mw-panel-header" style={{ flexWrap: "wrap", gap: "8px" }}>
               <h2 id="mw-distribution-title" style={{ margin: 0, fontSize: "13px" }}>
                 {distributionTab === "accounts" ? "Comptes d'Épargne (6)" : t.distribution}
@@ -1091,11 +1320,60 @@ useEffect(() => {
               )}
             </div>
           </section>
-        </aside>
-      </div>
+        </>
+      ) : (
+        <>
+          {/* Situation de ma Caisse Guichet */}
+          <section className="mw-panel mw-overview-panel">
+            <div className="mw-panel-header">
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <span className="mw-kpi-icon green" style={{ width: "26px", height: "26px" }}>
+                  <IconWallet size={15} />
+                </span>
+                <h2 style={{ margin: 0, fontSize: "13px" }}>Situation de ma Caisse</h2>
+              </div>
+              <span className="mw-dot-green" title="Guichet ouvert" />
+            </div>
+            <div style={{ padding: "10px 0", display: "grid", gap: "8px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "9px 12px", background: "var(--mw-canvas)", borderRadius: "8px", border: "1px solid var(--mw-line)" }}>
+                <span style={{ fontSize: "11.5px", color: "var(--mw-muted)" }}>Guichet assigné</span>
+                <strong style={{ fontSize: "12px" }}>{authUser?.guichet || myCaisse?.guichetAssigne || "Guichet 1"}</strong>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "9px 12px", background: "var(--mw-canvas)", borderRadius: "8px", border: "1px solid var(--mw-line)" }}>
+                <span style={{ fontSize: "11.5px", color: "var(--mw-muted)" }}>Liquidités USD</span>
+                <strong style={{ fontSize: "13px", color: "var(--mw-green)" }}>{money(myCaisse?.soldes.usd || 0, "USD")}</strong>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "9px 12px", background: "var(--mw-canvas)", borderRadius: "8px", border: "1px solid var(--mw-line)" }}>
+                <span style={{ fontSize: "11.5px", color: "var(--mw-muted)" }}>Liquidités FC</span>
+                <strong style={{ fontSize: "13px", color: "var(--mw-primary)" }}>{money(myCaisse?.soldes.fc || 0, "FC")}</strong>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "9px 12px", background: "var(--mw-canvas)", borderRadius: "8px", border: "1px solid var(--mw-line)" }}>
+                <span style={{ fontSize: "11.5px", color: "var(--mw-muted)" }}>Agent connecté</span>
+                <strong style={{ fontSize: "12px" }}>{authUser?.fullName || "Agent"}</strong>
+              </div>
+            </div>
+          </section>
 
-      {/* ── Section Guichets & Caisses Agents ──────────────────────── */}
-      <section id="mw-guichets-section" className="mw-panel mw-guichets-panel" aria-labelledby="mw-guichets-title">
+          {/* Assistance & Raccourcis */}
+          <section className="mw-panel mw-overview-panel">
+            <div className="mw-panel-header">
+              <h2 style={{ margin: 0, fontSize: "13px" }}>Centre d&apos;Assistance</h2>
+              <Link href="/support" className="mw-link-button" style={{ textDecoration: "none" }}>
+                Ouvrir
+              </Link>
+            </div>
+            <p style={{ fontSize: "12px", color: "var(--mw-muted)", margin: "10px 0 0", lineHeight: 1.5 }}>
+              Besoin d&apos;aide sur une transaction ou une régularisation de caisse ? Consultez le support ou contactez la direction.
+            </p>
+          </section>
+        </>
+      )}
+    </aside>
+  </div>
+
+  {/* ── Section Guichets & Caisses Agents (Visible uniquement pour Admin / SuperAdmin) ── */}
+  {isAdmin && (
+    <section id="mw-guichets-section" className="mw-panel mw-guichets-panel" aria-labelledby="mw-guichets-title">
         <div className="mw-panel-header">
           <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
             <span className="mw-kpi-icon blue">
@@ -1148,6 +1426,7 @@ useEffect(() => {
           )}
         </div>
       </section>
+      )}
 
       {loading && <p className="mw-empty" role="status">Chargement des données du dashboard…</p>}
       {loadError && <p className="mw-empty" role="alert">{loadError}</p>}

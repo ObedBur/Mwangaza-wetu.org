@@ -20,6 +20,8 @@ model Membre {
   numeroCompte        String          @unique @map("numero_compte")
   nomComplet          String          @map("nom_complet")
   dateAdhesion        DateTime        @map("date_adhesion")
+  dureeAdhesionMois   Int             @default(1) @map("duree_adhesion_mois")
+  dateExpirationAdhesion DateTime?    @map("date_expiration_adhesion")
   telephone           String          @unique
   email               String?         @unique
   adresse             String?
@@ -528,8 +530,10 @@ enum TypeOperationComptable {
   ADHESION
   ABONNEMENT_EPARGNE
   INTERET_CREDIT
+  DECAISSEMENT_CREDIT
   DEPOT_EPARGNE
   RETRAIT_EPARGNE
+  FRAIS_RETRAIT
   CONTREPASSATION
   AJUSTEMENT
 }
@@ -555,7 +559,7 @@ enum StatutCompte {
 
 model PlanComptable {
   id            Int          @id @default(autoincrement())
-  numero        String       @unique // 101, 411, 462, 521, 571, 7061, 7062, 771x,...
+  numero        String       @unique // Comptes généraux SYSCOHADA
   libelle       String
   nature        NatureCompte
   estAuxiliaire Boolean      @default(false)

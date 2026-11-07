@@ -4,9 +4,10 @@ import { WithdrawalsController } from './withdrawals.controller';
 import { ParametresModule } from '../parametres/parametres.module';
 import { BalancesModule } from '../balances/balances.module';
 import { ZktecoModule } from '../zkteco/zkteco.module';
+import { ComptabiliteModule } from '../comptabilite/comptabilite.module';
 
 @Module({
-  imports: [ParametresModule, BalancesModule, ZktecoModule],
+  imports: [ParametresModule, BalancesModule, ZktecoModule, ComptabiliteModule],
   providers: [WithdrawalsService],
   controllers: [WithdrawalsController],
 })

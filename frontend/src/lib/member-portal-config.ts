@@ -72,6 +72,7 @@ export const memberNavigation: NavigationItem[] = [
     href: "/retirer",
     group: "services",
     icon: IconArrowUp,
+    showInNavigation: false,
   },
   {
     id: "credits",

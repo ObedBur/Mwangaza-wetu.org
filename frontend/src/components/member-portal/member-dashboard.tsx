@@ -1,11 +1,24 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useMemberPortalData, type MemberPortalDashboard, type MemberPortalTransaction } from '@/components/member-portal/member-data';
-import { AccountAmount, DataRegion, Panel, StatusBadge } from '@/components/member-portal/portal-ui';
+import { DataRegion, Panel, StatusBadge } from '@/components/member-portal/portal-ui';
 import { formatCurrency, formatSignedCurrency } from '@/lib/format-currency';
-import { IconArrowDown, IconDatabaseOff, IconWallet } from '@/lib/tabler-icons';
+import {
+  IconArrowDown,
+  IconArrowDownLeft,
+  IconArrowUpRight,
+  IconCalendar,
+  IconChevronRight,
+  IconCoins,
+  IconCreditCard,
+  IconDatabaseOff,
+  IconFileText,
+  IconReceipt,
+  IconTrendingUp,
+  IconWallet,
+} from '@/lib/tabler-icons';
 import type { PortalDataState } from '@/components/member-portal/portal-ui';
 
 function transactionKind(type: string) {
@@ -24,16 +37,108 @@ function stateLabel(state: PortalDataState) {
   return state === 'loading' ? 'Chargement des données…' : 'Données indisponibles';
 }
 
-function SummaryCard({ title, amount, currency, caption, featured = false }: { title: string; amount: number; currency: string; caption: string; featured?: boolean }) {
+/** Bento KPI Card — Design harmonisé avec le Dashboard Admin */
+function BentoKPICard({
+  title,
+  amount,
+  currency,
+  caption,
+  badge,
+  badgeVariant = 'neutral',
+  icon: Icon,
+  iconColor = 'blue',
+}: {
+  title: string;
+  amount: number;
+  currency: string;
+  caption?: string;
+  badge?: string;
+  badgeVariant?: 'success' | 'warning' | 'neutral';
+  icon: typeof IconWallet;
+  iconColor?: 'blue' | 'gold' | 'green' | 'orange';
+}) {
   return (
-    <article className={`summary-card summary-deposit${featured ? ' is-savings-hero' : ''}`}>
-      <div className="summary-card-top"><h2>{title}</h2>{featured ? <IconWallet size={19} stroke={1.7} aria-hidden="true" /> : null}</div>
-      <AccountAmount amount={amount} currency={currency} />
-      <div className="summary-card-bottom"><span>{caption}</span></div>
+    <article className="kpi-card-bento">
+      <div className="kpi-card-top">
+        <span className="kpi-card-title">{title}</span>
+        <span className={`kpi-card-icon-wrap ${iconColor}`}>
+          <Icon size={18} stroke={1.7} aria-hidden="true" />
+        </span>
+      </div>
+      <div className="kpi-card-main-val tabular-nums">
+        {formatCurrency(amount, currency)}
+      </div>
+      <div className="kpi-card-sub-info">
+        {caption ? <span>{caption}</span> : null}
+        {badge ? (
+          <span
+            className={`kpi-card-badge is-${badgeVariant}`}
+            style={{
+              padding: '2px 8px',
+              borderRadius: '999px',
+              fontSize: '10.5px',
+              fontWeight: 600,
+              background: badgeVariant === 'success' ? '#dcfce7' : badgeVariant === 'warning' ? '#fef3c7' : '#f1f5f9',
+              color: badgeVariant === 'success' ? '#15803d' : badgeVariant === 'warning' ? '#b45309' : '#475569',
+            }}
+          >
+            {badge}
+          </span>
+        ) : null}
+      </div>
     </article>
   );
 }
 
+/** Flux du mois Bento Card avec sélecteur de devise */
+function BentoMonthlyFlowCard({
+  deposits,
+  withdrawals,
+  currency,
+  onCurrencyChange,
+}: {
+  deposits: number;
+  withdrawals: number;
+  currency: 'USD' | 'FC';
+  onCurrencyChange: (c: 'USD' | 'FC') => void;
+}) {
+  const net = deposits - withdrawals;
+  const isPositive = net >= 0;
+  return (
+    <article className="kpi-card-bento">
+      <div className="kpi-card-top">
+        <span className="kpi-card-title">Flux du mois</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <div className="kpi-currency-toggle" role="group" aria-label="Devise du flux">
+            <button
+              type="button"
+              className={currency === 'USD' ? 'is-selected' : ''}
+              onClick={() => onCurrencyChange('USD')}
+            >
+              USD
+            </button>
+            <button
+              type="button"
+              className={currency === 'FC' ? 'is-selected' : ''}
+              onClick={() => onCurrencyChange('FC')}
+            >
+              FC
+            </button>
+          </div>
+          <span className="kpi-card-icon-wrap green">
+            <IconTrendingUp size={18} stroke={1.7} aria-hidden="true" />
+          </span>
+        </div>
+      </div>
+      <div className="kpi-card-main-val tabular-nums" style={{ color: isPositive ? '#16A34A' : '#DC2626' }}>
+        {formatSignedCurrency(net, isPositive ? '+' : '−', currency)}
+      </div>
+      <div className="kpi-card-sub-info">
+        <span>+{formatCurrency(deposits, currency)} dépôts · {formatCurrency(withdrawals, currency)} retraits</span>
+      </div>
+    </article>
+  );
+}
 function DashboardEmptyState({ kind }: { kind: 'chart' | 'activity' }) {
   const isChart = kind === 'chart';
   return (
@@ -43,7 +148,7 @@ function DashboardEmptyState({ kind }: { kind: 'chart' | 'activity' }) {
         <strong>{isChart ? 'Aucun mouvement sur les six derniers mois' : 'Aucune opération récente'}</strong>
         <p>{isChart ? 'Vos dépôts et retraits apparaîtront ici.' : 'Vos opérations enregistrées s’afficheront dans cet historique.'}</p>
       </div>
-      {isChart ? <Link href="/deposer" className="dashboard-empty-action">Faire un dépôt</Link> : <Link href="/transactions" className="dashboard-empty-action">Voir l’historique</Link>}
+      <Link href="/transactions" className="dashboard-empty-action">Voir l’historique</Link>
     </div>
   );
 }
@@ -58,27 +163,75 @@ function ActivityChart({ activity, currency, onCurrencyChange }: { activity: Mem
   const activityRows = months;
   const maximum = Math.max(1, ...activityRows.flatMap((item) => [item.deposits, item.withdrawals]));
   const hasActivity = activityRows.some((item) => item.deposits || item.withdrawals);
+  const totalDeposits = activityRows.reduce((sum, item) => sum + item.deposits, 0);
+  const chartX = (index: number) =>
+    48 + (activityRows.length < 2 ? 319 : (index * 638) / (activityRows.length - 1));
+  const chartY = (value: number) => 158 - (value / maximum) * 132;
+  const depositPoints = activityRows
+    .map((item, index) => `${chartX(index)},${chartY(item.deposits)}`)
+    .join(" ");
+  const withdrawalPoints = activityRows
+    .map((item, index) => `${chartX(index)},${chartY(item.withdrawals)}`)
+    .join(" ");
+
   return (
-    <Panel title="Dépôts & retraits" className="chart-panel" action={<div className="chart-panel-actions"><div className="chart-currency-toggle" role="group" aria-label="Devise du graphique"><button type="button" aria-pressed={currency === 'USD'} className={currency === 'USD' ? 'is-selected' : ''} onClick={() => onCurrencyChange('USD')}>USD</button><button type="button" aria-pressed={currency === 'FC'} className={currency === 'FC' ? 'is-selected' : ''} onClick={() => onCurrencyChange('FC')}>FC</button></div><span className="chart-period-label">6 derniers mois</span></div>}>
+    <Panel
+      title="Dépôts & retraits"
+      className="chart-panel"
+      action={
+        <div className="chart-panel-actions">
+          <div className="chart-currency-toggle" role="group" aria-label="Devise du graphique">
+            <button type="button" aria-pressed={currency === 'USD'} className={currency === 'USD' ? 'is-selected' : ''} onClick={() => onCurrencyChange('USD')}>USD</button>
+            <button type="button" aria-pressed={currency === 'FC'} className={currency === 'FC' ? 'is-selected' : ''} onClick={() => onCurrencyChange('FC')}>FC</button>
+          </div>
+          <span className="chart-period-label">6 derniers mois</span>
+        </div>
+      }
+    >
       {!hasActivity ? <DashboardEmptyState kind="chart" /> : (
         <>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginBottom: '8px' }}>
+            <strong style={{ fontSize: '22px', fontWeight: 700, color: 'var(--mw-ink, #0f172a)', letterSpacing: '-0.03em' }}>
+              {formatCurrency(totalDeposits, currency)}
+            </strong>
+            <span style={{ fontSize: '11px', color: 'var(--mw-muted, #64748B)' }}>
+              Total versé sur la période
+            </span>
+          </div>
           <div className="member-chart-legend" aria-label="Légende du graphique">
             <span><i className="legend-deposit" />Dépôts</span>
             <span><i className="legend-withdrawal" />Retraits</span>
           </div>
           <div className="member-chart-plot">
-            <div className="member-chart-gridlines" aria-hidden="true"><span /><span /><span /><span /></div>
-            <div className="chart-columns">
-              {activityRows.map((item) => (
-                <div className="chart-column" key={item.key}>
-                  <div className="chart-bars">
-                    <span className="chart-bar deposit-bar" style={{ height: `${item.deposits ? Math.max(4, (item.deposits / maximum) * 100) : 0}%` }} title={`Dépôts ${item.month} : ${formatCurrency(item.deposits, currency)}`} />
-                    <span className="chart-bar withdrawal-bar" style={{ height: `${item.withdrawals ? Math.max(4, (item.withdrawals / maximum) * 100) : 0}%` }} title={`Retraits ${item.month} : ${formatCurrency(item.withdrawals, currency)}`} />
-                  </div>
-                  <span className="chart-month">{item.month}</span>
-                </div>
+            <svg
+              className="member-chart-svg"
+              viewBox="0 0 700 190"
+              role="img"
+              aria-label={`Dépôts et retraits des six derniers mois en ${currency}`}
+              preserveAspectRatio="none"
+            >
+              {[26, 67, 108, 149].map((y, index) => (
+                <g key={y}>
+                  <line x1="46" x2="687" y1={y} y2={y} className="member-chart-grid" />
+                  <text x="1" y={y + 3} className="member-chart-axis">
+                    {Math.round((maximum * (4 - index)) / 4).toLocaleString("fr-FR")}
+                  </text>
+                </g>
               ))}
-              </div>
+              <polyline className="member-chart-line-deposits" points={depositPoints} />
+              <polyline className="member-chart-line-withdrawals" points={withdrawalPoints} />
+              {activityRows.map((item, index) => (
+                <text
+                  key={item.key}
+                  x={chartX(index)}
+                  y="184"
+                  textAnchor="middle"
+                  className={`member-chart-axis${index % 2 === 1 ? " is-hidden-on-mobile" : ""}`}
+                >
+                  {item.month}
+                </text>
+              ))}
+            </svg>
           </div>
         </>
       )}
@@ -87,30 +240,115 @@ function ActivityChart({ activity, currency, onCurrencyChange }: { activity: Mem
 }
 
 function ActivityList({ transactions, state, error, reload }: { transactions: MemberPortalTransaction[]; state: PortalDataState; error: string; reload: () => void }) {
-  const recent = transactions.slice(0, 8);
+  const [filter, setFilter] = useState<string>('ALL');
+  const filtered = useMemo(() => {
+    if (filter === 'ALL') return transactions;
+    if (filter === 'depot') return transactions.filter((t) => t.type === 'depot');
+    if (filter === 'retrait') return transactions.filter((t) => t.type === 'retrait');
+    if (filter === 'remboursement') return transactions.filter((t) => t.type === 'remboursement');
+    return transactions;
+  }, [transactions, filter]);
+  const recent = filtered.slice(0, 8);
+
   return (
-    <Panel title="Activité récente" className="activity-panel" action={<Link href="/transactions" className="panel-text-link">Historique complet</Link>}>
-      {state === 'error' ? <div className="portal-error-state" role="alert"><span>{error}</span><button onClick={reload}>Réessayer</button></div> : state === 'loading' ? <p className="portal-empty-state">{stateLabel(state)}</p> : recent.length === 0 ? <DashboardEmptyState kind="activity" /> : (
+    <Panel
+      title="Activité récente"
+      className="activity-panel"
+      action={<Link href="/transactions" className="panel-text-link">Historique complet →</Link>}
+    >
+      {/* Filtres de transactions — style pills comme le dashboard Admin */}
+      <div style={{ display: 'flex', gap: '6px', marginBottom: '14px', flexWrap: 'wrap' }}>
+        {[
+          ['ALL', 'Toutes'],
+          ['depot', 'Dépôts'],
+          ['retrait', 'Retraits'],
+          ['remboursement', 'Remboursements'],
+        ].map(([val, label]) => (
+          <button
+            key={val}
+            type="button"
+            style={{
+              padding: '4px 12px',
+              borderRadius: '999px',
+              border: '1px solid var(--mw-line, #E5E7EB)',
+              background: filter === val ? 'var(--mw-primary, #0B5EA8)' : 'var(--mw-paper, #FFFFFF)',
+              color: filter === val ? '#FFFFFF' : 'var(--mw-muted, #64748B)',
+              fontSize: '11px',
+              fontWeight: 600,
+              cursor: 'pointer',
+              transition: 'all 120ms ease',
+            }}
+            onClick={() => setFilter(val)}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {state === 'error' ? (
+        <div className="portal-error-state" role="alert"><span>{error}</span><button onClick={reload}>Réessayer</button></div>
+      ) : state === 'loading' ? (
+        <p className="portal-empty-state">{stateLabel(state)}</p>
+      ) : recent.length === 0 ? (
+        <DashboardEmptyState kind="activity" />
+      ) : (
         <>
-        <div className="activity-table-wrap">
-          <table className="activity-table"><thead><tr><th>Date</th><th>Description</th><th>Compte</th><th>Montant</th><th>Statut</th></tr></thead>
-            <tbody>{recent.map((row) => {
+          <div className="activity-table-wrap">
+            <table className="activity-table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Description</th>
+                  <th>Compte</th>
+                  <th>Montant</th>
+                  <th>Statut</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recent.map((row) => {
+                  const positive = row.type === 'depot';
+                  const account = row.compteType === 'DAT' ? 'Dépôt à terme' : row.compteType === 'CREDIT' ? 'Crédit' : 'Compte principal';
+                  return (
+                    <tr key={row.id}>
+                      <td>{new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(row.date))}</td>
+                      <td className="transaction-description">
+                        <span>{row.description || transactionKind(row.type)}</span>
+                        <small>{transactionKind(row.type)}</small>
+                      </td>
+                      <td className="table-account"><span>{account}</span></td>
+                      <td className={positive ? 'amount-positive' : 'amount-negative'}>
+                        {formatSignedCurrency(row.montant, positive ? '+' : '−', row.devise)}
+                      </td>
+                      <td><StatusBadge status={transactionStatus(row.statut)} /></td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <div className="dashboard-activity-mobile">
+            {recent.map((row) => {
               const positive = row.type === 'depot';
               const account = row.compteType === 'DAT' ? 'Dépôt à terme' : row.compteType === 'CREDIT' ? 'Crédit' : 'Compte principal';
-              return <tr key={row.id}><td>{new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(row.date))}</td><td className="transaction-description"><span>{row.description}</span><small>{transactionKind(row.type)}</small></td><td className="table-account">{account}</td><td className={positive ? 'amount-positive' : 'amount-negative'}>{formatSignedCurrency(row.montant, positive ? '+' : '−', row.devise)}</td><td><StatusBadge status={transactionStatus(row.statut)} /></td></tr>;
-            })}</tbody>
-          </table>
-        </div>
-        <div className="dashboard-activity-mobile">
-          {recent.map((row) => {
-            const positive = row.type === 'depot';
-            const account = row.compteType === 'DAT' ? 'Dépôt à terme' : row.compteType === 'CREDIT' ? 'Crédit' : 'Compte principal';
-            return <article className="dashboard-activity-card" key={row.id}>
-              <div className="dashboard-activity-card-main"><div><strong>{row.description || transactionKind(row.type)}</strong><span>{new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(row.date))} · {account}</span></div><span className={positive ? 'amount-positive' : 'amount-negative'}>{formatSignedCurrency(row.montant, positive ? '+' : '−', row.devise)}</span></div>
-              <div className="dashboard-activity-card-footer"><span>{transactionKind(row.type)}</span><StatusBadge status={transactionStatus(row.statut)} /></div>
-            </article>;
-          })}
-        </div>
+              return (
+                <article className="dashboard-activity-card" key={row.id}>
+                  <div className="dashboard-activity-card-main">
+                    <div>
+                      <strong>{row.description || transactionKind(row.type)}</strong>
+                      <span>{new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(row.date))} · {account}</span>
+                    </div>
+                    <span className={positive ? 'amount-positive' : 'amount-negative'}>
+                      {formatSignedCurrency(row.montant, positive ? '+' : '−', row.devise)}
+                    </span>
+                  </div>
+                  <div className="dashboard-activity-card-footer">
+                    <span>{transactionKind(row.type)}</span>
+                    <StatusBadge status={transactionStatus(row.statut)} />
+                  </div>
+                </article>
+              );
+            })}
+          </div>
         </>
       )}
     </Panel>
@@ -132,31 +370,128 @@ export function MemberDashboard({ states = {} }: { states?: Partial<Record<Dashb
   const deposits = currentMonth?.[currency].deposits ?? 0;
   const withdrawals = currentMonth?.[currency].withdrawals ?? 0;
   const activeCreditTotal = credits[currency];
+  const initials = dashboard.profile.nomComplet
+    .split(' ')
+    .map((w) => w[0])
+    .slice(0, 2)
+    .join('')
+    .toUpperCase();
 
   return (
     <div className="dashboard-layout">
-      <div className="dashboard-top">
-        <div className="monthly-summary-region">
-          <div className="monthly-summary">
-            <SummaryCard title="Épargne disponible" amount={savings.USD} currency="USD" caption="Solde du compte principal · USD" featured />
-            <SummaryCard title="Épargne disponible" amount={savings.FC} currency="FC" caption="Compte membre · FC" />
-            <SummaryCard title="Crédits restant dus" amount={activeCreditTotal} currency={currency} caption={`Devise ${currency}`} />
-          </div>
-        </div>
-        <div className="credits-region"><Panel title={`Activité du mois · ${currency}`} action={<select aria-label="Devise des indicateurs" value={currency} onChange={(event) => setCurrency(event.target.value as 'USD' | 'FC')}><option value="USD">USD</option><option value="FC">FC</option></select>}>
-          <div className="monthly-summary"><SummaryCard title="Dépôts du mois" amount={deposits} currency={currency} caption="Opérations enregistrées" /><SummaryCard title="Retraits du mois" amount={withdrawals} currency={currency} caption="Opérations payées" /></div>
-          <p className="account-total-meta">Net du mois : {formatCurrency(deposits - withdrawals, currency)}</p>
-        </Panel></div>
+      {/* Top Section: 4 Bento KPI Cards (Harmonisées avec le Dashboard Admin) */}
+      <div className="dashboard-kpi-grid-4">
+        <BentoKPICard
+          title="Épargne disponible (USD)"
+          amount={savings.USD}
+          currency="USD"
+          caption="Solde du compte principal"
+          badge="USD"
+          icon={IconWallet}
+          iconColor="blue"
+        />
+        <BentoKPICard
+          title="Épargne disponible (FC)"
+          amount={savings.FC}
+          currency="FC"
+          caption="Solde du compte membre"
+          badge="FC"
+          icon={IconCoins}
+          iconColor="gold"
+        />
+        <BentoMonthlyFlowCard
+          deposits={deposits}
+          withdrawals={withdrawals}
+          currency={currency}
+          onCurrencyChange={setCurrency}
+        />
+        <BentoKPICard
+          title="Crédits restant dus"
+          amount={activeCreditTotal}
+          currency={currency}
+          caption={credits.FC > 0 ? `USD · ${formatCurrency(credits.FC, 'FC')} en FC` : `Devise sélectionnée (${currency})`}
+          badge={activeCreditTotal > 0 ? 'En cours' : 'À jour'}
+          badgeVariant={activeCreditTotal > 0 ? 'warning' : 'success'}
+          icon={IconReceipt}
+          iconColor="orange"
+        />
       </div>
+
+      {/* Middle Section: Chart (Balanced Left) + Member Hub & Quick Actions (Balanced Right) */}
       <div className="dashboard-middle">
-        <div className="accounts-region"><Panel title="Mon adhésion" className="accounts-panel">
-          <DataRegion state={states.accounts ?? (state === 'ready' ? 'ready' : state)}>
-            <div className="account-row member-dashboard-profile-row"><div><strong>{dashboard.profile.nomComplet}</strong><p>{dashboard.profile.numeroCompte}</p></div><span className="membership-account-type">{dashboard.profile.typeCompte}</span><span className="membership-status">{dashboard.profile.statut}</span></div>
-            <div className="account-row member-dashboard-credit-row"><span>Capital dû en crédits</span><strong>{formatCurrency(credits.USD, 'USD')} · {formatCurrency(credits.FC, 'FC')}</strong><Link href="/credits">Voir mes crédits</Link></div>
-          </DataRegion>
-        </Panel></div>
-        <div className="chart-region"><ActivityChart activity={dashboard.monthlyActivity} currency={currency} onCurrencyChange={setCurrency} /></div>
+        <div className="chart-region">
+          <ActivityChart activity={dashboard.monthlyActivity} currency={currency} onCurrencyChange={setCurrency} />
+        </div>
+        <div className="accounts-region">
+          <Panel title="Mon adhésion & Raccourcis" className="member-hub-panel">
+            <DataRegion state={states.accounts ?? (state === 'ready' ? 'ready' : state)}>
+              <div className="member-hub-content">
+                <div className="member-hub-profile">
+                  <div className="member-hub-profile-main">
+                    <span className="member-hub-avatar">{initials}</span>
+                    <div className="member-hub-profile-text">
+                      <strong>{dashboard.profile.nomComplet}</strong>
+                      <p>{dashboard.profile.numeroCompte}</p>
+                    </div>
+                  </div>
+                  <div className="member-hub-profile-badges">
+                    <span className="membership-account-type">{dashboard.profile.typeCompte}</span>
+                    <span className="membership-status">{dashboard.profile.statut}</span>
+                  </div>
+                </div>
+
+                <div className="member-hub-credit-banner">
+                  <div className="member-hub-credit-info">
+                    <span className="member-hub-credit-label">Capital dû en crédits</span>
+                    <strong>{formatCurrency(credits.USD, 'USD')} · {formatCurrency(credits.FC, 'FC')}</strong>
+                  </div>
+                  <Link href="/credits" className="member-hub-credit-link">
+                    Voir mes crédits →
+                  </Link>
+                </div>
+
+                <div className="member-hub-shortcuts">
+                  <span className="member-hub-shortcuts-title">Consultations & Raccourcis</span>
+                  <div className="member-hub-shortcuts-list">
+                    <Link href="/transactions" className="member-hub-shortcut-item">
+                      <span className="shortcut-icon is-history">
+                        <IconFileText size={16} aria-hidden="true" />
+                      </span>
+                      <div className="shortcut-info">
+                        <strong>Historique des mouvements</strong>
+                        <small>Consulter tous vos relevés d'opérations</small>
+                      </div>
+                      <IconChevronRight size={14} className="shortcut-arrow" aria-hidden="true" />
+                    </Link>
+                    <Link href="/comptes" className="member-hub-shortcut-item">
+                      <span className="shortcut-icon is-deposit">
+                        <IconWallet size={16} aria-hidden="true" />
+                      </span>
+                      <div className="shortcut-info">
+                        <strong>Mes comptes d'épargne</strong>
+                        <small>Détail des 6 comptes et soldes</small>
+                      </div>
+                      <IconChevronRight size={14} className="shortcut-arrow" aria-hidden="true" />
+                    </Link>
+                    <Link href="/credits" className="member-hub-shortcut-item">
+                      <span className="shortcut-icon is-withdraw">
+                        <IconCreditCard size={16} aria-hidden="true" />
+                      </span>
+                      <div className="shortcut-info">
+                        <strong>Mes crédits & échéances</strong>
+                        <small>Suivi des remboursements et échéances</small>
+                      </div>
+                      <IconChevronRight size={14} className="shortcut-arrow" aria-hidden="true" />
+                    </Link>
+                  </div>
+                </div>
+              </div>
+            </DataRegion>
+          </Panel>
+        </div>
       </div>
+
+      {/* Bottom Section: Activity List */}
       <ActivityList transactions={transactions} state={states.activity ?? state} error={error} reload={reload} />
     </div>
   );

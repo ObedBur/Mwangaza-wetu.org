@@ -7,6 +7,7 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { ComptabiliteService } from '../comptabilite/comptabilite.service';
 import {
   CancelWithdrawalDto,
   CreateWithdrawalDto,
@@ -33,6 +34,7 @@ export class WithdrawalsService {
     private parametresService: ParametresService,
     private balancesService: BalancesService,
     private zktecoService: ZktecoService,
+    private comptabiliteService: ComptabiliteService,
   ) {}
 
   private assertWithdrawalReplayMatches(
@@ -372,16 +374,6 @@ export class WithdrawalsService {
       const soldeApres = verification.soldeActuel - verification.montantDebite;
       const description = dto.description?.trim() || 'Retrait au guichet';
 
-      // La recette doit exister pour que le débit des frais soit toujours réconciliable.
-      const revenuType = verification.frais > 0
-        ? await tx.revenuType.findFirst({ where: { nom: 'Système Retrait' } })
-        : null;
-      if (verification.frais > 0 && !revenuType) {
-        throw new BadRequestException(
-          'Le type de revenu « Système Retrait » manque en base; le retrait est bloqué pour protéger la comptabilité.',
-        );
-      }
-
       await tx.epargne.create({
         data: {
           compte: dto.compte,
@@ -410,18 +402,17 @@ export class WithdrawalsService {
         include: { membre: { select: { nomComplet: true } } },
       });
 
-      if (verification.frais > 0 && revenuType) {
-        await this.recordFeeRevenue(tx, {
-          typeCompte: membreCourant.typeCompte,
-          typeRevenuId: revenuType.id,
-          compte: dto.compte,
-          devise: dto.devise,
-          montant: verification.frais,
-          dateOperation,
-          retraitReference: retraitRecord.reference,
-          reversal: false,
-        });
-      }
+      await this.comptabiliteService.enregistrerRetraitEpargne(tx, {
+        montant: dto.montant,
+        frais: verification.frais,
+        devise: dto.devise,
+        numeroCompte: dto.compte,
+        codeSection: `MW-${getSectionTrigram(membreCourant.typeCompte)}`,
+        executeParId: actor.userId,
+        executeParRole: actor.role,
+        dateOperation,
+        idempotencyKey: dto.idempotencyKey,
+      });
 
       const caisseApres = Number(caisse.solde) - dto.montant;
       await tx.caisseAgent.update({
@@ -468,49 +459,6 @@ export class WithdrawalsService {
       }
       throw error;
     }
-  }
-
-  private async recordFeeRevenue(
-    tx: Prisma.TransactionClient,
-    input: {
-      typeCompte: string;
-      typeRevenuId: number;
-      compte: string;
-      devise: Devise;
-      montant: number;
-      dateOperation: Date;
-      retraitReference: string;
-      reversal: boolean;
-      motif?: string;
-    },
-  ) {
-    const direction = input.reversal ? -1 : 1;
-    const operation = input.reversal
-      ? TypeOperationEpargne.retrait
-      : TypeOperationEpargne.depot;
-    const motif = input.reversal ? ` — annulation: ${input.motif}` : '';
-    await tx.revenu.create({
-      data: {
-        typeCompte: input.typeCompte,
-        typeRevenuId: input.typeRevenuId,
-        montant: input.montant * direction,
-        devise: input.devise,
-        dateOperation: input.dateOperation,
-        sourceCompte: input.compte,
-      },
-    });
-
-    const sectionTrigram = getSectionTrigram(input.typeCompte);
-    await tx.epargne.create({
-      data: {
-        compte: `MW-${sectionTrigram}-REVENUS`,
-        typeOperation: operation,
-        devise: input.devise,
-        montant: input.montant,
-        dateOperation: input.dateOperation,
-        description: `${input.reversal ? 'Contrepassation frais retrait' : 'Frais retrait'} ${input.retraitReference} membre ${input.compte}${motif}`,
-      },
-    });
   }
 
   async getMyCashboxes(agentId: number) {
@@ -755,25 +703,12 @@ export class WithdrawalsService {
         },
       });
 
-      if (Number(retrait.frais) > 0) {
-        const revenuType = await tx.revenuType.findFirst({
-          where: { nom: 'Système Retrait' },
-        });
-        if (!revenuType) {
-          throw new ConflictException('Le type de revenu des frais manque; annulation bloquée');
-        }
-        await this.recordFeeRevenue(tx, {
-          typeCompte: retrait.membre.typeCompte,
-          typeRevenuId: revenuType.id,
-          compte: retrait.compte,
-          devise: retrait.devise,
-          montant: Number(retrait.frais),
-          dateOperation,
-          retraitReference: retrait.reference,
-          reversal: true,
-          motif,
-        });
-      }
+      await this.comptabiliteService.contrepasser(tx, {
+        idempotencyKey: retrait.idempotencyKey ?? `legacy-retrait-${retrait.id}`,
+        executeParId: actor.userId,
+        executeParRole: actor.role,
+        motif: `Annulation retrait ${retrait.reference}: ${motif}`,
+      });
 
       const caisseAvant = Number(caisse.solde);
       const caisseApres = caisseAvant + Number(retrait.montant);

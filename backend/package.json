@@ -20,6 +20,8 @@
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "prisma:generate": "prisma generate",
+    "prisma:seed-compta": "bun run prisma/seed-compta.ts",
+    "comptabilite:migrate-legacy": "bun run scripts/migrate-legacy-to-compta.ts",
     "prisma:migrate": "prisma migrate dev --name init_migration",
     "prisma:studio": "prisma studio",
     "admin:send-welcome": "bun run prisma/send-admin-welcome.ts"

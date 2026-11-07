@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { RemboursementsService } from './remboursements.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { BalancesService } from '../balances/balances.service';
+import { ComptabiliteService } from '../comptabilite/comptabilite.service';
 
 describe('RemboursementsService', () => {
   let service: RemboursementsService;
@@ -12,6 +13,7 @@ describe('RemboursementsService', () => {
         RemboursementsService,
         { provide: PrismaService, useValue: {} },
         { provide: BalancesService, useValue: {} },
+        { provide: ComptabiliteService, useValue: { enregistrerRemboursementCredit: jest.fn(), contrepasser: jest.fn() } },
       ],
     }).compile();
 
