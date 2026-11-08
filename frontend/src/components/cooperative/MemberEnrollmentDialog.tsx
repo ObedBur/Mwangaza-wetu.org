@@ -5,6 +5,7 @@ import { IconCamera, IconFingerprint, IconPlus, IconUserCircle, IconUsers } from
 
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { apiClient } from '@/lib/auth';
+import { parseApiError } from '@/lib/api-error';
 
 type DelegateDraft = {
   name: string;
@@ -13,17 +14,6 @@ type DelegateDraft = {
   nationalId: string;
   userId?: string;
 };
-
-type ApiErrorShape = { message?: string | string[]; details?: string };
-
-function getApiError(error: unknown) {
-  if (!error || typeof error !== 'object') return {} as ApiErrorShape & { networkError: boolean };
-  const source = error as { response?: { data?: ApiErrorShape }; message?: string };
-  return {
-    ...(source.response?.data ?? {}),
-    networkError: !source.response && source.message === 'Network Error',
-  };
-}
 
 const accountTypes = [
   { value: 'PRINCIPAL', code: 'P', label: 'principal' },
@@ -175,8 +165,8 @@ export function MemberEnrollmentDialog({
       });
       setGeneratedAccountNumber(response.data.numero);
     } catch (error: unknown) {
-      const { message } = getApiError(error);
-      setAccountNumberError(Array.isArray(message) ? message.join(" ") : message || t.accountNumberUnavailable);
+      const { userMessage } = parseApiError(error, t.accountNumberUnavailable);
+      setAccountNumberError(userMessage);
     } finally {
       setGeneratingAccountNumber(false);
     }
@@ -266,8 +256,8 @@ export function MemberEnrollmentDialog({
       const response = await apiClient.post<{ userId: string }>("/zkteco/capture-fingerprint");
       setCapturedDelegateUserId(response.data.userId);
     } catch (error: unknown) {
-      const { message } = getApiError(error);
-      setDelegateFingerprintError(Array.isArray(message) ? message.join(" ") : message || t.fingerprintUnavailable);
+      const { userMessage } = parseApiError(error, t.fingerprintUnavailable);
+      setDelegateFingerprintError(userMessage);
     } finally {
       setCapturingDelegateFingerprint(false);
     }
@@ -290,12 +280,10 @@ export function MemberEnrollmentDialog({
       }
       setMemberUserId(userId);
     } catch (error: unknown) {
-      const { message, details, networkError } = getApiError(error);
+      const { userMessage, networkError } = parseApiError(error, t.fingerprintUnavailable);
       const readableMessage = networkError
         ? `${t.fingerprintApiUnavailable} (${apiClient.defaults.baseURL || "API URL non définie"})`
-        : Array.isArray(message)
-          ? message.join(" ")
-          : [message || t.fingerprintUnavailable, details].filter(Boolean).join(" ");
+        : userMessage;
       setMemberFingerprintError(readableMessage);
     } finally {
       setCapturingMemberFingerprint(false);
@@ -350,8 +338,11 @@ export function MemberEnrollmentDialog({
       onCreated(response.data);
       onOpenChange(false);
     } catch (error: unknown) {
-      const { message } = getApiError(error);
-      setCreateError(Array.isArray(message) ? message.join(" ") : message || t.createFailed);
+      const { userMessage, technicalDetails } = parseApiError(error, t.createFailed);
+      setCreateError(userMessage);
+      if (technicalDetails) {
+        console.error("[MemberEnrollmentDialog] Échec création membre:", technicalDetails);
+      }
     } finally {
       setCreatingMember(false);
     }
