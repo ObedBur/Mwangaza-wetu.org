@@ -4,6 +4,7 @@ import { AppModule } from './app.module';
 import { json, urlencoded } from 'express';
 import { join } from 'path';
 import * as fs from 'fs';
+import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -35,6 +36,9 @@ async function bootstrap() {
     origin: envOrigins,
     credentials: true, // Nécessaire pour envoyer les cookies d'authentification
   });
+
+  // Filtre d'exceptions global pour journaliser et formater les erreurs
+  app.useGlobalFilters(new AllExceptionsFilter());
 
   // Validation automatique des DTOs
   app.useGlobalPipes(
