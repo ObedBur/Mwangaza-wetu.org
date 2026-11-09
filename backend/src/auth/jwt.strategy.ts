@@ -69,9 +69,12 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       // admin / superadmin
       const admin = await this.prisma.administrateur.findUnique({
         where: { id: payload.id },
-        select: { id: true, actif: true },
+        select: { id: true, actif: true, authVersion: true },
       });
       if (!admin || !admin.actif) {
+        throw new UnauthorizedException(REVOKED_MESSAGE);
+      }
+      if ((payload.authVersion ?? 0) !== admin.authVersion) {
         throw new UnauthorizedException(REVOKED_MESSAGE);
       }
     }

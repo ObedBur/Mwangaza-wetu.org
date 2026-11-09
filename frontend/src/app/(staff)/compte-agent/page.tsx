@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { IconShieldCheck } from '@/lib/tabler-icons';
 import { CooperativeBreadcrumb } from '@/components/cooperative/CooperativePrimitives';
-import { apiClient } from '@/lib/auth';
+import { apiClient, getAuthUser } from '@/lib/auth';
 
 export default function AgentAccountPage() {
   const [currentPassword, setCurrentPassword] = useState('');
@@ -35,13 +35,17 @@ export default function AgentAccountPage() {
       setCurrentPassword('');
       setNewPassword('');
       setConfirmation('');
-    } catch (requestError: any) {
-      const message = requestError?.response?.data?.message;
+    } catch (requestError: unknown) {
+      const message = (requestError as { response?: { data?: { message?: string | string[] } } })
+        ?.response?.data?.message;
       setError(Array.isArray(message) ? message.join(' ') : message || 'Changement du mot de passe impossible. Réessayez.');
     } finally {
       setSaving(false);
     }
   }
+
+  const authUser = getAuthUser();
+  const isAdmin = authUser?.role === 'admin' || authUser?.role === 'superadmin';
 
   return (
     <div className="coop-agent-account-page">
@@ -49,7 +53,11 @@ export default function AgentAccountPage() {
         <div>
           <CooperativeBreadcrumb section="Mon compte" current="Sécurité du compte" />
           <h1>Sécurité du compte</h1>
-          <p>Modifiez le mot de passe temporaire reçu lors de la création de votre compte.</p>
+          <p>
+            {isAdmin
+              ? 'Modifiez le mot de passe associé à votre compte administrateur.'
+              : 'Modifiez le mot de passe temporaire reçu lors de la création de votre compte.'}
+          </p>
         </div>
       </div>
       <section className="coop-agent-password-panel">

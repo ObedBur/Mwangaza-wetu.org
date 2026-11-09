@@ -2,9 +2,10 @@ import { Controller, Post, Get, Body, Req } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { Public, Private } from './jwt-auth.guard';
-import { Roles } from '../common/decorators/roles.decorator';
+import { ADMIN_ROLES, Roles } from '../common/decorators/roles.decorator';
 import type { AuthenticatedRequest } from '../common/types/auth-request';
 import { ChangeMemberPasswordDto } from './dto/change-member-password.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 
 @Public()
 @Controller('api/auth')
@@ -49,7 +50,23 @@ export class AuthController {
     @Body() dto: ChangeMemberPasswordDto,
   ) {
     return this.authService.changeMemberPassword(
-      req.user!, dto.currentPassword, dto.newPassword,
+      req.user!,
+      dto.currentPassword,
+      dto.newPassword,
+    );
+  }
+
+  @Private()
+  @Roles(...ADMIN_ROLES)
+  @Post('me/change-password')
+  async changeAdminPassword(
+    @Req() req: AuthenticatedRequest,
+    @Body() dto: ChangePasswordDto,
+  ) {
+    return this.authService.changeAdminPassword(
+      req.user!,
+      dto.currentPassword,
+      dto.newPassword,
     );
   }
 }

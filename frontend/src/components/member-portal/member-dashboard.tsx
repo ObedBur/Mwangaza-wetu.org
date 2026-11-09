@@ -143,12 +143,16 @@ function DashboardEmptyState({ kind }: { kind: 'chart' | 'activity' }) {
   const isChart = kind === 'chart';
   return (
     <div className="dashboard-empty-state">
-      <span className="dashboard-empty-icon" aria-hidden="true">{isChart ? <IconArrowDown size={18} /> : <IconDatabaseOff size={18} />}</span>
-      <div>
+      <span className="dashboard-empty-icon" aria-hidden="true">
+        {isChart ? <IconTrendingUp size={22} /> : <IconReceipt size={22} />}
+      </span>
+      <div className="dashboard-empty-content">
         <strong>{isChart ? 'Aucun mouvement sur les six derniers mois' : 'Aucune opération récente'}</strong>
-        <p>{isChart ? 'Vos dépôts et retraits apparaîtront ici.' : 'Vos opérations enregistrées s’afficheront dans cet historique.'}</p>
+        <p>{isChart ? 'Vos dépôts et retraits apparaîtront ici dès vos premières opérations.' : 'Vos opérations enregistrées s’afficheront dans cet historique.'}</p>
       </div>
-      <Link href="/transactions" className="dashboard-empty-action">Voir l’historique</Link>
+      <Link href="/transactions" className="dashboard-empty-action">
+        Voir l’historique →
+      </Link>
     </div>
   );
 }
@@ -257,7 +261,7 @@ function ActivityList({ transactions, state, error, reload }: { transactions: Me
       action={<Link href="/transactions" className="panel-text-link">Historique complet →</Link>}
     >
       {/* Filtres de transactions — style pills comme le dashboard Admin */}
-      <div style={{ display: 'flex', gap: '6px', marginBottom: '14px', flexWrap: 'wrap' }}>
+      <div className="activity-filter-pills" role="group" aria-label="Filtrer les opérations">
         {[
           ['ALL', 'Toutes'],
           ['depot', 'Dépôts'],
@@ -267,17 +271,7 @@ function ActivityList({ transactions, state, error, reload }: { transactions: Me
           <button
             key={val}
             type="button"
-            style={{
-              padding: '4px 12px',
-              borderRadius: '999px',
-              border: '1px solid var(--mw-line, #E5E7EB)',
-              background: filter === val ? 'var(--mw-primary, #0B5EA8)' : 'var(--mw-paper, #FFFFFF)',
-              color: filter === val ? '#FFFFFF' : 'var(--mw-muted, #64748B)',
-              fontSize: '11px',
-              fontWeight: 600,
-              cursor: 'pointer',
-              transition: 'all 120ms ease',
-            }}
+            className={`activity-filter-pill ${filter === val ? 'is-active' : ''}`}
             onClick={() => setFilter(val)}
           >
             {label}

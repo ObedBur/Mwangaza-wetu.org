@@ -42,13 +42,13 @@ export class AgentsController {
     return this.agentsService.checkUserId(userId);
   }
 
-  @Roles('agent')
+  @Roles('agent', 'admin', 'superadmin')
   @Post('me/change-password')
   changeOwnPassword(
     @Req() req: AuthenticatedRequest,
     @Body() dto: ChangeAgentPasswordDto,
   ) {
-    return this.agentsService.changeOwnPassword(req.user!.userId!, dto);
+    return this.agentsService.changeOwnPassword(req.user!, dto);
   }
 
   @Get(':id')

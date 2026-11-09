@@ -40,6 +40,7 @@ export class AuthService {
           email: admin.email,
           accountNumber: admin.numeroCompte,
           role: admin.role,
+          authVersion: admin.authVersion,
           lastName: admin.nom,
           firstName: admin.prenom,
           fullName: `${admin.prenom} ${admin.nom}`,
@@ -148,6 +149,7 @@ export class AuthService {
       email: admin.email,
       accountNumber: admin.numeroCompte,
       role: admin.role,
+      authVersion: admin.authVersion,
       lastName: admin.nom,
       firstName: admin.prenom,
       fullName: `${admin.prenom} ${admin.nom}`,
@@ -216,7 +218,11 @@ export class AuthService {
     };
   }
 
-  async changeMemberPassword(user: AuthUser, currentPassword: string, newPassword: string) {
+  async changeMemberPassword(
+    user: AuthUser,
+    currentPassword: string,
+    newPassword: string,
+  ) {
     if (user.role !== 'member' || !user.userId) {
       throw new UnauthorizedException('Session membre invalide');
     }
@@ -231,7 +237,9 @@ export class AuthService {
       throw new UnauthorizedException('Le mot de passe actuel est incorrect');
     }
     if (await bcrypt.compare(newPassword, member.motDePasse)) {
-      throw new BadRequestException('Le nouveau mot de passe doit être différent de l’actuel');
+      throw new BadRequestException(
+        'Le nouveau mot de passe doit être différent de l’actuel',
+      );
     }
 
     const passwordHash = await bcrypt.hash(newPassword, 12);
@@ -250,6 +258,51 @@ export class AuthService {
       });
     });
     return { success: true, sessionRevoked: true };
+  }
+
+  async changeAdminPassword(
+    user: AuthUser,
+    currentPassword: string,
+    newPassword: string,
+  ) {
+    if (!user.userId || !['admin', 'superadmin'].includes(user.role ?? '')) {
+      throw new UnauthorizedException('Session administrateur invalide');
+    }
+    const admin = await this.prisma.administrateur.findUnique({
+      where: { id: user.userId },
+      select: { id: true, motDePasse: true, actif: true },
+    });
+    if (!admin?.actif) {
+      throw new UnauthorizedException('Compte administrateur non disponible');
+    }
+    if (!(await bcrypt.compare(currentPassword, admin.motDePasse))) {
+      throw new UnauthorizedException('Le mot de passe actuel est incorrect');
+    }
+    if (await bcrypt.compare(newPassword, admin.motDePasse)) {
+      throw new BadRequestException(
+        'Le nouveau mot de passe doit être différent de l’actuel',
+      );
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, 12);
+    await this.prisma.$transaction(async (tx) => {
+      await tx.administrateur.update({
+        where: { id: admin.id },
+        data: { motDePasse: passwordHash, authVersion: { increment: 1 } },
+      });
+      await tx.adminLog.create({
+        data: {
+          action: 'ADMIN_PASSWORD_CHANGED',
+          details: `L’administrateur #${admin.id} a modifié son mot de passe. Ses sessions existantes ont été révoquées.`,
+          success: true,
+          userId: admin.id,
+        },
+      });
+    });
+    return {
+      success: true,
+      message: 'Mot de passe modifié; reconnectez-vous.',
+    };
   }
 
   async loginAgent(loginDto: LoginDto) {
