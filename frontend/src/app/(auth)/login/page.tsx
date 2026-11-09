@@ -13,7 +13,9 @@ import {
   AlertCircle,
   CheckCircle2,
   HelpCircle,
-  X
+  X,
+  Pause,
+  Play
 } from 'lucide-react';
 
 const LOGIN_SLIDES = [
@@ -126,11 +128,12 @@ function LoginForm() {
 
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
-  const [rememberMe, setRememberMe] = useState(true);
+  const [rememberMe, setRememberMe] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [showHelpModal, setShowHelpModal] = useState(false);
   const [currentSlide, setCurrentSlide] = useState(0);
+  const [isCarouselPaused, setIsCarouselPaused] = useState(false);
 
   // Toast notifications (fixed position, top-right)
   const [toasts, setToasts] = useState<Array<{ id: number; title?: string; message: string; type: ToastType }>>(() => {
@@ -143,6 +146,7 @@ function LoginForm() {
   // Per-field validation errors
   const [identifierError, setIdentifierError] = useState<string | null>(null);
   const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
   // Track whether fields have been touched/blurred
   const [identifierTouched, setIdentifierTouched] = useState(false);
   const [passwordTouched, setPasswordTouched] = useState(false);
@@ -160,13 +164,13 @@ function LoginForm() {
 
   useEffect(() => {
     const motionPreference = window.matchMedia('(prefers-reduced-motion: reduce)');
-    if (motionPreference.matches) return;
+    if (motionPreference.matches || isCarouselPaused) return;
 
     const timer = window.setInterval(() => {
       setCurrentSlide((current) => (current + 1) % LOGIN_SLIDES.length);
-    }, 6000);
+    }, 8000);
     return () => window.clearInterval(timer);
-  }, []);
+  }, [isCarouselPaused]);
 
   // Session déjà active : on redirige directement vers l'espace du rôle
   useEffect(() => {
@@ -215,6 +219,7 @@ function LoginForm() {
   // Live validation on change (only if already touched)
   const handleIdentifierChange = (value: string) => {
     setIdentifier(value);
+    setFormError(null);
     if (identifierTouched || formSubmitted) {
       setIdentifierError(validateIdentifier(value));
     }
@@ -222,6 +227,7 @@ function LoginForm() {
 
   const handlePasswordChange = (value: string) => {
     setPassword(value);
+    setFormError(null);
     if (passwordTouched || formSubmitted) {
       setPasswordError(validatePassword(value));
     }
@@ -234,7 +240,7 @@ function LoginForm() {
     value: string,
   ): string => {
     const base =
-      'w-full px-4 py-3.5 bg-white border rounded-xl text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 transition-all';
+      'w-full px-4 py-4 bg-white border rounded-xl text-base text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 transition-all';
 
     if (fieldError && (touched || formSubmitted)) {
       return `${base} border-red-400 focus:ring-red-500 focus:border-red-500`;
@@ -242,12 +248,13 @@ function LoginForm() {
     if (!fieldError && (touched || formSubmitted) && value.trim()) {
       return `${base} border-emerald-400 focus:ring-emerald-500 focus:border-emerald-500`;
     }
-    return `${base} border-slate-300 focus:ring-slate-900 focus:border-slate-900`;
+    return `${base} border-slate-300 focus:ring-emerald-500 focus:border-emerald-500`;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormSubmitted(true);
+    setFormError(null);
 
     // Validate all fields
     const idError = validateIdentifier(identifier);
@@ -270,6 +277,7 @@ function LoginForm() {
         // Reset field states on success
         setIdentifierError(null);
         setPasswordError(null);
+        setFormError(null);
         setFormSubmitted(false);
         setIdentifierTouched(false);
         setPasswordTouched(false);
@@ -317,30 +325,15 @@ function LoginForm() {
     }
   };
 
-  // Analyze backend error to attribute it to the right field + show toast
+  // Keep authentication failures at form level: the server cannot identify which credential was wrong.
   const handleBackendError = (message: string) => {
-    const msgLower = message.toLowerCase();
-
-    // Show error toast notification
-    addToast(message, 'error', 'Erreur de connexion');
-
-    if (msgLower.includes('identifiant') && msgLower.includes('mot de passe')) {
-      setIdentifierError('Vérifiez votre identifiant.');
-      setPasswordError('Vérifiez votre mot de passe.');
-    } else if (msgLower.includes('identifiant') || msgLower.includes('email') || msgLower.includes('compte') || msgLower.includes('utilisateur') || msgLower.includes('introuvable')) {
-      setIdentifierError(message);
-      setPasswordError(null);
-    } else if (msgLower.includes('mot de passe') || msgLower.includes('password')) {
-      setPasswordError(message);
-      setIdentifierError(null);
-    } else {
-      setIdentifierError('Vérifiez votre identifiant.');
-      setPasswordError('Vérifiez votre mot de passe.');
-    }
+    setIdentifierError(null);
+    setPasswordError(null);
+    setFormError(message);
   };
 
   return (
-    <main className="login-page min-h-screen min-h-svh w-full bg-white">
+    <main className="login-page min-h-dvh w-full bg-[#f4f7fb] xl:bg-white">
       {/* ═══ Toast Notifications — fixed top-right ═══ */}
       {toasts.length > 0 && (
         <div
@@ -359,7 +352,7 @@ function LoginForm() {
         </div>
       )}
 
-      <div className="mx-auto flex min-h-screen min-h-svh w-full max-w-7xl flex-col px-6 py-6 sm:px-12 sm:py-10 xl:mx-0 xl:max-w-none xl:flex-row xl:px-0 xl:py-0">
+      <div className="mx-auto flex min-h-dvh w-full max-w-7xl flex-col px-4 py-4 sm:px-8 sm:py-8 xl:mx-0 xl:max-w-none xl:flex-row xl:px-0 xl:py-0">
         <aside className="relative hidden min-h-svh overflow-hidden bg-slate-950 text-white xl:flex xl:w-1/2 xl:flex-col xl:justify-between xl:p-12 2xl:p-16" aria-label="Présentation des produits Mwangaza Wetu">
           {LOGIN_SLIDES.map((slide, index) => (
             <Image
@@ -369,7 +362,7 @@ function LoginForm() {
               fill
               priority={index === 0}
               sizes="50vw"
-              className={`object-cover transition-opacity duration-700 ${index === currentSlide ? 'opacity-100' : 'opacity-0'}`}
+              className={`object-cover transition-opacity duration-700 motion-reduce:transition-none ${index === currentSlide ? 'opacity-100' : 'opacity-0'}`}
               aria-hidden="true"
             />
           ))}
@@ -384,7 +377,7 @@ function LoginForm() {
             <h2 className="text-4xl font-black tracking-tight 2xl:text-5xl">{LOGIN_SLIDES[currentSlide].title}</h2>
             <p className="mt-3 text-lg font-semibold text-white/90">{LOGIN_SLIDES[currentSlide].subtitle}</p>
             <p className="mt-3 max-w-lg text-sm leading-relaxed text-white/80">{LOGIN_SLIDES[currentSlide].description}</p>
-            <div className="mt-7 flex items-center gap-2" aria-label="Choisir une présentation">
+            <div className="mt-7 flex items-center gap-1" role="group" aria-label="Commandes du carrousel">
               {LOGIN_SLIDES.map((slide, index) => (
                 <button
                   key={slide.image}
@@ -392,54 +385,78 @@ function LoginForm() {
                   onClick={() => setCurrentSlide(index)}
                   aria-label={`Afficher ${slide.title}`}
                   aria-current={index === currentSlide ? 'true' : undefined}
-                  className={`h-2.5 rounded-full transition-all ${index === currentSlide ? 'w-8 bg-white' : 'w-2.5 bg-white/50 hover:bg-white/80'}`}
-                />
+                  className="flex h-11 w-11 items-center justify-center rounded-full focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+                >
+                  <span className={`h-2.5 rounded-full transition-all motion-reduce:transition-none ${index === currentSlide ? 'w-8 bg-white' : 'w-2.5 bg-white/50 hover:bg-white/80'}`} />
+                </button>
               ))}
+              <button
+                type="button"
+                onClick={() => setIsCarouselPaused((paused) => !paused)}
+                aria-label={isCarouselPaused ? 'Reprendre le carrousel' : 'Mettre le carrousel en pause'}
+                aria-pressed={isCarouselPaused}
+                className="ml-1 flex h-11 w-11 items-center justify-center rounded-full text-white/85 transition-colors hover:bg-white/15 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+              >
+                {isCarouselPaused ? <Play className="h-4 w-4" aria-hidden="true" /> : <Pause className="h-4 w-4" aria-hidden="true" />}
+              </button>
             </div>
           </div>
         </aside>
-        <div className="flex min-h-screen min-h-svh flex-1 flex-col xl:w-1/2 xl:px-12 2xl:px-20">
-        <header className="flex items-center gap-3 xl:hidden">
-          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white p-1 shadow-sm ring-1 ring-slate-200">
+        <div className="flex min-h-[calc(100svh-2rem)] flex-1 flex-col xl:min-h-svh xl:w-1/2 xl:px-12 2xl:px-20">
+        <header className="flex items-center gap-3 py-1 xl:hidden">
+          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white p-1 shadow-sm ring-1 ring-slate-200/80">
             <Image
               src="/images/logo.png"
               alt="Logo Mwangaza Wetu"
-              width={30}
-              height={30}
+              width={32}
+              height={32}
               className="object-contain"
               priority
             />
           </div>
-          <span className="text-sm font-bold tracking-wide text-slate-900 uppercase">
-            {MWANGAZA_BRAND.name}
-          </span>
+          <div className="min-w-0">
+            <p className="text-sm font-bold tracking-tight text-slate-900">{MWANGAZA_BRAND.name}</p>
+            <p className="mt-0.5 text-xs text-slate-500">Épargne · Crédit · Développement</p>
+          </div>
         </header>
 
-        <div className="flex flex-1 items-center justify-center py-10 xl:py-12">
-          <section className="w-full max-w-[420px]">
+        <div className="flex flex-1 items-center justify-center py-7 sm:py-10 xl:py-12">
+          <section className="w-full max-w-lg rounded-3xl border border-slate-200/80 bg-white p-5 shadow-[0_18px_48px_-32px_rgba(15,23,42,0.3)] sm:p-8 xl:rounded-none xl:border-0 xl:bg-transparent xl:p-0 xl:shadow-none">
           <div className="mb-8">
+            <p className="mb-2 text-xs font-semibold tracking-[0.14em] text-[#0B5EA8] uppercase xl:hidden">
+              Espace membre
+            </p>
             <h1 className="text-3xl sm:text-4xl font-bold text-slate-900 tracking-tight">
               Connexion
             </h1>
-            <p className="text-sm text-slate-500 mt-2">
+            <p className="text-base text-slate-500 mt-2">
               Accédez à votre compte en toute sécurité.
             </p>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-5" noValidate>
+          <form onSubmit={handleSubmit} className="space-y-6" autoComplete="on" noValidate>
+            {formError && (
+              <p className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm leading-relaxed text-red-800" role="alert">
+                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+                <span>{formError}</span>
+              </p>
+            )}
             {/* Champ Identifiant */}
             <div>
               <label
                 htmlFor="identifier"
-                className="block text-sm font-semibold text-slate-700 mb-2"
+                className="block text-base font-semibold text-slate-700 mb-2"
               >
                 Identifiant
               </label>
               <div className="relative">
                 <input
                   id="identifier"
+                  name="username"
                   type="text"
                   autoComplete="username"
+                  autoCapitalize="none"
+                  spellCheck={false}
                   value={identifier}
                   onChange={(e) => handleIdentifierChange(e.target.value)}
                   onBlur={handleIdentifierBlur}
@@ -472,13 +489,14 @@ function LoginForm() {
             <div>
               <label
                 htmlFor="password"
-                className="block text-sm font-semibold text-slate-700 mb-2"
+                className="block text-base font-semibold text-slate-700 mb-2"
               >
                 Mot de passe
               </label>
               <div className="relative">
                 <input
                   id="password"
+                  name="password"
                   type={showPassword ? 'text' : 'password'}
                   autoComplete="current-password"
                   value={password}
@@ -505,7 +523,7 @@ function LoginForm() {
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
                     aria-label={showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
-                    className="ml-1 flex items-center justify-center text-slate-400 hover:text-slate-700 transition-colors"
+                    className="ml-1 flex h-11 w-11 items-center justify-center rounded-full text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-slate-900"
                   >
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
@@ -546,7 +564,7 @@ function LoginForm() {
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full mt-2 py-3.5 px-4 bg-slate-900 hover:bg-slate-800 text-white font-bold text-sm rounded-xl shadow-md active:scale-[0.99] transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              className="mt-2 flex min-h-14 w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-4 text-sm font-bold text-white shadow-md transition-all hover:bg-slate-800 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50"
             >
               {isLoading ? (
                 <div className="flex items-center gap-2">
@@ -560,7 +578,7 @@ function LoginForm() {
           </form>
 
           {/* Lien d'activation membre pour nouveau compte */}
-          <div className="mt-8 text-center text-xs text-slate-500">
+          <div className="mt-8 text-center text-sm text-slate-500">
             <span>Nouveau membre ? </span>
             <Link
               href="/activate"
@@ -572,7 +590,7 @@ function LoginForm() {
           </section>
         </div>
 
-        <footer className="text-center text-xs text-slate-400">
+        <footer className="py-2 text-center text-xs text-slate-400">
           {MWANGAZA_BRAND.name} • © {new Date().getFullYear()}
         </footer>
         </div>
