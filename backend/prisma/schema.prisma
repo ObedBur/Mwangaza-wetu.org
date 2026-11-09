@@ -21,6 +21,7 @@ model Membre {
   nomComplet          String          @map("nom_complet")
   dateAdhesion        DateTime        @map("date_adhesion")
   dureeAdhesionMois   Int             @default(1) @map("duree_adhesion_mois")
+  dureeEpargneMois    Int             @default(1) @map("duree_epargne_mois")
   dateExpirationAdhesion DateTime?    @map("date_expiration_adhesion")
   telephone           String          @unique
   email               String?         @unique
@@ -351,6 +352,8 @@ model notifications {
   titre           String
   message         String
   type            String          @default("info")
+  audience        String          @default("all")
+  reference       String?         @unique
   is_read         Boolean         @default(false)
   created_at      DateTime        @default(now())
   administrateurs Administrateur? @relation(fields: [admin_id], references: [id], onDelete: Cascade)

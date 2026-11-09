@@ -27,6 +27,7 @@ type DepositNoticeSummary = {
   cursorId: number;
   recent: { id: number; accountNumber: string; memberName: string; amount: number; currency: "USD" | "FC"; createdAt: string }[];
 };
+type MaturityNotice = { id: number; titre: string; message: string; createdAt: string; audience: string };
 
 import "@/app/home.css";
 import "./cooperative-pages.css";
@@ -59,6 +60,7 @@ export function CooperativePageLayout({
   const [membersCount, setMembersCount] = useState<number | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [depositNotice, setDepositNotice] = useState<DepositNoticeSummary>({ count: 0, cursor: "", cursorId: 0, recent: [] });
+  const [maturityNotices, setMaturityNotices] = useState<MaturityNotice[]>([]);
   const isAdmin = authUser?.role === "admin" || authUser?.role === "superadmin";
   const profileName = authUser?.fullName || "Mon compte";
   const profileInitials = profileName
@@ -75,6 +77,15 @@ export function CooperativePageLayout({
         ? "Administrateur"
         : "Utilisateur";
   const depositCursorKey = authUser ? `mwangaza_deposit_notice_cursor_${authUser.id}` : "";
+
+  const acknowledgeMaturityNotice = async (id: number) => {
+    try {
+      await apiClient.patch(`/notifications/${id}/lire`);
+      setMaturityNotices((current) => current.filter((notice) => notice.id !== id));
+    } catch {
+      // L’alerte reste visible si sa confirmation échoue.
+    }
+  };
 
   useEffect(() => {
     if (!isAdmin) {
@@ -129,6 +140,19 @@ export function CooperativePageLayout({
       window.clearInterval(interval);
     };
   }, [depositCursorKey, isAdmin]);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    let active = true;
+    const refresh = () => apiClient.get<{ data: MaturityNotice[] }>("/notifications", {
+      params: { type: "rappel", nonLues: true, pageSize: 20 },
+    }).then((response) => {
+      if (active) setMaturityNotices(response.data.data.filter((notice) => notice.audience === "admin"));
+    }).catch(() => undefined);
+    void refresh();
+    const timer = window.setInterval(() => void refresh(), 15000);
+    return () => { active = false; window.clearInterval(timer); };
+  }, [isAdmin]);
 
   useEffect(() => {
     function handleSearchShortcut(event: KeyboardEvent) {
@@ -251,7 +275,7 @@ export function CooperativePageLayout({
               >
                 <IconBell />
                 {isAdmin
-                  ? depositNotice.count > 0 && <span className="mw-notice-count" aria-label={`${depositNotice.count} nouveaux dépôts`}>{depositNotice.count > 99 ? "99+" : depositNotice.count}</span>
+                  ? (depositNotice.count + maturityNotices.length) > 0 && <span className="mw-notice-count" aria-label={`${depositNotice.count + maturityNotices.length} notifications`}>{depositNotice.count + maturityNotices.length > 99 ? "99+" : depositNotice.count + maturityNotices.length}</span>
                   : <span className="mw-notice-dot" />}
               </button>
               <span className="mw-language" aria-label={t.selectedLanguage} title="Langue actuellement utilisée : français">
@@ -306,6 +330,13 @@ export function CooperativePageLayout({
                 <strong>Notifications</strong>
                 {isAdmin ? <>
                   <p><b>{depositNotice.count} nouveau{depositNotice.count > 1 ? "x" : ""} dépôt{depositNotice.count > 1 ? "s" : ""}</b> depuis votre dernière consultation.</p>
+                  {maturityNotices.length > 0 && <section aria-label="Échéances DAT à préparer">
+                    <p><b>{maturityNotices.length} échéance{maturityNotices.length > 1 ? "s" : ""} DAT à préparer</b></p>
+                    <ul className="mw-notification-deposits">{maturityNotices.map((notice) => <li key={notice.id}>
+                      <span><b>{notice.titre}</b><small>{notice.message}</small></span>
+                      <button type="button" onClick={() => void acknowledgeMaturityNotice(notice.id)}>Préparé</button>
+                    </li>)}</ul>
+                  </section>}
                   {depositNotice.recent.length > 0 && <ul className="mw-notification-deposits">
                     {depositNotice.recent.map((item) => <li key={item.id}>
                       <span><b>{item.memberName}</b><small>{item.accountNumber}</small></span>

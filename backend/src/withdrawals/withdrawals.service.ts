@@ -155,20 +155,20 @@ export class WithdrawalsService {
       );
     }
 
-    // 1. Vérifier les heures autorisées (DÉSACTIVÉ POUR LES TESTS)
-    // const now = new Date();
-    // const heureActuelle = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+    // 1. Vérifier les heures autorisées
+    const now = new Date();
+    const heureActuelle = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
 
-    // if (params.heures_autorisees) {
-    //   if (
-    //     heureActuelle < params.heures_autorisees.debut ||
-    //     heureActuelle > params.heures_autorisees.fin
-    //   ) {
-    //     throw new BadRequestException(
-    //       `Les retraits sont autorisés uniquement entre ${params.heures_autorisees.debut} et ${params.heures_autorisees.fin}`,
-    //     );
-    //   }
-    // }
+    if (params.heures_autorisees && params.heures_autorisees.actif === true) {
+      if (
+        heureActuelle < params.heures_autorisees.debut ||
+        heureActuelle > params.heures_autorisees.fin
+      ) {
+        throw new BadRequestException(
+          `Les retraits sont autorisés uniquement entre ${params.heures_autorisees.debut} et ${params.heures_autorisees.fin}. Il est actuellement ${heureActuelle}.`,
+        );
+      }
+    }
 
     // 2. Vérifier montant minimum
     if (montant < montantMin) {
@@ -270,31 +270,53 @@ export class WithdrawalsService {
     if (!membre || membre.statut !== 'actif') {
       throw new NotFoundException('Compte membre introuvable ou inactif');
     }
-    if (!membre.userId) {
+    if (!membre.userId && !dto.skipBiometric) {
       throw new ForbiddenException(
         "Retrait bloqué : l'empreinte du membre doit d'abord être capturée au bureau.",
       );
     }
 
-    // Le scan est lancé par le backend. Le client ne peut pas fournir un ID biométrique arbitraire.
-    let zkUserId: string;
-    try {
-      zkUserId = await this.zktecoService.captureFingerprint();
-    } catch (error) {
-      if (error instanceof Error && error.message === 'CAPTURE_IN_FLIGHT') {
-        throw new ConflictException('Une lecture biométrique est déjà en cours; réessayez dans un instant.');
+    // V’rification biom’trique — le scan est lancé par le backend.
+    // Mode dégradé : un agent peut activer le contournement si le lecteur est en panne.
+    let zkUserId: string | null = null;
+    let biometricSkipped = false;
+
+    if (dto.skipBiometric === true) {
+      // Le contournement biométrique nécessite un motif détaillé pour la traçabilité
+      if (!dto.motifSkipBiometric || dto.motifSkipBiometric.trim().length < 10) {
+        throw new BadRequestException(
+          'Le motif du contournement biométrique est obligatoire (au moins 10 caractères).',
+        );
       }
-      throw new ServiceUnavailableException(
-        'Le lecteur biométrique est indisponible. Le retrait n’a pas été enregistré.',
-      );
-    }
-    const biometricMatches =
-      membre.userId === zkUserId ||
-      membre.delegues.some((delegue) => delegue.userId === zkUserId);
-    if (!biometricMatches) {
-      throw new ForbiddenException(
-        'Le scan ZKTeco ne correspond ni au membre ni à un délégué autorisé pour ce compte.',
-      );
+      biometricSkipped = true;
+      // Log d’audit pour traçabilité complète
+      await this.prisma.adminLog.create({
+        data: {
+          action: 'BIOMETRIC_BYPASS',
+          details: `Contournement biométrique pour retrait sur compte ${dto.compte}. Agent #${actor.userId}. Motif : ${dto.motifSkipBiometric.trim()}`,
+          success: true,
+          userId: actor.userId,
+        },
+      });
+    } else {
+      try {
+        zkUserId = await this.zktecoService.captureFingerprint();
+      } catch (error) {
+        if (error instanceof Error && error.message === 'CAPTURE_IN_FLIGHT') {
+          throw new ConflictException('Une lecture biométrique est déjà en cours; réessayez dans un instant.');
+        }
+        throw new ServiceUnavailableException(
+          'Le lecteur biométrique est indisponible. Vous pouvez activer le mode dégradé (contournement biométrique) si le lecteur est physiquement en panne.',
+        );
+      }
+      const biometricMatches =
+        membre.userId === zkUserId ||
+        membre.delegues.some((delegue) => delegue.userId === zkUserId);
+      if (!biometricMatches) {
+        throw new ForbiddenException(
+          'Le scan ZKTeco ne correspond ni au membre ni à un délégué autorisé pour ce compte.',
+        );
+      }
     }
 
     // L’heure légale de l’opération vient du serveur, jamais du navigateur.
@@ -320,17 +342,17 @@ export class WithdrawalsService {
       if (!membreCourant || membreCourant.statut !== 'actif') {
         throw new NotFoundException('Compte membre introuvable ou inactif');
       }
-      if (!membreCourant.userId) {
+      if (!membreCourant.userId && !biometricSkipped) {
         throw new ForbiddenException(
           "Retrait bloqué : l'empreinte du membre doit d'abord être capturée au bureau.",
         );
       }
-      if (
-        membreCourant.userId !== zkUserId &&
-        !membreCourant.delegues.some((delegue) => delegue.userId === zkUserId)
+      if (!biometricSkipped &&
+        (membreCourant.userId !== zkUserId &&
+        !membreCourant.delegues.some((delegue) => delegue.userId === zkUserId))
       ) {
         throw new ForbiddenException(
-          'L’autorisation biométrique de ce membre ou de son délégué a changé pendant la capture.',
+          'Lu{2019}autorisation biomu{00e9}trique de ce membre ou de son du{00e9}lu{00e9}guu{00e9} a changu{00e9} pendant la capture.',
         );
       }
 
@@ -435,7 +457,7 @@ export class WithdrawalsService {
       await tx.adminLog.create({
         data: {
           action: 'RETRAIT_GUICHET',
-          details: `Retrait ${retraitRecord.reference}, compte ${dto.compte}, montant ${dto.montant} ${dto.devise}, frais ${verification.frais} ${dto.devise}, agent #${actor.userId}, solde membre ${verification.soldeActuel} → ${soldeApres}, caisse ${caisse.solde} → ${caisseApres}.`,
+          details: `Retrait ${retraitRecord.reference}, compte ${dto.compte}, montant ${dto.montant} ${dto.devise}, frais ${verification.frais} ${dto.devise}, agent #${actor.userId}, solde membre ${verification.soldeActuel} → ${soldeApres}, caisse ${caisse.solde} → ${caisseApres}${biometricSkipped ? ' [BIOMÉTRIE CONTOURNÉE]' : ''}.`,
           success: true,
           userId: actor.userId,
         },
@@ -517,12 +539,7 @@ export class WithdrawalsService {
     if (!membre || membre.statut !== 'actif') {
       throw new NotFoundException('Compte membre introuvable ou inactif');
     }
-    if (!membre.userId) {
-      throw new ForbiddenException(
-        "Retrait bloqué : l'empreinte du membre doit d'abord être capturée au bureau.",
-      );
-    }
-    const result = await this.verifyLimites(compte, montant, devise);
+        const result = await this.verifyLimites(compte, montant, devise);
     const caisse = await this.prisma.caisseAgent.findUnique({
       where: { agentId_devise: { agentId, devise } },
       select: { solde: true },
@@ -535,7 +552,7 @@ export class WithdrawalsService {
         `Fonds insuffisants dans votre caisse : ${Number(caisse.solde)} ${devise} disponibles.`,
       );
     }
-    return { ...result, soldeCaisse: Number(caisse.solde) };
+    return { ...result, soldeCaisse: Number(caisse.solde), hasBiometric: Boolean(membre.userId) };
   }
 
   async getAllCashboxes() {

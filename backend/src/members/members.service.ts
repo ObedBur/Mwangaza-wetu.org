@@ -446,6 +446,7 @@ export class MembersService {
           userId,
           dateAdhesion: new Date(dateAdhesion),
           dureeAdhesionMois: createMemberDto.dureeAdhesionMois ?? 1,
+          dureeEpargneMois: createMemberDto.dureeEpargneMois ?? 1,
           dateExpirationAdhesion: (() => {
             const expiration = new Date(dateAdhesion);
             expiration.setMonth(expiration.getMonth() + (createMemberDto.dureeAdhesionMois ?? 1));

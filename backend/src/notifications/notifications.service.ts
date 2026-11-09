@@ -35,6 +35,7 @@ export interface NotificationResponse {
   membreId: number | null;
   /** null = notification non ciblée sur un agent précis. */
   agentId: number | null;
+  audience: string;
 }
 
 const DEFAULT_PAGE_SIZE = 20;
@@ -50,6 +51,7 @@ function toResponse(record: notifications): NotificationResponse {
     createdAt: record.created_at,
     membreId: record.membre_id,
     agentId: record.agent_id,
+    audience: record.audience,
   };
 }
 
@@ -89,10 +91,11 @@ export class NotificationsService {
     const broadcast: Prisma.notificationsWhereInput = {
       membre_id: null,
       agent_id: null,
+      audience: 'all',
     };
     return audience === 'agent'
       ? { OR: [{ agent_id: userId }, broadcast] }
-      : { OR: [{ membre_id: userId }, broadcast] };
+      : { OR: [{ membre_id: userId, audience: 'all' }, broadcast] };
   }
 
   /**
@@ -132,6 +135,34 @@ export class NotificationsService {
       pageSize,
       nonLues,
     };
+  }
+
+  /** Émet une alerte privée à l’administration et un rappel ciblé au membre. */
+  async createDatMaturityReminders(dat: {
+    id: number; membreId: number; numeroCompte: string; nomComplet: string;
+    capital: number; gain: number; devise: string; dateEcheance: Date;
+  }) {
+    const date = dat.dateEcheance.toLocaleDateString('fr-FR');
+    const ref = `dat-maturity-${dat.id}`;
+    const data = [
+      {
+        titre: `Échéance DAT à préparer — ${dat.numeroCompte}`,
+        message: `${dat.nomComplet} (${dat.numeroCompte}) : préparer ${dat.capital + dat.gain} ${dat.devise} (capital ${dat.capital} + gain ${dat.gain}), échéance le ${date}.`,
+        audience: 'admin', membre_id: null,
+      },
+      {
+        titre: 'Votre placement arrive bientôt à échéance',
+        message: `Votre placement arrive à échéance le ${date}. Présentez-vous à la coopérative à partir de cette date. Pour renouveler, un nouveau versement devra être enregistré et une durée choisie ; le renouvellement n’est pas automatique.`,
+        audience: 'all', membre_id: dat.membreId,
+      },
+    ];
+    await this.prisma.$transaction(data.map((notice, index) =>
+      this.prisma.notifications.upsert({
+        where: { reference: `${ref}-${index === 0 ? 'admin' : 'member'}` },
+        create: { ...notice, agent_id: null, admin_id: null, reference: `${ref}-${index === 0 ? 'admin' : 'member'}`, type: 'rappel' },
+        update: {},
+      }),
+    ));
   }
 
   /** GET /api/notifications/moi/non-lues — badge de la navigation. */
@@ -181,6 +212,7 @@ export class NotificationsService {
     const page = normalizePage(options.page, 1);
     const pageSize = normalizePageSize(options.pageSize, DEFAULT_PAGE_SIZE);
     const where: Prisma.notificationsWhereInput = {
+      audience: { in: ['all', 'admin'] },
       ...(options.membreId ? { membre_id: options.membreId } : {}),
       ...(options.agentId ? { agent_id: options.agentId } : {}),
       ...(options.type ? { type: options.type } : {}),
@@ -255,5 +287,11 @@ export class NotificationsService {
     }
     await this.prisma.notifications.delete({ where: { id } });
     return { deleted: true, id };
+  }
+
+  async markAdminNoticeAsRead(id: number) {
+    const notice = await this.prisma.notifications.findFirst({ where: { id, audience: 'admin' } });
+    if (!notice) throw new NotFoundException('Notification introuvable');
+    return toResponse(await this.prisma.notifications.update({ where: { id }, data: { is_read: true } }));
   }
 }

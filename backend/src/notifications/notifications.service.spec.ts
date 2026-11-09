@@ -62,6 +62,8 @@ describe('NotificationsService', () => {
     titre: 'Assemblée générale',
     message: 'Rendez-vous le 15 novembre.',
     type: 'assemblée',
+    audience: 'all',
+    reference: null,
     is_read: false,
     created_at: new Date('2026-10-02T10:00:00Z'),
   };
@@ -99,8 +101,8 @@ describe('NotificationsService', () => {
       // Périmètre membre : ses notifications + diffusions (les deux NULL)
       const { where } = prisma.notifications.findMany.mock.calls[0][0];
       expect(where?.OR).toEqual([
-        { membre_id: 42 },
-        { membre_id: null, agent_id: null },
+        { membre_id: 42, audience: 'all' },
+        { membre_id: null, agent_id: null, audience: 'all' },
       ]);
 
       expect(result.total).toBe(3);
@@ -115,6 +117,7 @@ describe('NotificationsService', () => {
           createdAt: notificationRecord.created_at,
           membreId: 42,
           agentId: null,
+          audience: 'all',
         },
       ]);
     });
@@ -157,7 +160,7 @@ describe('NotificationsService', () => {
       const { where } = prisma.notifications.findMany.mock.calls[0][0];
       expect(where?.OR).toEqual([
         { agent_id: 7 },
-        { membre_id: null, agent_id: null },
+        { membre_id: null, agent_id: null, audience: 'all' },
       ]);
       expect(result.data[0]?.agentId).toBe(7);
       expect(result.data[0]?.membreId).toBeNull();
@@ -189,7 +192,7 @@ describe('NotificationsService', () => {
       expect(where?.is_read).toBe(false);
       expect(where?.OR).toEqual([
         { agent_id: 7 },
-        { membre_id: null, agent_id: null },
+        { membre_id: null, agent_id: null, audience: 'all' },
       ]);
     });
   });
@@ -219,7 +222,7 @@ describe('NotificationsService', () => {
         NotFoundException,
       );
       expect(prisma.notifications.findFirst.mock.calls[0][0].where?.OR).toEqual(
-        [{ agent_id: 7 }, { membre_id: null, agent_id: null }],
+        [{ agent_id: 7 }, { membre_id: null, agent_id: null, audience: 'all' }],
       );
     });
 

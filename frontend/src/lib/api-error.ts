@@ -148,6 +148,18 @@ export function parseApiError(
     };
   }
 
+  // Cas 503 Service Indisponible (ex: lecteur biométrique indisponible)
+  if (status === 503) {
+    return {
+      userMessage:
+        (typeof rawMessage === "string" ? rawMessage : null) ||
+        "Le service demandé est temporairement indisponible. Veuillez réessayer.",
+      technicalDetails,
+      statusCode: status,
+      networkError: false,
+    };
+  }
+
   // Cas 500+ Erreur serveur
   if (status && status >= 500) {
     return {

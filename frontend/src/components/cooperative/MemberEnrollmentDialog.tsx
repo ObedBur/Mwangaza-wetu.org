@@ -106,6 +106,7 @@ export function MemberEnrollmentDialog({
 }) {
   const [accountType, setAccountType] = useState("PRINCIPAL");
   const [adhesionMonths, setAdhesionMonths] = useState(1);
+  const [savingsMonths, setSavingsMonths] = useState(1);
   const [adhesionCurrency, setAdhesionCurrency] = useState<'FC' | 'USD'>('FC');
   const [generatedAccountNumber, setGeneratedAccountNumber] = useState("");
   const [generatingAccountNumber, setGeneratingAccountNumber] = useState(false);
@@ -307,6 +308,7 @@ export function MemberEnrollmentDialog({
       sexe: String(data.get("memberSex") || ""),
       dateAdhesion: String(data.get("joinDate") || ""),
       dureeAdhesionMois: adhesionMonths,
+      dureeEpargneMois: savingsMonths,
       deviseAdhesion: adhesionCurrency,
       typeCompte: accountType,
       statut: "actif",
@@ -641,6 +643,17 @@ export function MemberEnrollmentDialog({
                   </div>
                 </div>
                 <div className="mw-fee-card">
+                  <span className="mw-form-label">Durée du placement d’épargne</span>
+                  <div className="mw-dat-duration-options" role="group" aria-label="Durée du placement d’épargne">
+                    {[1, 3, 6, 12].map((months) => <button
+                      key={`savings-${months}`}
+                      type="button"
+                      className={savingsMonths === months ? 'is-selected' : undefined}
+                      aria-pressed={savingsMonths === months}
+                      onClick={() => setSavingsMonths(months)}
+                    >{months} mois</button>)}
+                  </div>
+                  <p>Durée prévue à l’inscription. Chaque placement et renouvellement reste confirmé au guichet avec un nouveau versement.</p>
                   <span className="mw-form-label">{t.membershipFee}</span>
                   <span className="mw-form-label">{t.adhesionDuration}</span>
                   <div className="mw-dat-duration-options" role="group" aria-label={t.adhesionDuration}>

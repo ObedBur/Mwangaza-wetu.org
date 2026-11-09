@@ -16,7 +16,7 @@ export interface GeneralParameters {
   montant_max_par_retrait_fc: number;
   montant_max_par_retrait_usd: number;
   taux_usd_cdf: number;
-  heures_autorisees: { debut: string; fin: string };
+  heures_autorisees?: { debut: string; fin: string; actif?: boolean };
   motif_obligatoire: boolean;
   retraits?: {
     frais_retrait?: {

@@ -3,12 +3,15 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
+  OnModuleDestroy,
+  OnModuleInit,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { ParametresService } from '../parametres/parametres.service';
 import { CreateDatDto } from './dto/create-dat.dto';
 import type { DatDuree } from '../parametres/parametres.service';
 import { Devise, StatutDat } from '@prisma/client';
+import { NotificationsService } from '../notifications/notifications.service';
 
 /** Statuts pour lesquels le membre ne peut PAS ouvrir un second DAT. */
 const STATUTS_ACTIFS: StatutDat[] = [StatutDat.OUVERT, StatutDat.ECHEANCE];
@@ -17,11 +20,47 @@ const STATUTS_ACTIFS: StatutDat[] = [StatutDat.OUVERT, StatutDat.ECHEANCE];
 const BASE_JOURS: Record<number, number> = { 1: 31, 3: 93, 6: 186, 12: 365 };
 
 @Injectable()
-export class DatService {
+export class DatService implements OnModuleInit, OnModuleDestroy {
+  private reminderTimer?: ReturnType<typeof setInterval>;
   constructor(
     private prisma: PrismaService,
     private parametres: ParametresService,
+    private notifications: NotificationsService,
   ) {}
+
+  onModuleInit() {
+    void this.notifierEcheancesProches();
+    this.reminderTimer = setInterval(() => void this.notifierEcheancesProches(), 60 * 60 * 1000);
+    this.reminderTimer.unref?.();
+  }
+
+  onModuleDestroy() {
+    if (this.reminderTimer) clearInterval(this.reminderTimer);
+  }
+
+  /** Scan horaire idempotent : les rappels sont émis au jour J-3. */
+  private async notifierEcheancesProches() {
+    try {
+      const debut = new Date();
+      debut.setUTCHours(0, 0, 0, 0);
+      debut.setUTCDate(debut.getUTCDate() + 3);
+      const fin = new Date(debut);
+      fin.setUTCDate(fin.getUTCDate() + 1);
+      const dats = await this.prisma.dat.findMany({
+        where: { statut: StatutDat.OUVERT, dateEcheance: { gte: debut, lt: fin } },
+        include: { membre: { select: { id: true, nomComplet: true } } },
+      });
+      for (const dat of dats) {
+        await this.notifications.createDatMaturityReminders({
+          id: dat.id, membreId: dat.membre.id, numeroCompte: dat.numeroCompte,
+          nomComplet: dat.membre.nomComplet, capital: Number(dat.capital),
+          gain: Number(dat.gain), devise: dat.devise, dateEcheance: dat.dateEcheance,
+        });
+      }
+    } catch (error) {
+      console.error('[DAT] Échec du scan des rappels d’échéance', error);
+    }
+  }
 
   // ── Soldes ────────────────────────────────────────────────────────
   /**
@@ -170,10 +209,12 @@ export class DatService {
     }
 
     // 3. Durée autorisée par le barème
-    const bareme = await this.parametres.getDatDuree(dto.dureeMois);
+    const historiqueDat = await this.prisma.dat.count({ where: { numeroCompte: dto.numeroCompte } });
+    const dureeMois = historiqueDat === 0 ? membre.dureeEpargneMois : dto.dureeMois;
+    const bareme = await this.parametres.getDatDuree(dureeMois);
     if (!bareme) {
       throw new BadRequestException(
-        `Durée non autorisée : ${dto.dureeMois} mois. Durées possibles : 1, 3, 6, 12 mois.`,
+        `Durée non autorisée : ${dureeMois} mois. Durées possibles : 1, 3, 6, 12 mois.`,
       );
     }
 
@@ -181,7 +222,7 @@ export class DatService {
     const minimum = dto.devise === Devise.FC ? bareme.minFc : bareme.minUsd;
     if (dto.montant < minimum) {
       throw new BadRequestException(
-        `Montant minimum pour un DAT de ${dto.dureeMois} mois : ` +
+        `Montant minimum pour un DAT de ${dureeMois} mois : ` +
           `${minimum} ${dto.devise}.`,
       );
     }
@@ -209,7 +250,7 @@ export class DatService {
     }
 
     const dateEcheance = new Date(dateOuverture);
-    dateEcheance.setMonth(dateEcheance.getMonth() + dto.dureeMois);
+    dateEcheance.setUTCMonth(dateEcheance.getUTCMonth() + dureeMois);
 
     const capital = dto.montant;
     // Gain conditionné au seuil : sous le seuil, ou durée sans intérêt, gain = 0
@@ -227,7 +268,7 @@ export class DatService {
           devise: dto.devise,
           capital,
           tauxPeriode: bareme.tauxPeriode,
-          dureeMois: dto.dureeMois,
+          dureeMois,
           baseJours: bareme.baseJours,
           gain,
           dateOuverture,
@@ -235,6 +276,7 @@ export class DatService {
           statut: StatutDat.OUVERT,
         },
       });
+      await tx.membre.update({ where: { numeroCompte: dto.numeroCompte }, data: { dureeEpargneMois: dureeMois } });
 
       // Sortie du Compte Principal (solde libre)
       await tx.epargne.create({
@@ -245,7 +287,7 @@ export class DatService {
           devise: dto.devise,
           montant: capital,
           dateOperation: dateOuverture,
-          description: `Blocage DAT ${dto.dureeMois} mois (n°${dat.id})`,
+          description: `Blocage DAT ${dureeMois} mois (n°${dat.id})`,
         },
       });
 
@@ -258,7 +300,7 @@ export class DatService {
           devise: dto.devise,
           montant: capital,
           dateOperation: dateOuverture,
-          description: `Ouverture DAT ${dto.dureeMois} mois (n°${dat.id})`,
+          description: `Ouverture DAT ${dureeMois} mois (n°${dat.id})`,
         },
       });
 
@@ -271,7 +313,7 @@ export class DatService {
         motifGainNul: gain > 0
           ? undefined
           : bareme.tauxPeriode === 0
-            ? `Le DAT de ${dto.dureeMois} mois n'applique aucun intérêt.`
+            ? `Le DAT de ${dureeMois} mois n'applique aucun intérêt.`
             : `Capital inférieur au seuil de ${seuilGain.toLocaleString('fr-FR')} ` +
               `${dto.devise} : pas d'intérêt.`,
       });
@@ -280,7 +322,7 @@ export class DatService {
     await this.journal(
       `DAT_OUVERTURE_${resultat.id}`,
       `DAT n°${resultat.id} — ${dto.numeroCompte} : ${capital} ${dto.devise} ` +
-        `bloqués ${dto.dureeMois} mois au taux de période ${bareme.tauxPeriode} % ` +
+        `bloqués ${dureeMois} mois au taux de période ${bareme.tauxPeriode} % ` +
         (seuilAtteint
           ? `(gain attendu ${gain} ${dto.devise}, échéance ` +
             `${resultat.dateEcheance.toLocaleDateString('fr-FR')})`

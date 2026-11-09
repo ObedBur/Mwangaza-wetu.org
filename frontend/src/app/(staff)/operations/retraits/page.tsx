@@ -37,6 +37,7 @@ import {
   downloadReportPdf,
 } from "@/lib/cooperative-report-export";
 import { formatMixedCurrency } from "@/lib/format-currency";
+import { parseApiError } from "@/lib/api-error";
 import { MWANGAZA_BRAND } from "@/lib/theme-constants";
 
 type Currency = "USD" | "FC";

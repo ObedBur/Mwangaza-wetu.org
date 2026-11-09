@@ -35,6 +35,20 @@ export class CreateWithdrawalDto {
 
   @IsUUID()
   idempotencyKey: string;
+
+  /**
+   * Mode dégradé : permet à un admin-agent de contourner la vérification
+   * biométrique quand le lecteur ZKTeco est physiquement en panne.
+   * Le motif du contournement est obligatoire et sera tracé dans les logs.
+   */
+  @IsBoolean()
+  @IsOptional()
+  skipBiometric?: boolean;
+
+  @IsString()
+  @IsOptional()
+  @MaxLength(500)
+  motifSkipBiometric?: string;
 }
 
 export class VerifyWithdrawalDto {

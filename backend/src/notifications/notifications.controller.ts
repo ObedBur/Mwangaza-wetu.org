@@ -169,6 +169,11 @@ export class NotificationsController {
     return this.notificationsService.create(dto, adminId);
   }
 
+  @Patch(':id/lire')
+  async markAdminNoticeAsRead(@Param('id', ParseIntPipe) id: number) {
+    return this.notificationsService.markAdminNoticeAsRead(id);
+  }
+
   /** DELETE /api/notifications/:id — superadmin uniquement. */
   @Roles(...SUPERADMIN_ROLES)
   @Delete(':id')

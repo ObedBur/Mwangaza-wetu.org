@@ -66,6 +66,10 @@ export class CreateMemberDto {
   dureeAdhesionMois?: number;
 
   @IsOptional()
+  @IsIn([1, 3, 6, 12])
+  dureeEpargneMois?: number;
+
+  @IsOptional()
   @IsIn(['FC', 'USD'])
   deviseAdhesion?: 'FC' | 'USD';
 
