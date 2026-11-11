@@ -266,8 +266,8 @@ model LoginAttempt {
   ip         String
   identifier String   // email ou numéro de compte haché
   count      Int      @default(1)
-  firstAttempt DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  firstAttempt DateTime @default(now()) @map("first_attempt")
+  updatedAt  DateTime @updatedAt @map("updated_at")
 
   @@index([ip, identifier])
   @@map("login_attempts")
