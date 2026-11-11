@@ -4,7 +4,6 @@ import React, { useState, useEffect, useCallback, Suspense } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import axios from 'axios';
 import { login, getPostLoginRedirect, getAuthUser, fetchCurrentUser, clearAuthSession } from '@/lib/auth';
 import { MWANGAZA_BRAND } from '@/lib/theme-constants';
 import {
@@ -255,15 +254,15 @@ function LoginForm() {
     value: string,
   ): string => {
     const base =
-      'w-full px-4 py-4 bg-white border rounded-xl text-base text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 transition-all';
+      'w-full min-w-0 rounded-none border-x-0 border-t-0 border-b-2 bg-transparent px-1 py-4 text-[15px] text-slate-900 placeholder:text-slate-400 transition-[border-color,box-shadow] duration-200 focus:outline-none focus:ring-0 sm:text-base';
 
     if (fieldError && (touched || formSubmitted)) {
-      return `${base} border-red-400 focus:ring-red-500 focus:border-red-500`;
+      return `${base} border-b-red-500 hover:border-b-red-600 hover:shadow-[0_3px_4px_-3px_rgba(239,68,68,0.55)] focus:border-b-red-600 focus:shadow-[0_3px_4px_-3px_rgba(239,68,68,0.7)]`;
     }
     if (!fieldError && (touched || formSubmitted) && value.trim()) {
-      return `${base} border-emerald-400 focus:ring-emerald-500 focus:border-emerald-500`;
+      return `${base} border-b-emerald-500 hover:border-b-emerald-600 hover:shadow-[0_3px_4px_-3px_rgba(16,185,129,0.55)] focus:border-b-emerald-600 focus:shadow-[0_3px_4px_-3px_rgba(16,185,129,0.7)]`;
     }
-    return `${base} border-slate-300 focus:ring-[#0B5EA8] focus:border-[#0B5EA8]`;
+    return `${base} border-b-slate-300 hover:border-b-slate-400 hover:shadow-[0_3px_4px_-3px_rgba(11,94,168,0.45)] focus:border-b-[#0B5EA8] focus:shadow-[0_3px_4px_-3px_rgba(11,94,168,0.6)]`;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -337,11 +336,7 @@ function LoginForm() {
       }
     } catch (err: unknown) {
       setIsRedirecting(false);
-      const backendMessage = axios.isAxiosError(err)
-        ? (Array.isArray(err.response?.data?.message)
-          ? err.response.data.message[0]
-          : err.response?.data?.message) || 'Identifiant ou mot de passe incorrect.'
-        : 'Identifiant ou mot de passe incorrect.';
+      const backendMessage = err instanceof Error ? err.message : 'Identifiant ou mot de passe incorrect.';
       handleBackendError(backendMessage);
     } finally {
       setIsLoading(false);
@@ -356,7 +351,7 @@ function LoginForm() {
   };
 
   return (
-    <main className="login-page min-h-dvh w-full bg-[#f4f7fb] xl:bg-white">
+    <main className="login-page min-h-dvh w-full bg-white">
       {/* ═══ Toast Notifications — fixed top-right ═══ */}
       {toasts.length > 0 && (
         <div
@@ -444,7 +439,7 @@ function LoginForm() {
         </header>
 
         <div className="flex flex-1 items-center justify-center py-7 sm:py-10 xl:py-12">
-          <section className="w-full max-w-lg rounded-3xl border border-slate-200/80 bg-white p-5 shadow-[0_18px_48px_-32px_rgba(15,23,42,0.3)] sm:p-8 xl:rounded-none xl:border-0 xl:bg-transparent xl:p-0 xl:shadow-none">
+          <section className="w-full max-w-lg p-0">
           <div className="mb-8">
             <p className="mb-3 text-[11px] font-bold tracking-[0.16em] text-[#0B5EA8] uppercase">
               Votre espace Mwangaza Wetu
@@ -483,10 +478,10 @@ function LoginForm() {
                   value={identifier}
                   onChange={(e) => handleIdentifierChange(e.target.value)}
                   onBlur={handleIdentifierBlur}
-                  placeholder="E-mail, téléphone ou numéro de compte"
+                  placeholder="Votre identifiant"
                   aria-invalid={!!(identifierError && (identifierTouched || formSubmitted))}
                   aria-describedby={identifierError ? 'identifier-help identifier-error' : 'identifier-help'}
-                  className={getInputClasses(identifierError, identifierTouched, identifier)}
+                  className={`${getInputClasses(identifierError, identifierTouched, identifier)} pr-10`}
                 />
                 {/* Validation icon inside input */}
                 {(identifierTouched || formSubmitted) && (
@@ -500,12 +495,12 @@ function LoginForm() {
                 )}
               </div>
               <p id="identifier-help" className="mt-2 text-xs leading-relaxed text-slate-500">
-                Un seul identifiant suffit, quel que soit votre espace.
+                Saisissez votre e-mail, téléphone ou numéro de compte.
               </p>
               {/* Inline error message below the field */}
               {identifierError && (identifierTouched || formSubmitted) && (
-                <p id="identifier-error" className="mt-1.5 flex items-center gap-1.5 text-xs text-red-600" role="alert">
-                  <AlertCircle className="h-3 w-3 shrink-0" />
+                <p id="identifier-error" className="mt-1.5 flex items-start gap-1.5 text-xs leading-relaxed text-red-600" role="alert">
+                  <AlertCircle className="mt-0.5 h-3 w-3 shrink-0" />
                   {identifierError}
                 </p>
               )}
@@ -557,15 +552,15 @@ function LoginForm() {
               </div>
               {/* Inline error message below the field */}
               {passwordError && (passwordTouched || formSubmitted) && (
-                <p id="password-error" className="mt-1.5 flex items-center gap-1.5 text-xs text-red-600" role="alert">
-                  <AlertCircle className="h-3 w-3 shrink-0" />
+                <p id="password-error" className="mt-1.5 flex items-start gap-1.5 text-xs leading-relaxed text-red-600" role="alert">
+                  <AlertCircle className="mt-0.5 h-3 w-3 shrink-0" />
                   {passwordError}
                 </p>
               )}
             </div>
 
             {/* Ligne Se souvenir de moi / Aide */}
-            <div className="flex items-center justify-between text-xs sm:text-sm pt-1">
+            <div className="flex flex-col items-start justify-between gap-1 pt-1 text-xs sm:flex-row sm:items-center sm:gap-4 sm:text-sm">
               <label className="flex min-h-11 items-center gap-2 cursor-pointer select-none text-slate-600 font-medium">
                 <input
                   type="checkbox"
@@ -573,12 +568,12 @@ function LoginForm() {
                   onChange={(e) => setRememberMe(e.target.checked)}
                   className="h-4 w-4 rounded border-slate-300 accent-slate-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
                 />
-                <span>Rester connecté sur cet appareil</span>
+                <span>Rester connecté</span>
               </label>
 
               <Link
                 href="/aide-connexion"
-                className="flex min-h-11 items-center gap-1 text-slate-500 hover:text-slate-900 font-semibold transition-colors"
+                className="flex min-h-11 items-center gap-1 whitespace-nowrap text-slate-500 hover:text-slate-900 font-semibold transition-colors"
               >
                 <HelpCircle className="w-3.5 h-3.5" aria-hidden="true" />
                 <span>Besoin d&apos;aide ?</span>
@@ -589,7 +584,7 @@ function LoginForm() {
             <button
               type="submit"
               disabled={isLoading || isRedirecting}
-              className="mt-2 flex min-h-14 w-full items-center justify-center gap-2 rounded-xl bg-[#c65313] px-4 py-4 text-sm font-bold text-white shadow-md shadow-orange-900/10 transition-all hover:bg-[#ad450d] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#c65313] active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-70"
+              className="mt-2 flex min-h-14 w-full items-center justify-center gap-2 rounded-xl bg-[#c65313] px-4 py-4 text-sm font-bold text-white shadow-md shadow-orange-900/10 transition-all hover:bg-[#ad450d] hover:shadow-lg hover:shadow-orange-900/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#c65313] active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-70"
             >
               {isLoading || isRedirecting ? (
                 <div className="flex items-center gap-2">

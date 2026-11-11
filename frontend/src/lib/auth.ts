@@ -15,12 +15,65 @@ export const apiClient = axios.create({
   },
 });
 
+/**
+ * Extrait un message d'erreur lisible depuis une erreur Axios.
+ * Gère les codes 400, 401, 403, 429 et les erreurs réseau.
+ */
+function extractAxiosError(err: unknown): string {
+  if (!axios.isAxiosError(err)) {
+    return 'Erreur de connexion inconnue.';
+  }
+
+  const status = err.response?.status;
+  const data = err.response?.data;
+  const message = data?.message || data?.error || '';
+
+  // 429 — Trop de tentatives (rate limiting)
+  if (status === 429) {
+    const retryAfter = err.response?.headers?.['retry-after'];
+    return retryAfter
+      ? `Trop de tentatives. Réessayez dans ${retryAfter} seconde(s).`
+      : 'Trop de tentatives. Réessayez plus tard.';
+  }
+
+  // 401 — Identifiants incorrects ou compte verrouillé
+  if (status === 401) {
+    return message || 'Identifiants incorrects.';
+  }
+
+  // 400 — Données invalides ou manquantes
+  if (status === 400) {
+    return message || 'Données de connexion invalides.';
+  }
+
+  // 403 — Origine non autorisée (erreur de configuration serveur)
+  if (status === 403) {
+    return 'Erreur de configuration serveur. Contactez l\'administrateur.';
+  }
+
+  // Autres erreurs HTTP
+  if (status) {
+    return message || `Erreur serveur (${status}).`;
+  }
+
+  // Pas de réponse du serveur (réseau, DNS, timeout, etc.)
+  if (err.code === 'ECONNREFUSED' || err.code === 'ENOTFOUND' || err.code === 'ETIMEDOUT') {
+    return 'Impossible de joindre le serveur. Vérifiez votre connexion.';
+  }
+
+  return 'Erreur de connexion.';
+}
+
 // Récupère le jeton CSRF depuis l'endpoint dédié (le cookie est HttpOnly, illisible par JS)
 export async function fetchCsrfToken(): Promise<string> {
   if (csrfToken) return csrfToken;
-  const response = await apiClient.get<{ csrfToken: string }>('/auth/csrf-token');
-  csrfToken = response.data.csrfToken;
-  return csrfToken;
+  try {
+    const response = await apiClient.get<{ csrfToken: string }>('/auth/csrf-token');
+    csrfToken = response.data.csrfToken;
+    return csrfToken;
+  } catch (err) {
+    throw new Error(extractAxiosError(err));
+  }
 }
 
 // Le JWT reste en cookie HttpOnly; le jeton CSRF est envoyé via l'en-tête X-CSRF-Token.
@@ -75,7 +128,7 @@ export function clearAuthSession(): void {
   void fetch(`${API_URL}/auth/logout`, { method: 'POST', credentials: 'include' }).catch(() => undefined);
 }
 
-/** Déconnexion : purge la session puis renvoie vers /login (aucun endpoint backend). */
+/** Déconnexion : purge la session puis renvoie vers /login. */
 export function logout(): void {
   if (typeof window === 'undefined') return;
   clearAuthSession();
@@ -118,75 +171,95 @@ export async function login(
   password: string,
   rememberMe = true,
 ): Promise<LoginResponse> {
-  const response = await apiClient.post<LoginResponse & { csrfToken?: string }>(
-    '/auth/login',
-    { ...formatIdentifierBody(identifier, password), rememberMe },
-  );
-  if (response.data.csrfToken) {
-    csrfToken = response.data.csrfToken;
+  try {
+    const response = await apiClient.post<LoginResponse & { csrfToken?: string }>(
+      '/auth/login',
+      { ...formatIdentifierBody(identifier, password), rememberMe },
+    );
+    if (response.data.csrfToken) {
+      csrfToken = response.data.csrfToken;
+    }
+    if (response.data.success && response.data.user) {
+      setAuthSession(response.data.user, rememberMe);
+    }
+    return response.data;
+  } catch (err) {
+    throw new Error(extractAxiosError(err));
   }
-  if (response.data.success && response.data.user) {
-    setAuthSession(response.data.user, rememberMe);
-  }
-  return response.data;
 }
 
 // 1. Connexion Administrateur
 export async function loginAdmin(identifier: string, password: string): Promise<LoginResponse> {
-  const payload = formatIdentifierBody(identifier, password);
-  const response = await apiClient.post<LoginResponse & { csrfToken?: string }>(
-    '/auth/admin/login',
-    payload,
-  );
-  if (response.data.csrfToken) {
-    csrfToken = response.data.csrfToken;
+  try {
+    const payload = formatIdentifierBody(identifier, password);
+    const response = await apiClient.post<LoginResponse & { csrfToken?: string }>(
+      '/auth/admin/login',
+      payload,
+    );
+    if (response.data.csrfToken) {
+      csrfToken = response.data.csrfToken;
+    }
+    if (response.data.success && response.data.user) {
+      setAuthSession(response.data.user);
+    }
+    return response.data;
+  } catch (err) {
+    throw new Error(extractAxiosError(err));
   }
-  if (response.data.success && response.data.user) {
-    setAuthSession(response.data.user);
-  }
-  return response.data;
 }
 
 // 2. Connexion Membre
 export async function loginMember(identifier: string, password: string): Promise<LoginResponse> {
-  const payload = formatIdentifierBody(identifier, password);
-  const response = await apiClient.post<LoginResponse & { csrfToken?: string }>(
-    '/auth/member/login',
-    payload,
-  );
-  if (response.data.csrfToken) {
-    csrfToken = response.data.csrfToken;
+  try {
+    const payload = formatIdentifierBody(identifier, password);
+    const response = await apiClient.post<LoginResponse & { csrfToken?: string }>(
+      '/auth/member/login',
+      payload,
+    );
+    if (response.data.csrfToken) {
+      csrfToken = response.data.csrfToken;
+    }
+    if (response.data.success && response.data.user) {
+      setAuthSession(response.data.user);
+    }
+    return response.data;
+  } catch (err) {
+    throw new Error(extractAxiosError(err));
   }
-  if (response.data.success && response.data.user) {
-    setAuthSession(response.data.user);
-  }
-  return response.data;
 }
 
 // 3. Connexion Agent (Guichet)
 export async function loginAgent(identifier: string, password: string): Promise<LoginResponse> {
-  const payload = formatIdentifierBody(identifier, password);
-  const response = await apiClient.post<LoginResponse & { csrfToken?: string }>(
-    '/auth/agent/login',
-    payload,
-  );
-  if (response.data.csrfToken) {
-    csrfToken = response.data.csrfToken;
+  try {
+    const payload = formatIdentifierBody(identifier, password);
+    const response = await apiClient.post<LoginResponse & { csrfToken?: string }>(
+      '/auth/agent/login',
+      payload,
+    );
+    if (response.data.csrfToken) {
+      csrfToken = response.data.csrfToken;
+    }
+    if (response.data.success && response.data.user) {
+      setAuthSession(response.data.user);
+    }
+    return response.data;
+  } catch (err) {
+    throw new Error(extractAxiosError(err));
   }
-  if (response.data.success && response.data.user) {
-    setAuthSession(response.data.user);
-  }
-  return response.data;
 }
 
 // 4. Vérification de session active (GET /auth/me)
 export async function fetchCurrentUser(): Promise<AuthUser> {
-  const response = await apiClient.get<AuthMeResponse>('/auth/me');
-  if (response.data.success && response.data.user) {
-    if (typeof window !== 'undefined') {
-      setAuthSession(response.data.user, true);
+  try {
+    const response = await apiClient.get<AuthMeResponse>('/auth/me');
+    if (response.data.success && response.data.user) {
+      if (typeof window !== 'undefined') {
+        setAuthSession(response.data.user, true);
+      }
+      return response.data.user;
     }
-    return response.data.user;
+    throw new Error('Impossible de récupérer le profil utilisateur');
+  } catch (err) {
+    throw new Error(extractAxiosError(err));
   }
-  throw new Error('Impossible de récupérer le profil utilisateur');
 }
