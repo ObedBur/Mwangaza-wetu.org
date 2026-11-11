@@ -2,6 +2,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ZktecoService } from '../zkteco.service';
+import { ZkAttendanceLog } from '../zkteco.service';
 
 @Injectable()
 export class SyncService {
@@ -27,7 +28,7 @@ export class SyncService {
       this.logger.log(`${recentLogs.length} logs récents à synchroniser`);
 
       for (const log of recentLogs) {
-        const uid = log.userSn?.toString() || log.userId?.toString();
+        const uid = this.deviceUserId(log);
         const dateStr = log.recordTime || log.timestamp;
         const timestamp = new Date(dateStr ?? '');
 
@@ -68,13 +69,59 @@ export class SyncService {
     }
   }
 
+  /** Stores attendance logs sent by the local Windows relay. */
+  async ingestDeviceAttendances(input: unknown[]): Promise<number> {
+    let stored = 0;
+    for (const value of input) {
+      if (!value || typeof value !== 'object') continue;
+      const log = value as ZkAttendanceLog;
+      const uid = this.deviceUserId(log);
+      const dateStr = log.recordTime || log.timestamp;
+      const timestamp = new Date(dateStr ?? '');
+      if (!uid || Number.isNaN(timestamp.getTime())) continue;
+
+      const membre = await this.prisma.membre.findFirst({
+        where: { userId: uid },
+        select: { id: true, nomComplet: true },
+      });
+      const existing = await this.prisma.attendance.findFirst({
+        where: { uid, timestamp },
+        select: { id: true, membreId: true },
+      });
+      if (existing) {
+        if (membre && existing.membreId === null) {
+          await this.prisma.attendance.update({
+            where: { id: existing.id },
+            data: { membreId: membre.id },
+          });
+        }
+        continue;
+      }
+
+      if (!membre) {
+        this.logger.warn(`UID appareil ${uid} inconnu – pointage enregistré sans membre`);
+      }
+      await this.prisma.attendance.create({
+        data: { uid, timestamp, membreId: membre?.id ?? null },
+      });
+      stored += 1;
+      if (membre) this.logger.debug(`Pointage relais → ${membre.nomComplet} (${uid})`);
+    }
+    return stored;
+  }
+
+  private deviceUserId(log: ZkAttendanceLog): string | undefined {
+    const id = log.deviceUserId || log.userId || log.uid;
+    return id === undefined || id === null || id === '' ? undefined : String(id);
+  }
+
   async startRealTimeListener() {
     this.logger.log("Démarrage de l'écoute temps réel...");
 
     await this.zkteco.startRealtime(async (log) => {
       this.logger.debug('Pointage temps réel reçu:', log);
 
-      const uid = log.userSn?.toString() || log.userId?.toString();
+      const uid = this.deviceUserId(log);
       // Pression en direct → horodatage serveur (horloge appareil non fiable)
       const timestamp = new Date();
 
