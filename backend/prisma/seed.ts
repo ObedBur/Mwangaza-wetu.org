@@ -11,12 +11,21 @@ const pool = new Pool({ connectionString });
 const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
 
+function requireSeedPassword(name: string): string {
+    const password = process.env[name];
+    if (!password || password.length < 12) {
+        throw new Error(`${name} must be configured with at least 12 characters.`);
+    }
+    return password;
+}
 
 async function main() {
     console.log('🌱 Start seeding...');
 
-    // Hacher le mot de passe pour le super admin
-    const hashedSuperAdminPassword = await bcrypt.hash('Admin@2026', 10);
+    // Valider et hacher tous les secrets avant le premier accès en écriture à la base.
+    const hashedSuperAdminPassword = await bcrypt.hash(requireSeedPassword('SEED_SUPERADMIN_PASSWORD'), 12);
+    const hashedAdminPassword = await bcrypt.hash(requireSeedPassword('SEED_ADMIN_PASSWORD'), 12);
+    const hashedAgentPassword = await bcrypt.hash(requireSeedPassword('SEED_AGENT_PASSWORD'), 12);
 
     // Création du Super Admin
     const superAdmin = await prisma.administrateur.upsert({
@@ -25,6 +34,7 @@ async function main() {
             email: 'obedburindi@gmail.com',
             role: 'superadmin',
             actif: true,
+            motDePasse: hashedSuperAdminPassword,
         },
         create: {
             nom: 'MWANGAZA',
@@ -39,9 +49,6 @@ async function main() {
     });
     console.log(`✅ Super Admin created: ${superAdmin.email}`);
 
-    // Hacher le mot de passe pour un admin standard
-    const hashedAdminPassword = await bcrypt.hash('Admin@123', 10);
-
     // Création d'un Admin standard
     const admin = await prisma.administrateur.upsert({
         where: { userId: 'AD-001' },
@@ -49,6 +56,7 @@ async function main() {
             email: 'makasimumbere22@gmail.com',
             role: 'admin',
             actif: true,
+            motDePasse: hashedAdminPassword,
         },
         create: {
             nom: 'MAKASI',
@@ -69,6 +77,7 @@ async function main() {
             email: 'kitavulameschack@gmail.com',
             role: 'admin',
             actif: true,
+            motDePasse: hashedAdminPassword,
         },
         create: {
             nom: 'KITAVULA',
@@ -84,10 +93,9 @@ async function main() {
     console.log(`✅ Admin created: ${secondAdmin.email}`);
 
     // Création d'un agent (caissier/guichet) de démonstration
-    const hashedAgentPassword = await bcrypt.hash('Agent@123', 10);
     const agent = await prisma.agent.upsert({
         where: { email: 'agent-mwangaza@gmail.com' },
-        update: {},
+        update: { motDePasse: hashedAgentPassword },
         create: {
             nom: 'Agent Démo',
             email: 'agent-mwangaza@gmail.com',

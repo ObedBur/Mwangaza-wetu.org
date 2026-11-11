@@ -9,7 +9,7 @@ import type { AuthenticatedRequest } from '../common/types/auth-request';
 import { ChangeMemberPasswordDto } from './dto/change-member-password.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { LoginThrottleGuard } from './login-throttle.guard';
-import { CSRF_COOKIE_NAME, SESSION_COOKIE_NAME } from './auth-cookies';
+import { CSRF_COOKIE_NAME, SESSION_COOKIE_NAME, readRequestCookie } from './auth-cookies';
 
 @Public()
 @Controller('api/auth')
@@ -27,7 +27,7 @@ export class AuthController {
     @Res({ passthrough: true }) response: Response,
   ) {
     const result = await this.authService.loginUnified(loginDto);
-    this.loginThrottleGuard.resetIdentifier(request);
+    await this.loginThrottleGuard.resetIdentifier(request);
     return this.createSession(response, result, loginDto.rememberMe !== false);
   }
 
@@ -35,7 +35,7 @@ export class AuthController {
   @UseGuards(LoginThrottleGuard)
   async loginAdmin(@Body() loginDto: LoginDto, @Req() request: ExpressRequest, @Res({ passthrough: true }) response: Response) {
     const result = await this.authService.loginAdmin(loginDto);
-    this.loginThrottleGuard.resetIdentifier(request);
+    await this.loginThrottleGuard.resetIdentifier(request);
     return this.createSession(response, result, loginDto.rememberMe !== false);
   }
 
@@ -43,7 +43,7 @@ export class AuthController {
   @UseGuards(LoginThrottleGuard)
   async loginMember(@Body() loginDto: LoginDto, @Req() request: ExpressRequest, @Res({ passthrough: true }) response: Response) {
     const result = await this.authService.loginMember(loginDto);
-    this.loginThrottleGuard.resetIdentifier(request);
+    await this.loginThrottleGuard.resetIdentifier(request);
     return this.createSession(response, result, loginDto.rememberMe !== false);
   }
 
@@ -51,8 +51,27 @@ export class AuthController {
   @UseGuards(LoginThrottleGuard)
   async loginAgent(@Body() loginDto: LoginDto, @Req() request: ExpressRequest, @Res({ passthrough: true }) response: Response) {
     const result = await this.authService.loginAgent(loginDto);
-    this.loginThrottleGuard.resetIdentifier(request);
+    await this.loginThrottleGuard.resetIdentifier(request);
     return this.createSession(response, result, loginDto.rememberMe !== false);
+  }
+
+  @Public()
+  @Get('csrf-token')
+  getCsrfToken(@Req() request: ExpressRequest, @Res({ passthrough: true }) response: Response) {
+    const csrfToken = readRequestCookie(request, CSRF_COOKIE_NAME);
+    if (!csrfToken) {
+      // Génère un nouveau token si aucun n'existe encore
+      const newToken = randomBytes(32).toString('hex');
+      const secure = process.env.NODE_ENV === 'production';
+      response.cookie(CSRF_COOKIE_NAME, newToken, {
+        httpOnly: true,
+        secure,
+        sameSite: 'lax',
+        path: '/',
+      });
+      return { csrfToken: newToken };
+    }
+    return { csrfToken };
   }
 
   @Post('logout')
@@ -115,14 +134,16 @@ export class AuthController {
       path: '/',
       ...persistentOptions,
     });
-    response.cookie(CSRF_COOKIE_NAME, randomBytes(32).toString('hex'), {
-      httpOnly: false,
+    const csrfToken = randomBytes(32).toString('hex');
+    response.cookie(CSRF_COOKIE_NAME, csrfToken, {
+      httpOnly: true, // ← JS ne peut plus le lire : protection contre le vol par XSS
       secure,
       sameSite: 'lax',
       path: '/',
       ...persistentOptions,
     });
     const { token: _token, ...publicResult } = result;
-    return publicResult;
+    // On retourne le token dans le corps de la réponse pour que le frontend puisse l'envoyer en header X-CSRF-Token
+    return { ...publicResult, csrfToken };
   }
 }

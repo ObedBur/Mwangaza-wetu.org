@@ -42,6 +42,8 @@ model Membre {
   activationExpires   DateTime?       @map("activation_expires")
   isActivated         Boolean         @default(false) @map("is_activated")
   authVersion         Int             @default(0) @map("auth_version")
+  loginFailures       Int             @default(0) @map("login_failures")
+  lockedUntil         DateTime?       @map("locked_until")
   attendances         Attendance[]
   comptesEpargne      CompteEpargne[]
   credits             Credit[]
@@ -67,6 +69,8 @@ model Administrateur {
   numeroCompte  String?         @unique @map("numero_compte")
   userId        String?         @unique @map("userId")
   authVersion   Int             @default(0) @map("auth_version")
+  loginFailures Int             @default(0) @map("login_failures")
+  lockedUntil   DateTime?       @map("locked_until")
   dateCreation  DateTime        @default(now()) @map("date_creation")
   photoProfil   String?         @map("photo_profil")
   notifications notifications[]
@@ -257,6 +261,18 @@ model ParametreEpargne {
   @@map("parametres_epargne")
 }
 
+model LoginAttempt {
+  id         Int      @id @default(autoincrement())
+  ip         String
+  identifier String   // email ou numéro de compte haché
+  count      Int      @default(1)
+  firstAttempt DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([ip, identifier])
+  @@map("login_attempts")
+}
+
 model AdminConfirmation {
   id               Int       @id @default(autoincrement())
   adminId          Int       @map("admin_id")
@@ -393,6 +409,8 @@ model Agent {
   authVersion                Int       @default(0) @map("auth_version")
   motDePasse                 String?   @map("mot_de_passe")
   userId                     String?   @unique @map("userId")
+  loginFailures              Int       @default(0) @map("login_failures")
+  lockedUntil                DateTime? @map("locked_until")
   createdAt                  DateTime  @default(now()) @map("created_at")
   caisses                    CaisseAgent[]
   notifications              notifications[]

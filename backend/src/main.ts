@@ -5,9 +5,14 @@ import { json, urlencoded } from 'express';
 import { join } from 'path';
 import * as fs from 'fs';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
+import { SecurityHeadersMiddleware } from './middleware/security-headers.middleware';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+
+  // En-têtes de sécurité sur toutes les réponses
+  const securityHeaders = new SecurityHeadersMiddleware();
+  app.use((req, res, next) => securityHeaders.use(req, res, next));
 
   // Les routes d'authentification n'acceptent que de petits formulaires JSON.
   // Ce parseur est monté avant la limite élevée nécessaire aux photos.

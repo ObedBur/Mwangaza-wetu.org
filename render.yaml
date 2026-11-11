@@ -19,6 +19,8 @@ services:
         generateValue: true
       - key: FRONTEND_URL
         sync: false # Mettre l'URL du frontend après déploiement
+      - key: REDIS_URL
+        sync: false # URL privée de l'instance Redis provisionnée sur Render
       - key: CLOUDINARY_CLOUD_NAME
         sync: false
       - key: CLOUDINARY_API_KEY

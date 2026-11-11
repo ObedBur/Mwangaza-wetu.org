@@ -17,9 +17,14 @@ export class AllExceptionsFilter implements ExceptionFilter {
     const response = ctx.getResponse<Response>();
     const request = ctx.getRequest<Request>();
 
-    const status =
-      exception instanceof HttpException
-        ? exception.getStatus()
+    const parserStatus =
+      exception && typeof exception === 'object' && 'status' in exception
+        ? Number((exception as { status?: unknown }).status)
+        : undefined;
+    const status = exception instanceof HttpException
+      ? exception.getStatus()
+      : parserStatus === HttpStatus.PAYLOAD_TOO_LARGE
+        ? HttpStatus.PAYLOAD_TOO_LARGE
         : HttpStatus.INTERNAL_SERVER_ERROR;
 
     const exceptionResponse =
@@ -28,7 +33,10 @@ export class AllExceptionsFilter implements ExceptionFilter {
     let userMessage = "Une erreur inattendue est survenue.";
     let rawErrors: string[] = [];
 
-    if (typeof exceptionResponse === 'object' && exceptionResponse !== null) {
+    if (status === HttpStatus.PAYLOAD_TOO_LARGE) {
+      userMessage = 'Le corps de la requête dépasse la taille maximale autorisée.';
+      rawErrors = [userMessage];
+    } else if (typeof exceptionResponse === 'object' && exceptionResponse !== null) {
       const res = exceptionResponse as Record<string, any>;
       if (Array.isArray(res.message)) {
         rawErrors = res.message.map((m) => String(m));

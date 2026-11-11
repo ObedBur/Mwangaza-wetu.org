@@ -24,6 +24,7 @@ import {
 import { useEffect, useMemo, useState } from "react";
 
 import { CooperativePagination } from "@/components/cooperative/CooperativePagination";
+import { DashboardSkeleton } from "@/components/cooperative/DashboardSkeleton";
 import { getAuthUser } from "@/lib/auth";
 import { apiClient } from "@/lib/auth";
 
@@ -613,6 +614,8 @@ useEffect(() => {
     const start = (safePage - 1) * transactionPageSize;
     return filteredTransactions.slice(start, start + transactionPageSize);
   }, [filteredTransactions, transactionPage, transactionPageSize]);
+
+  if (loading) return <DashboardSkeleton isAdmin={isAdmin} />;
 
   return (
     <div className="mw-dashboard-page">
@@ -1428,7 +1431,6 @@ useEffect(() => {
       </section>
       )}
 
-      {loading && <p className="mw-empty" role="status">Chargement des données du dashboard…</p>}
       {loadError && <p className="mw-empty" role="alert">{loadError}</p>}
 
       {toast && (<div className="mw-toast" role="status">{toast}</div>)}

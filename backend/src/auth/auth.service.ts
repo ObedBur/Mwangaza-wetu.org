@@ -12,6 +12,8 @@ import type { AuthUser } from '../common/types/auth-request';
 
 const DUMMY_PASSWORD_HASH = '$2b$12$It432ShYcsQ0kRyH7jJnk.Hq88W2iZA1/PjnL4JDTYjRJ3vNoU33e';
 const INVALID_LOGIN_MESSAGE = 'Identifiants incorrects';
+const MAX_LOGIN_FAILURES = 5;
+const LOCKOUT_DURATION_MS = 30 * 60 * 1000; // 30 minutes
 
 @Injectable()
 export class AuthService {
@@ -19,6 +21,87 @@ export class AuthService {
     private prisma: PrismaService,
     private jwtService: JwtService,
   ) {}
+
+  private async isAccountLocked(
+    loginFailures: number,
+    lockedUntil: Date | null,
+  ): Promise<boolean> {
+    if (!lockedUntil) return false;
+    return new Date(lockedUntil) > new Date();
+  }
+
+  private async recordLoginFailure(
+    role: string,
+    id: number,
+  ): Promise<void> {
+    if (role === 'member') {
+      const member = await this.prisma.membre.findUnique({ where: { id } });
+      if (!member) return;
+      const newFailures = member.loginFailures + 1;
+      const data: { loginFailures: number; lockedUntil?: Date | null } = {
+        loginFailures: newFailures,
+      };
+      if (newFailures >= MAX_LOGIN_FAILURES) {
+        data.lockedUntil = new Date(Date.now() + LOCKOUT_DURATION_MS);
+      }
+      await this.prisma.membre.update({
+        where: { id },
+        data,
+      });
+    } else if (role === 'agent') {
+      const agent = await this.prisma.agent.findUnique({ where: { id } });
+      if (!agent) return;
+      const newFailures = agent.loginFailures + 1;
+      const data: { loginFailures: number; lockedUntil?: Date | null } = {
+        loginFailures: newFailures,
+      };
+      if (newFailures >= MAX_LOGIN_FAILURES) {
+        data.lockedUntil = new Date(Date.now() + LOCKOUT_DURATION_MS);
+      }
+      await this.prisma.agent.update({
+        where: { id },
+        data,
+      });
+    } else if (role === 'admin' || role === 'superadmin') {
+      const admin = await this.prisma.administrateur.findUnique({
+        where: { id },
+      });
+      if (!admin) return;
+      const newFailures = admin.loginFailures + 1;
+      const data: { loginFailures: number; lockedUntil?: Date | null } = {
+        loginFailures: newFailures,
+      };
+      if (newFailures >= MAX_LOGIN_FAILURES) {
+        data.lockedUntil = new Date(Date.now() + LOCKOUT_DURATION_MS);
+      }
+      await this.prisma.administrateur.update({
+        where: { id },
+        data,
+      });
+    }
+  }
+
+  private async resetLoginFailures(
+    role: string,
+    id: number,
+  ): Promise<void> {
+    if (role === 'member') {
+      await this.prisma.membre.update({
+        where: { id },
+        data: { loginFailures: 0, lockedUntil: null },
+      });
+    } else if (role === 'agent') {
+      await this.prisma.agent.update({
+        where: { id },
+        data: { loginFailures: 0, lockedUntil: null },
+      });
+    } else if (role === 'admin' || role === 'superadmin') {
+      await this.prisma.administrateur.update({
+        where: { id },
+        data: { loginFailures: 0, lockedUntil: null },
+      });
+    }
+  }
 
   async loginUnified(loginDto: LoginDto) {
     const { email, accountNumber, password } = loginDto;
@@ -46,13 +129,42 @@ export class AuthService {
       }),
     ]);
 
+    // Vérification du verrouillage de compte avant toute comparaison de mot de passe
+    const lockedMessages: string[] = [];
+    if (admin?.actif && await this.isAccountLocked(admin.loginFailures, admin.lockedUntil)) {
+      lockedMessages.push('admin');
+    }
+    if (agent?.actif && agent.motDePasse && await this.isAccountLocked(agent.loginFailures, agent.lockedUntil)) {
+      lockedMessages.push('agent');
+    }
+    if (member?.isActivated && member.motDePasse && await this.isAccountLocked(member.loginFailures, member.lockedUntil)) {
+      lockedMessages.push('member');
+    }
+    if (lockedMessages.length > 0) {
+      throw new UnauthorizedException('Compte temporairement verrouillé. Réessayez plus tard.');
+    }
+
     const candidate =
-      (admin?.actif && { role: 'admin' as const, passwordHash: admin.motDePasse }) ||
-      (agent?.actif && agent.motDePasse && { role: 'agent' as const, passwordHash: agent.motDePasse }) ||
-      (member?.isActivated && member.motDePasse && { role: 'member' as const, passwordHash: member.motDePasse }) ||
+      (admin?.actif && { role: 'admin' as const, passwordHash: admin.motDePasse, id: admin.id }) ||
+      (agent?.actif && agent.motDePasse && { role: 'agent' as const, passwordHash: agent.motDePasse, id: agent.id }) ||
+      (member?.isActivated && member.motDePasse && { role: 'member' as const, passwordHash: member.motDePasse, id: member.id }) ||
       null;
     const passwordValid = await bcrypt.compare(password, candidate?.passwordHash ?? DUMMY_PASSWORD_HASH);
-    if (!candidate || !passwordValid) throw new UnauthorizedException(INVALID_LOGIN_MESSAGE);
+
+    if (!candidate || !passwordValid) {
+      // Enregistre l'échec sur le compte correspondant (si identifié)
+      if (admin?.actif) {
+        await this.recordLoginFailure(admin.role, admin.id);
+      } else if (agent?.actif && agent.motDePasse) {
+        await this.recordLoginFailure('agent', agent.id);
+      } else if (member?.isActivated && member.motDePasse) {
+        await this.recordLoginFailure('member', member.id);
+      }
+      throw new UnauthorizedException(INVALID_LOGIN_MESSAGE);
+    }
+
+    // Réinitialise les échecs en cas de succès
+    await this.resetLoginFailures(candidate.role, candidate.id);
 
     if (candidate.role === 'admin' && admin) {
       const user = {
@@ -95,8 +207,21 @@ export class AuthService {
       throw new BadRequestException('Email ou numéro de compte requis');
     }
 
+    // Vérification du verrouillage
+    if (admin && await this.isAccountLocked(admin.loginFailures, admin.lockedUntil)) {
+      throw new UnauthorizedException('Compte temporairement verrouillé. Réessayez plus tard.');
+    }
+
     const isValid = await bcrypt.compare(password, admin?.motDePasse ?? DUMMY_PASSWORD_HASH);
-    if (!admin || !admin.actif || !isValid) throw new UnauthorizedException(INVALID_LOGIN_MESSAGE);
+    if (!admin || !admin.actif || !isValid) {
+      if (admin) {
+        await this.recordLoginFailure(admin.role, admin.id);
+      }
+      throw new UnauthorizedException(INVALID_LOGIN_MESSAGE);
+    }
+
+    // Réinitialise les échecs en cas de succès
+    await this.resetLoginFailures(admin.role, admin.id);
 
     const payload = {
       id: admin.id,
@@ -132,10 +257,21 @@ export class AuthService {
       throw new BadRequestException('Email ou numéro de compte requis');
     }
 
+    // Vérification du verrouillage
+    if (member && await this.isAccountLocked(member.loginFailures, member.lockedUntil)) {
+      throw new UnauthorizedException('Compte temporairement verrouillé. Réessayez plus tard.');
+    }
+
     const isValid = await bcrypt.compare(password, member?.motDePasse ?? DUMMY_PASSWORD_HASH);
     if (!member || !member.motDePasse || !member.isActivated || !isValid) {
+      if (member) {
+        await this.recordLoginFailure('member', member.id);
+      }
       throw new UnauthorizedException(INVALID_LOGIN_MESSAGE);
     }
+
+    // Réinitialise les échecs en cas de succès
+    await this.resetLoginFailures('member', member.id);
 
     const payload = {
       id: member.id,
@@ -257,10 +393,21 @@ export class AuthService {
       where: { OR: [{ email: identifier }, { telephone: identifier }] },
     });
 
+    // Vérification du verrouillage
+    if (agent && await this.isAccountLocked(agent.loginFailures, agent.lockedUntil)) {
+      throw new UnauthorizedException('Compte temporairement verrouillé. Réessayez plus tard.');
+    }
+
     const isValid = await bcrypt.compare(password, agent?.motDePasse ?? DUMMY_PASSWORD_HASH);
     if (!agent || !agent.actif || !agent.motDePasse || !isValid) {
+      if (agent) {
+        await this.recordLoginFailure('agent', agent.id);
+      }
       throw new UnauthorizedException(INVALID_LOGIN_MESSAGE);
     }
+
+    // Réinitialise les échecs en cas de succès
+    await this.resetLoginFailures('agent', agent.id);
 
     const payload = {
       id: agent.id,

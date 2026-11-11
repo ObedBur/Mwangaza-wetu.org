@@ -2,8 +2,10 @@ import axios from 'axios';
 import { AuthUser, LoginResponse, AuthMeResponse, UserRole } from '@/types/auth';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
-const USER_KEY = 'mwangaza_auth_user';
 const CSRF_COOKIE = 'mwangaza_csrf';
+
+// Jeton CSRF stocké en mémoire (plus lisible via document.cookie car cookie HttpOnly)
+let csrfToken: string | null = null;
 
 export const apiClient = axios.create({
   baseURL: API_URL,
@@ -13,16 +15,18 @@ export const apiClient = axios.create({
   },
 });
 
-// Le JWT reste en cookie HttpOnly; seul le jeton CSRF non secret est lu par JS.
-apiClient.interceptors.request.use((config) => {
-  if (typeof window !== 'undefined') {
-    const csrf = document.cookie
-      .split('; ')
-      .find((cookie) => cookie.startsWith(`${CSRF_COOKIE}=`))
-      ?.slice(CSRF_COOKIE.length + 1);
-    if (csrf) {
-      config.headers['X-CSRF-Token'] = decodeURIComponent(csrf);
-    }
+// Récupère le jeton CSRF depuis l'endpoint dédié (le cookie est HttpOnly, illisible par JS)
+export async function fetchCsrfToken(): Promise<string> {
+  if (csrfToken) return csrfToken;
+  const response = await apiClient.get<{ csrfToken: string }>('/auth/csrf-token');
+  csrfToken = response.data.csrfToken;
+  return csrfToken;
+}
+
+// Le JWT reste en cookie HttpOnly; le jeton CSRF est envoyé via l'en-tête X-CSRF-Token.
+apiClient.interceptors.request.use(async (config) => {
+  if (typeof window !== 'undefined' && csrfToken) {
+    config.headers['X-CSRF-Token'] = csrfToken;
   }
   return config;
 });
@@ -44,33 +48,29 @@ apiClient.interceptors.response.use(
   }
 );
 
-// Helpers de stockage
+// Helpers de stockage — les données utilisateur ne sont plus stockées dans localStorage (XSS).
+// Le JWT est déjà protégé dans le cookie HttpOnly `mwangaza_session` côté backend.
+const ROLE_COOKIE = 'mwangaza_role';
+
 export function setAuthSession(user: AuthUser, rememberMe = true): void {
   if (typeof window === 'undefined') return;
-  const storage = rememberMe ? localStorage : sessionStorage;
-  const otherStorage = rememberMe ? sessionStorage : localStorage;
-  storage.setItem(USER_KEY, JSON.stringify(user));
-  otherStorage.removeItem(USER_KEY);
   const maxAge = rememberMe ? '; max-age=86400' : '';
-  document.cookie = `mwangaza_role=${encodeURIComponent(user.role)}; path=/; SameSite=Lax${maxAge}`;
+  document.cookie = `${ROLE_COOKIE}=${encodeURIComponent(user.role)}; path=/; SameSite=Lax${maxAge}`;
 }
 
 export function getAuthUser(): AuthUser | null {
   if (typeof window === 'undefined') return null;
-  const userStr = localStorage.getItem(USER_KEY) || sessionStorage.getItem(USER_KEY);
-  if (!userStr) return null;
-  try {
-    return JSON.parse(userStr) as AuthUser;
-  } catch {
-    return null;
-  }
+  const match = document.cookie
+    .split('; ')
+    .find((cookie) => cookie.startsWith(`${ROLE_COOKIE}=`));
+  if (!match) return null;
+  const role = decodeURIComponent(match.slice(ROLE_COOKIE.length + 1));
+  return { role: role as AuthUser['role'] } as AuthUser;
 }
 
 export function clearAuthSession(): void {
   if (typeof window === 'undefined') return;
-  localStorage.removeItem(USER_KEY);
-  sessionStorage.removeItem(USER_KEY);
-  document.cookie = 'mwangaza_role=; path=/; max-age=0';
+  document.cookie = `${ROLE_COOKIE}=; path=/; max-age=0`;
   document.cookie = `${CSRF_COOKIE}=; path=/; max-age=0`;
   void fetch(`${API_URL}/auth/logout`, { method: 'POST', credentials: 'include' }).catch(() => undefined);
 }
@@ -118,10 +118,13 @@ export async function login(
   password: string,
   rememberMe = true,
 ): Promise<LoginResponse> {
-  const response = await apiClient.post<LoginResponse>(
+  const response = await apiClient.post<LoginResponse & { csrfToken?: string }>(
     '/auth/login',
     { ...formatIdentifierBody(identifier, password), rememberMe },
   );
+  if (response.data.csrfToken) {
+    csrfToken = response.data.csrfToken;
+  }
   if (response.data.success && response.data.user) {
     setAuthSession(response.data.user, rememberMe);
   }
@@ -131,7 +134,13 @@ export async function login(
 // 1. Connexion Administrateur
 export async function loginAdmin(identifier: string, password: string): Promise<LoginResponse> {
   const payload = formatIdentifierBody(identifier, password);
-  const response = await apiClient.post<LoginResponse>('/auth/admin/login', payload);
+  const response = await apiClient.post<LoginResponse & { csrfToken?: string }>(
+    '/auth/admin/login',
+    payload,
+  );
+  if (response.data.csrfToken) {
+    csrfToken = response.data.csrfToken;
+  }
   if (response.data.success && response.data.user) {
     setAuthSession(response.data.user);
   }
@@ -141,7 +150,13 @@ export async function loginAdmin(identifier: string, password: string): Promise<
 // 2. Connexion Membre
 export async function loginMember(identifier: string, password: string): Promise<LoginResponse> {
   const payload = formatIdentifierBody(identifier, password);
-  const response = await apiClient.post<LoginResponse>('/auth/member/login', payload);
+  const response = await apiClient.post<LoginResponse & { csrfToken?: string }>(
+    '/auth/member/login',
+    payload,
+  );
+  if (response.data.csrfToken) {
+    csrfToken = response.data.csrfToken;
+  }
   if (response.data.success && response.data.user) {
     setAuthSession(response.data.user);
   }
@@ -151,7 +166,13 @@ export async function loginMember(identifier: string, password: string): Promise
 // 3. Connexion Agent (Guichet)
 export async function loginAgent(identifier: string, password: string): Promise<LoginResponse> {
   const payload = formatIdentifierBody(identifier, password);
-  const response = await apiClient.post<LoginResponse>('/auth/agent/login', payload);
+  const response = await apiClient.post<LoginResponse & { csrfToken?: string }>(
+    '/auth/agent/login',
+    payload,
+  );
+  if (response.data.csrfToken) {
+    csrfToken = response.data.csrfToken;
+  }
   if (response.data.success && response.data.user) {
     setAuthSession(response.data.user);
   }
@@ -163,7 +184,7 @@ export async function fetchCurrentUser(): Promise<AuthUser> {
   const response = await apiClient.get<AuthMeResponse>('/auth/me');
   if (response.data.success && response.data.user) {
     if (typeof window !== 'undefined') {
-      setAuthSession(response.data.user, localStorage.getItem(USER_KEY) !== null);
+      setAuthSession(response.data.user, true);
     }
     return response.data.user;
   }

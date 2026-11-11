@@ -131,7 +131,7 @@ function LoginForm() {
   const [rememberMe, setRememberMe] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [showHelpModal, setShowHelpModal] = useState(false);
+  const [isRedirecting, setIsRedirecting] = useState(false);
   const [currentSlide, setCurrentSlide] = useState(0);
   const [isCarouselPaused, setIsCarouselPaused] = useState(false);
 
@@ -202,8 +202,20 @@ function LoginForm() {
     if (!value) {
       return 'Le mot de passe est requis.';
     }
-    if (value.length < 4) {
-      return 'Le mot de passe doit contenir au moins 4 caractères.';
+    if (value.length < 12) {
+      return 'Le mot de passe doit contenir au moins 12 caractères.';
+    }
+    if (!/[A-Z]/.test(value)) {
+      return 'Le mot de passe doit contenir au moins une majuscule.';
+    }
+    if (!/[a-z]/.test(value)) {
+      return 'Le mot de passe doit contenir au moins une minuscule.';
+    }
+    if (!/[0-9]/.test(value)) {
+      return 'Le mot de passe doit contenir au moins un chiffre.';
+    }
+    if (!/[^A-Za-z0-9]/.test(value)) {
+      return 'Le mot de passe doit contenir au moins un caractère spécial.';
     }
     return null;
   };
@@ -251,11 +263,12 @@ function LoginForm() {
     if (!fieldError && (touched || formSubmitted) && value.trim()) {
       return `${base} border-emerald-400 focus:ring-emerald-500 focus:border-emerald-500`;
     }
-    return `${base} border-slate-300 focus:ring-emerald-500 focus:border-emerald-500`;
+    return `${base} border-slate-300 focus:ring-[#0B5EA8] focus:border-[#0B5EA8]`;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isLoading || isRedirecting) return;
     setFormSubmitted(true);
     setFormError(null);
 
@@ -302,12 +315,18 @@ function LoginForm() {
           '';
 
         const welcomeTitle = userName ? `Bienvenue, ${userName} !` : 'Bienvenue !';
-        const welcomeSubtitle = 'Connexion réussie. Accès à votre espace en cours…';
+        const destinationLabel = res.user.role === 'member'
+          ? 'votre espace membre'
+          : res.user.role === 'agent'
+            ? 'votre espace guichet'
+            : 'votre tableau de bord';
+        const welcomeSubtitle = `Connexion réussie. Nous ouvrons ${destinationLabel}…`;
 
         // Affichage du toast avec le nom récupéré directement
         addToast(welcomeSubtitle, 'success', welcomeTitle);
 
         const destination = getPostLoginRedirect(res.user.role);
+        setIsRedirecting(true);
         // Légère pause (1,1s) pour permettre à l'utilisateur de voir le message de bienvenue avec son nom
         setTimeout(() => {
           router.push(destination);
@@ -317,6 +336,7 @@ function LoginForm() {
         handleBackendError(msg);
       }
     } catch (err: unknown) {
+      setIsRedirecting(false);
       const backendMessage = axios.isAxiosError(err)
         ? (Array.isArray(err.response?.data?.message)
           ? err.response.data.message[0]
@@ -426,14 +446,14 @@ function LoginForm() {
         <div className="flex flex-1 items-center justify-center py-7 sm:py-10 xl:py-12">
           <section className="w-full max-w-lg rounded-3xl border border-slate-200/80 bg-white p-5 shadow-[0_18px_48px_-32px_rgba(15,23,42,0.3)] sm:p-8 xl:rounded-none xl:border-0 xl:bg-transparent xl:p-0 xl:shadow-none">
           <div className="mb-8">
-            <p className="mb-2 text-xs font-semibold tracking-[0.14em] text-[#0B5EA8] uppercase xl:hidden">
-              Espace membre
+            <p className="mb-3 text-[11px] font-bold tracking-[0.16em] text-[#0B5EA8] uppercase">
+              Votre espace Mwangaza Wetu
             </p>
-            <h1 className="text-3xl sm:text-4xl font-bold text-slate-900 tracking-tight">
+            <h1 className="text-3xl sm:text-4xl font-bold text-slate-900 tracking-tight leading-tight">
               Connexion
             </h1>
-            <p className="text-base text-slate-500 mt-2">
-              Accédez à votre compte en toute sécurité.
+            <p className="mt-3 text-xs font-medium text-slate-500">
+              Membres, agents et administrateurs : utilisez votre identifiant habituel.
             </p>
           </div>
 
@@ -450,7 +470,7 @@ function LoginForm() {
                 htmlFor="identifier"
                 className="block text-base font-semibold text-slate-700 mb-2"
               >
-                Identifiant
+                Votre identifiant
               </label>
               <div className="relative">
                 <input
@@ -465,7 +485,7 @@ function LoginForm() {
                   onBlur={handleIdentifierBlur}
                   placeholder="E-mail, téléphone ou numéro de compte"
                   aria-invalid={!!(identifierError && (identifierTouched || formSubmitted))}
-                  aria-describedby={identifierError ? 'identifier-error' : undefined}
+                  aria-describedby={identifierError ? 'identifier-help identifier-error' : 'identifier-help'}
                   className={getInputClasses(identifierError, identifierTouched, identifier)}
                 />
                 {/* Validation icon inside input */}
@@ -479,6 +499,9 @@ function LoginForm() {
                   </div>
                 )}
               </div>
+              <p id="identifier-help" className="mt-2 text-xs leading-relaxed text-slate-500">
+                Un seul identifiant suffit, quel que soit votre espace.
+              </p>
               {/* Inline error message below the field */}
               {identifierError && (identifierTouched || formSubmitted) && (
                 <p id="identifier-error" className="mt-1.5 flex items-center gap-1.5 text-xs text-red-600" role="alert">
@@ -550,32 +573,31 @@ function LoginForm() {
                   onChange={(e) => setRememberMe(e.target.checked)}
                   className="h-4 w-4 rounded border-slate-300 accent-slate-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
                 />
-                <span>Se souvenir de moi</span>
+                <span>Rester connecté sur cet appareil</span>
               </label>
 
-              <button
-                type="button"
-                onClick={() => setShowHelpModal(true)}
+              <Link
+                href="/aide-connexion"
                 className="flex min-h-11 items-center gap-1 text-slate-500 hover:text-slate-900 font-semibold transition-colors"
               >
-                <HelpCircle className="w-3.5 h-3.5" />
-                <span>Assistance</span>
-              </button>
+                <HelpCircle className="w-3.5 h-3.5" aria-hidden="true" />
+                <span>Besoin d&apos;aide ?</span>
+              </Link>
             </div>
 
             {/* Bouton Principal de Connexion */}
             <button
               type="submit"
-              disabled={isLoading}
-              className="mt-2 flex min-h-14 w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-4 text-sm font-bold text-white shadow-md transition-all hover:bg-slate-800 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={isLoading || isRedirecting}
+              className="mt-2 flex min-h-14 w-full items-center justify-center gap-2 rounded-xl bg-[#c65313] px-4 py-4 text-sm font-bold text-white shadow-md shadow-orange-900/10 transition-all hover:bg-[#ad450d] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#c65313] active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-70"
             >
-              {isLoading ? (
+              {isLoading || isRedirecting ? (
                 <div className="flex items-center gap-2">
-                  <div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-                  <span>Connexion en cours...</span>
+                  <div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin motion-reduce:animate-none" />
+                  <span>{isRedirecting ? 'Ouverture de votre espace…' : 'Connexion en cours…'}</span>
                 </div>
               ) : (
-                <span>Se connecter</span>
+                <span>Accéder à mon espace</span>
               )}
             </button>
           </form>
@@ -599,57 +621,6 @@ function LoginForm() {
         </div>
       </div>
 
-      {/* Modal d'Aide aux Usagers */}
-      {showHelpModal && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4"
-          onClick={() => setShowHelpModal(false)}
-        >
-          <div
-            className="bg-white rounded-2xl p-6 sm:p-8 max-w-md w-full shadow-2xl border border-slate-100"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h3 className="text-lg font-bold text-slate-900 mb-2">
-              Formats d&apos;identifiants acceptés
-            </h3>
-            <p className="text-xs sm:text-sm text-slate-500 mb-4">
-              Notre système identifie automatiquement votre espace selon vos coordonnées :
-            </p>
-            <ul className="text-xs sm:text-sm text-slate-700 space-y-2 mb-6">
-              <li className="flex items-start gap-2">
-                <span className="font-semibold text-slate-900">• Administrateurs :</span>
-                <span>Votre email ou identifiant admin</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="font-semibold text-slate-900">• Guichetiers :</span>
-                <span>Votre email ou numéro de téléphone</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="font-semibold text-slate-900">• Membres :</span>
-                <span>Votre numéro de compte (ex: <code>MW-PRI-XXXXXX</code>) ou email</span>
-              </li>
-            </ul>
-            <div className="border border-dashed border-slate-300 rounded-xl p-3.5 mb-6 bg-slate-50">
-              <p className="text-xs font-bold text-slate-900 mb-2">
-                Comptes de démonstration (environnement de test)
-              </p>
-              <ul className="text-xs text-slate-600 space-y-1">
-                <li>Superadmin : <code>superadmin@mwangaza.cd</code> / <code>Admin@2026</code></li>
-                <li>Admin : <code>admin@mwangaza.cd</code> / <code>Admin@123</code></li>
-                <li>Guichetier : <code>agent@mwangaza.cd</code> / <code>Agent@123</code></li>
-                <li>Membre : <code>MW-PRI-VXHZZ3</code> / <code>Test@1234</code></li>
-              </ul>
-            </div>
-            <button
-              type="button"
-              onClick={() => setShowHelpModal(false)}
-              className="w-full py-2.5 bg-slate-900 text-white rounded-xl text-xs font-bold hover:bg-slate-800 transition"
-            >
-              Compris, fermer
-            </button>
-          </div>
-        </div>
-      )}
     </main>
   );
 }
