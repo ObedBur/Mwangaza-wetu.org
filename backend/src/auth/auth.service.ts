@@ -10,6 +10,9 @@ import * as bcrypt from 'bcrypt';
 import { Administrateur, Membre, Agent } from '@prisma/client';
 import type { AuthUser } from '../common/types/auth-request';
 
+const DUMMY_PASSWORD_HASH = '$2b$12$It432ShYcsQ0kRyH7jJnk.Hq88W2iZA1/PjnL4JDTYjRJ3vNoU33e';
+const INVALID_LOGIN_MESSAGE = 'Identifiants incorrects';
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -25,100 +28,57 @@ export class AuthService {
       throw new BadRequestException('Identifiant requis (email, numéro de compte ou téléphone)');
     }
 
-    // 1. Tenter Administrateur / Superadmin
-    const admin = await this.prisma.administrateur.findFirst({
-      where: {
-        OR: [{ email: identifier }, { numeroCompte: identifier }],
-      },
-    });
+    const [admin, agent, member] = await Promise.all([
+      this.prisma.administrateur.findFirst({
+        where: { OR: [{ email: identifier }, { numeroCompte: identifier }] },
+      }),
+      this.prisma.agent.findFirst({
+        where: { OR: [{ email: identifier }, { telephone: identifier }] },
+      }),
+      this.prisma.membre.findFirst({
+        where: {
+          OR: [
+            { email: identifier },
+            { numeroCompte: identifier },
+            { telephone: identifier },
+          ],
+        },
+      }),
+    ]);
 
-    if (admin && admin.actif) {
-      const isValid = await bcrypt.compare(password, admin.motDePasse);
-      if (isValid) {
-        const payload = {
-          id: admin.id,
-          email: admin.email,
-          accountNumber: admin.numeroCompte,
-          role: admin.role,
-          authVersion: admin.authVersion,
-          lastName: admin.nom,
-          firstName: admin.prenom,
-          fullName: `${admin.prenom} ${admin.nom}`,
-          profilePhoto: admin.photoProfil,
-        };
-        return {
-          success: true,
-          message: 'Connexion réussie',
-          token: this.jwtService.sign(payload),
-          user: payload,
-        };
-      }
+    const candidate =
+      (admin?.actif && { role: 'admin' as const, passwordHash: admin.motDePasse }) ||
+      (agent?.actif && agent.motDePasse && { role: 'agent' as const, passwordHash: agent.motDePasse }) ||
+      (member?.isActivated && member.motDePasse && { role: 'member' as const, passwordHash: member.motDePasse }) ||
+      null;
+    const passwordValid = await bcrypt.compare(password, candidate?.passwordHash ?? DUMMY_PASSWORD_HASH);
+    if (!candidate || !passwordValid) throw new UnauthorizedException(INVALID_LOGIN_MESSAGE);
+
+    if (candidate.role === 'admin' && admin) {
+      const user = {
+        id: admin.id, email: admin.email, accountNumber: admin.numeroCompte,
+        role: admin.role, authVersion: admin.authVersion, lastName: admin.nom,
+        firstName: admin.prenom, fullName: `${admin.prenom} ${admin.nom}`,
+        profilePhoto: admin.photoProfil,
+      };
+      return { success: true, message: 'Connexion réussie', token: this.jwtService.sign(user), user };
     }
-
-    // 2. Tenter Agent (Guichet)
-    const agent = await this.prisma.agent.findFirst({
-      where: {
-        OR: [{ email: identifier }, { telephone: identifier }],
-      },
-    });
-
-    if (agent && agent.actif && agent.motDePasse) {
-      const isValid = await bcrypt.compare(password, agent.motDePasse);
-      if (isValid) {
-        const payload = {
-          id: agent.id,
-          email: agent.email,
-          accountNumber: null,
-          role: 'agent',
-          fullName: agent.nom,
-          guichet: agent.guichetAssigne,
-          authVersion: agent.authVersion,
-        };
-        return {
-          success: true,
-          message: 'Connexion agent réussie',
-          token: this.jwtService.sign(payload),
-          user: payload,
-        };
-      }
+    if (candidate.role === 'agent' && agent) {
+      const user = {
+        id: agent.id, email: agent.email, accountNumber: null, role: 'agent',
+        fullName: agent.nom, guichet: agent.guichetAssigne, authVersion: agent.authVersion,
+      };
+      return { success: true, message: 'Connexion réussie', token: this.jwtService.sign(user), user };
     }
-
-    // 3. Tenter Membre
-    const member = await this.prisma.membre.findFirst({
-      where: {
-        OR: [
-          { email: identifier },
-          { numeroCompte: identifier },
-          { telephone: identifier },
-        ],
-      },
-    });
-
-    if (member && member.motDePasse && member.isActivated) {
-      const isValid = await bcrypt.compare(password, member.motDePasse);
-      if (isValid) {
-        const payload = {
-          id: member.id,
-          email: member.email,
-          accountNumber: member.numeroCompte,
-          role: 'member',
-        authVersion: member.authVersion,
-        };
-        return {
-          success: true,
-          message: 'Connexion membre réussie',
-          token: this.jwtService.sign(payload),
-          user: {
-            ...payload,
-            fullName: member.nomComplet,
-            section: member.typeCompte,
-            profilePhoto: member.photoProfil,
-          },
-        };
-      }
+    if (candidate.role === 'member' && member) {
+      const user = {
+        id: member.id, email: member.email, accountNumber: member.numeroCompte,
+        role: 'member', authVersion: member.authVersion, fullName: member.nomComplet,
+        section: member.typeCompte, profilePhoto: member.photoProfil,
+      };
+      return { success: true, message: 'Connexion réussie', token: this.jwtService.sign(user), user };
     }
-
-    throw new UnauthorizedException('Identifiants incorrects ou compte inactif');
+    throw new UnauthorizedException(INVALID_LOGIN_MESSAGE);
   }
 
   async loginAdmin(loginDto: LoginDto) {
@@ -135,14 +95,8 @@ export class AuthService {
       throw new BadRequestException('Email ou numéro de compte requis');
     }
 
-    if (!admin || !admin.actif) {
-      throw new UnauthorizedException('Admin non trouvé ou inactif');
-    }
-
-    const isValid = await bcrypt.compare(password, admin.motDePasse);
-    if (!isValid) {
-      throw new UnauthorizedException('Mot de passe incorrect');
-    }
+    const isValid = await bcrypt.compare(password, admin?.motDePasse ?? DUMMY_PASSWORD_HASH);
+    if (!admin || !admin.actif || !isValid) throw new UnauthorizedException(INVALID_LOGIN_MESSAGE);
 
     const payload = {
       id: admin.id,
@@ -178,23 +132,9 @@ export class AuthService {
       throw new BadRequestException('Email ou numéro de compte requis');
     }
 
-    if (!member) {
-      throw new UnauthorizedException('Membre non trouvé');
-    }
-
-    if (!member.motDePasse) {
-      throw new UnauthorizedException('Compte membre non configuré');
-    }
-
-    if (!member.isActivated) {
-      throw new UnauthorizedException(
-        'Compte membre non activé : veuillez finaliser votre activation',
-      );
-    }
-
-    const isValid = await bcrypt.compare(password, member.motDePasse);
-    if (!isValid) {
-      throw new UnauthorizedException('Mot de passe incorrect');
+    const isValid = await bcrypt.compare(password, member?.motDePasse ?? DUMMY_PASSWORD_HASH);
+    if (!member || !member.motDePasse || !member.isActivated || !isValid) {
+      throw new UnauthorizedException(INVALID_LOGIN_MESSAGE);
     }
 
     const payload = {
@@ -317,21 +257,9 @@ export class AuthService {
       where: { OR: [{ email: identifier }, { telephone: identifier }] },
     });
 
-    if (!agent) {
-      throw new UnauthorizedException('Agent non trouvé');
-    }
-
-    if (!agent.actif) {
-      throw new UnauthorizedException('Agent inactif');
-    }
-
-    if (!agent.motDePasse) {
-      throw new UnauthorizedException('Compte agent non configuré');
-    }
-
-    const isValid = await bcrypt.compare(password, agent.motDePasse);
-    if (!isValid) {
-      throw new UnauthorizedException('Mot de passe incorrect');
+    const isValid = await bcrypt.compare(password, agent?.motDePasse ?? DUMMY_PASSWORD_HASH);
+    if (!agent || !agent.actif || !agent.motDePasse || !isValid) {
+      throw new UnauthorizedException(INVALID_LOGIN_MESSAGE);
     }
 
     const payload = {

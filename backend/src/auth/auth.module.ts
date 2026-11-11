@@ -6,6 +6,7 @@ import { AuthController } from './auth.controller';
 import { PrismaModule } from '../prisma/prisma.module';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtStrategy } from './jwt.strategy';
+import { LoginThrottleGuard } from './login-throttle.guard';
 
 @Module({
   imports: [
@@ -16,13 +17,24 @@ import { JwtStrategy } from './jwt.strategy';
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({
-        secret: configService.get<string>('JWT_SECRET'),
+        secret: getJwtSecret(configService),
         signOptions: { expiresIn: '24h' },
       }),
     }),
   ],
-  providers: [AuthService, JwtStrategy],
+  providers: [AuthService, JwtStrategy, LoginThrottleGuard],
   controllers: [AuthController],
   exports: [AuthService, JwtStrategy],
 })
 export class AuthModule {}
+
+function getJwtSecret(configService: ConfigService): string {
+  const secret = configService.getOrThrow<string>('JWT_SECRET');
+  if (
+    secret.trim().length < 32 ||
+    /changeme|example|placeholder|your[-_ ]?secret/i.test(secret)
+  ) {
+    throw new Error('JWT_SECRET must be a non-placeholder value of at least 32 characters.');
+  }
+  return secret;
+}

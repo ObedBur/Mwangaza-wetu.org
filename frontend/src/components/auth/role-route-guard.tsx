@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
-import { clearAuthSession, fetchCurrentUser, getAuthToken, getPostLoginRedirect } from '@/lib/auth';
+import { clearAuthSession, fetchCurrentUser, getPostLoginRedirect } from '@/lib/auth';
 import { MWANGAZA_BRAND } from '@/lib/theme-constants';
 import type { UserRole } from '@/types/auth';
 import { WifiOff, RefreshCw, ArrowLeft, ShieldCheck } from 'lucide-react';
@@ -25,12 +25,6 @@ export function RoleRouteGuard({
 
   const verifySession = useCallback(async () => {
     setStatus('checking');
-    if (!getAuthToken()) {
-      clearAuthSession();
-      router.replace('/login');
-      return;
-    }
-
     try {
       const user = await fetchCurrentUser();
       if (!KNOWN_ROLES.includes(user.role)) {

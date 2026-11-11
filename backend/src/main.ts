@@ -9,6 +9,10 @@ import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
+  // Les routes d'authentification n'acceptent que de petits formulaires JSON.
+  // Ce parseur est monté avant la limite élevée nécessaire aux photos.
+  app.use('/api/auth', json({ limit: '8kb' }));
+
   // Augmenter la limite de taille pour les photos et empreintes (Base64)
   app.use(json({ limit: '50mb' }));
   app.use(urlencoded({ extended: true, limit: '50mb' }));

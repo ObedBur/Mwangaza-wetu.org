@@ -2,22 +2,26 @@ import axios from 'axios';
 import { AuthUser, LoginResponse, AuthMeResponse, UserRole } from '@/types/auth';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
-const TOKEN_KEY = 'mwangaza_auth_token';
 const USER_KEY = 'mwangaza_auth_user';
+const CSRF_COOKIE = 'mwangaza_csrf';
 
 export const apiClient = axios.create({
   baseURL: API_URL,
+  withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-// Intercepteur pour injecter automatiquement le token Bearer
+// Le JWT reste en cookie HttpOnly; seul le jeton CSRF non secret est lu par JS.
 apiClient.interceptors.request.use((config) => {
   if (typeof window !== 'undefined') {
-    const token = localStorage.getItem(TOKEN_KEY) || sessionStorage.getItem(TOKEN_KEY);
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+    const csrf = document.cookie
+      .split('; ')
+      .find((cookie) => cookie.startsWith(`${CSRF_COOKIE}=`))
+      ?.slice(CSRF_COOKIE.length + 1);
+    if (csrf) {
+      config.headers['X-CSRF-Token'] = decodeURIComponent(csrf);
     }
   }
   return config;
@@ -41,21 +45,14 @@ apiClient.interceptors.response.use(
 );
 
 // Helpers de stockage
-export function setAuthSession(token: string, user: AuthUser, rememberMe = true): void {
+export function setAuthSession(user: AuthUser, rememberMe = true): void {
   if (typeof window === 'undefined') return;
   const storage = rememberMe ? localStorage : sessionStorage;
   const otherStorage = rememberMe ? sessionStorage : localStorage;
-  storage.setItem(TOKEN_KEY, token);
   storage.setItem(USER_KEY, JSON.stringify(user));
-  otherStorage.removeItem(TOKEN_KEY);
   otherStorage.removeItem(USER_KEY);
-  // Pour le support SSR si nécessaire, on peut également définir un cookie léger
-  document.cookie = `mwangaza_role=${user.role}; path=/; max-age=86400; SameSite=Lax`;
-}
-
-export function getAuthToken(): string | null {
-  if (typeof window === 'undefined') return null;
-  return localStorage.getItem(TOKEN_KEY) || sessionStorage.getItem(TOKEN_KEY);
+  const maxAge = rememberMe ? '; max-age=86400' : '';
+  document.cookie = `mwangaza_role=${encodeURIComponent(user.role)}; path=/; SameSite=Lax${maxAge}`;
 }
 
 export function getAuthUser(): AuthUser | null {
@@ -71,11 +68,11 @@ export function getAuthUser(): AuthUser | null {
 
 export function clearAuthSession(): void {
   if (typeof window === 'undefined') return;
-  localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(USER_KEY);
-  sessionStorage.removeItem(TOKEN_KEY);
   sessionStorage.removeItem(USER_KEY);
   document.cookie = 'mwangaza_role=; path=/; max-age=0';
+  document.cookie = `${CSRF_COOKIE}=; path=/; max-age=0`;
+  void fetch(`${API_URL}/auth/logout`, { method: 'POST', credentials: 'include' }).catch(() => undefined);
 }
 
 /** Déconnexion : purge la session puis renvoie vers /login (aucun endpoint backend). */
@@ -123,10 +120,10 @@ export async function login(
 ): Promise<LoginResponse> {
   const response = await apiClient.post<LoginResponse>(
     '/auth/login',
-    formatIdentifierBody(identifier, password),
+    { ...formatIdentifierBody(identifier, password), rememberMe },
   );
-  if (response.data.success && response.data.token) {
-    setAuthSession(response.data.token, response.data.user, rememberMe);
+  if (response.data.success && response.data.user) {
+    setAuthSession(response.data.user, rememberMe);
   }
   return response.data;
 }
@@ -135,8 +132,8 @@ export async function login(
 export async function loginAdmin(identifier: string, password: string): Promise<LoginResponse> {
   const payload = formatIdentifierBody(identifier, password);
   const response = await apiClient.post<LoginResponse>('/auth/admin/login', payload);
-  if (response.data.success && response.data.token) {
-    setAuthSession(response.data.token, response.data.user);
+  if (response.data.success && response.data.user) {
+    setAuthSession(response.data.user);
   }
   return response.data;
 }
@@ -145,8 +142,8 @@ export async function loginAdmin(identifier: string, password: string): Promise<
 export async function loginMember(identifier: string, password: string): Promise<LoginResponse> {
   const payload = formatIdentifierBody(identifier, password);
   const response = await apiClient.post<LoginResponse>('/auth/member/login', payload);
-  if (response.data.success && response.data.token) {
-    setAuthSession(response.data.token, response.data.user);
+  if (response.data.success && response.data.user) {
+    setAuthSession(response.data.user);
   }
   return response.data;
 }
@@ -155,8 +152,8 @@ export async function loginMember(identifier: string, password: string): Promise
 export async function loginAgent(identifier: string, password: string): Promise<LoginResponse> {
   const payload = formatIdentifierBody(identifier, password);
   const response = await apiClient.post<LoginResponse>('/auth/agent/login', payload);
-  if (response.data.success && response.data.token) {
-    setAuthSession(response.data.token, response.data.user);
+  if (response.data.success && response.data.user) {
+    setAuthSession(response.data.user);
   }
   return response.data;
 }
@@ -166,7 +163,7 @@ export async function fetchCurrentUser(): Promise<AuthUser> {
   const response = await apiClient.get<AuthMeResponse>('/auth/me');
   if (response.data.success && response.data.user) {
     if (typeof window !== 'undefined') {
-      localStorage.setItem(USER_KEY, JSON.stringify(response.data.user));
+      setAuthSession(response.data.user, localStorage.getItem(USER_KEY) !== null);
     }
     return response.data.user;
   }

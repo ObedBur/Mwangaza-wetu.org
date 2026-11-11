@@ -1,7 +1,7 @@
 'use client';
 
 import { FormEvent, useEffect, useState } from 'react';
-import { apiClient, getAuthToken, getAuthUser, logout, setAuthSession } from '@/lib/auth';
+import { apiClient, getAuthUser, logout, setAuthSession } from '@/lib/auth';
 import { useMemberPortalData } from '@/components/member-portal/member-data';
 import { Panel } from '@/components/member-portal/portal-ui';
 
@@ -28,8 +28,8 @@ export function MemberProfilePage() {
     event.preventDefault(); setBusy(true); setFeedback(''); setFormError('');
     try {
       const response = await apiClient.patch('/membres/me/profil', { telephone, email: email || null, adresse: adresse || null });
-      const token = getAuthToken(); const user = getAuthUser();
-      if (token && user && response.data.email !== undefined) setAuthSession(token, { ...user, email: response.data.email });
+      const user = getAuthUser();
+      if (user && response.data.email !== undefined) setAuthSession({ ...user, email: response.data.email });
       setFeedback('Vos coordonnées ont été mises à jour.'); reload();
     } catch (err: any) {
       setFormError(err?.response?.data?.message || 'La mise à jour a échoué. Vérifiez les informations et réessayez.');

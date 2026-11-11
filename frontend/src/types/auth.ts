@@ -23,7 +23,6 @@ export interface LoginCredentials {
 export interface LoginResponse {
   success: boolean;
   message: string;
-  token: string;
   user: AuthUser;
 }
 

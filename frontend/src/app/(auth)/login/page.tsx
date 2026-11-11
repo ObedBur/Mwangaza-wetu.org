@@ -5,7 +5,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import axios from 'axios';
-import { login, getPostLoginRedirect, getAuthToken, getAuthUser } from '@/lib/auth';
+import { login, getPostLoginRedirect, getAuthUser, fetchCurrentUser, clearAuthSession } from '@/lib/auth';
 import { MWANGAZA_BRAND } from '@/lib/theme-constants';
 import {
   Eye,
@@ -174,10 +174,13 @@ function LoginForm() {
 
   // Session déjà active : on redirige directement vers l'espace du rôle
   useEffect(() => {
-    const user = getAuthUser();
-    if (getAuthToken() && user) {
-      router.replace(getPostLoginRedirect(user.role));
+    let active = true;
+    if (getAuthUser()) {
+      void fetchCurrentUser()
+        .then((user) => { if (active) router.replace(getPostLoginRedirect(user.role)); })
+        .catch(() => { if (active) clearAuthSession(); });
     }
+    return () => { active = false; };
   }, [router]);
 
   // Validate individual fields

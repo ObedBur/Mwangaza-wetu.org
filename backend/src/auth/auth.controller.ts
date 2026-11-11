@@ -1,4 +1,6 @@
-import { Controller, Post, Get, Body, Req } from '@nestjs/common';
+import { Controller, Post, Get, Body, Req, Res, UseGuards } from '@nestjs/common';
+import { randomBytes } from 'node:crypto';
+import type { Request as ExpressRequest, Response } from 'express';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { Public, Private } from './jwt-auth.guard';
@@ -6,30 +8,59 @@ import { ADMIN_ROLES, Roles } from '../common/decorators/roles.decorator';
 import type { AuthenticatedRequest } from '../common/types/auth-request';
 import { ChangeMemberPasswordDto } from './dto/change-member-password.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
+import { LoginThrottleGuard } from './login-throttle.guard';
+import { CSRF_COOKIE_NAME, SESSION_COOKIE_NAME } from './auth-cookies';
 
 @Public()
 @Controller('api/auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    private readonly loginThrottleGuard: LoginThrottleGuard,
+  ) {}
 
   @Post('login')
-  async login(@Body() loginDto: LoginDto) {
-    return this.authService.loginUnified(loginDto);
+  @UseGuards(LoginThrottleGuard)
+  async login(
+    @Body() loginDto: LoginDto,
+    @Req() request: ExpressRequest,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const result = await this.authService.loginUnified(loginDto);
+    this.loginThrottleGuard.resetIdentifier(request);
+    return this.createSession(response, result, loginDto.rememberMe !== false);
   }
 
   @Post('admin/login')
-  async loginAdmin(@Body() loginDto: LoginDto) {
-    return this.authService.loginAdmin(loginDto);
+  @UseGuards(LoginThrottleGuard)
+  async loginAdmin(@Body() loginDto: LoginDto, @Req() request: ExpressRequest, @Res({ passthrough: true }) response: Response) {
+    const result = await this.authService.loginAdmin(loginDto);
+    this.loginThrottleGuard.resetIdentifier(request);
+    return this.createSession(response, result, loginDto.rememberMe !== false);
   }
 
   @Post('member/login')
-  async loginMember(@Body() loginDto: LoginDto) {
-    return this.authService.loginMember(loginDto);
+  @UseGuards(LoginThrottleGuard)
+  async loginMember(@Body() loginDto: LoginDto, @Req() request: ExpressRequest, @Res({ passthrough: true }) response: Response) {
+    const result = await this.authService.loginMember(loginDto);
+    this.loginThrottleGuard.resetIdentifier(request);
+    return this.createSession(response, result, loginDto.rememberMe !== false);
   }
 
   @Post('agent/login')
-  async loginAgent(@Body() loginDto: LoginDto) {
-    return this.authService.loginAgent(loginDto);
+  @UseGuards(LoginThrottleGuard)
+  async loginAgent(@Body() loginDto: LoginDto, @Req() request: ExpressRequest, @Res({ passthrough: true }) response: Response) {
+    const result = await this.authService.loginAgent(loginDto);
+    this.loginThrottleGuard.resetIdentifier(request);
+    return this.createSession(response, result, loginDto.rememberMe !== false);
+  }
+
+  @Post('logout')
+  logout(@Res({ passthrough: true }) response: Response) {
+    const secure = process.env.NODE_ENV === 'production';
+    response.clearCookie(SESSION_COOKIE_NAME, { path: '/', httpOnly: true, secure, sameSite: 'lax' });
+    response.clearCookie(CSRF_COOKIE_NAME, { path: '/', secure, sameSite: 'lax' });
+    return { success: true };
   }
 
   @Private()
@@ -68,5 +99,30 @@ export class AuthController {
       dto.currentPassword,
       dto.newPassword,
     );
+  }
+
+  private createSession(
+    response: Response,
+    result: { success: boolean; message: string; token: string; user: object },
+    rememberMe: boolean,
+  ) {
+    const secure = process.env.NODE_ENV === 'production';
+    const persistentOptions = rememberMe ? { maxAge: 24 * 60 * 60 * 1000 } : {};
+    response.cookie(SESSION_COOKIE_NAME, result.token, {
+      httpOnly: true,
+      secure,
+      sameSite: 'lax',
+      path: '/',
+      ...persistentOptions,
+    });
+    response.cookie(CSRF_COOKIE_NAME, randomBytes(32).toString('hex'), {
+      httpOnly: false,
+      secure,
+      sameSite: 'lax',
+      path: '/',
+      ...persistentOptions,
+    });
+    const { token: _token, ...publicResult } = result;
+    return publicResult;
   }
 }
