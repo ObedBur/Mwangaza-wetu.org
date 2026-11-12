@@ -270,7 +270,7 @@ model LoginAttempt {
   firstAttempt DateTime @default(now()) @map("first_attempt")
   updatedAt  DateTime @updatedAt @map("updated_at")
 
-  @@index([ip, identifier])
+  @@unique([ip, identifier], map: "login_attempts_ip_identifier_key")
   @@map("login_attempts")
 }
 

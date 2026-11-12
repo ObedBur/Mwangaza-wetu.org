@@ -66,35 +66,33 @@ export class LoginThrottleGuard implements CanActivate {
   ): Promise<number | undefined> {
     const now = new Date();
     const windowStart = new Date(now.getTime() - WINDOW_MS);
+    const bucketIdentifier = identifier ?? '';
 
-    // Cherche une tentative existante dans la fenêtre
-    let attempt = await this.prisma.loginAttempt.findFirst({
-      where: {
-        ip,
-        ...(identifier ? { identifier } : {}),
-        firstAttempt: { gte: windowStart },
-      },
-      orderBy: { updatedAt: 'desc' },
-    });
+    // L'upsert PostgreSQL est atomique : des requêtes simultanées ne peuvent
+    // ni créer des compteurs concurrents ni perdre des incréments.
+    const [attempt] = await this.prisma.$queryRaw<
+      Array<{ count: number; first_attempt: Date }>
+    >`
+      INSERT INTO "login_attempts" ("ip", "identifier", "count", "first_attempt", "updated_at")
+      VALUES (${ip}, ${bucketIdentifier}, 1, ${now}, ${now})
+      ON CONFLICT ("ip", "identifier")
+      DO UPDATE SET
+        "count" = CASE
+          WHEN "login_attempts"."first_attempt" < ${windowStart} THEN 1
+          ELSE "login_attempts"."count" + 1
+        END,
+        "first_attempt" = CASE
+          WHEN "login_attempts"."first_attempt" < ${windowStart} THEN ${now}
+          ELSE "login_attempts"."first_attempt"
+        END,
+        "updated_at" = ${now}
+      RETURNING "count", "first_attempt"
+    `;
 
-    if (!attempt) {
-      // Première tentative dans la fenêtre
-      await this.prisma.loginAttempt.create({
-        data: { ip, identifier: identifier ?? '', count: 1 },
-      });
-      return undefined;
-    }
-
-    if (attempt.count >= limit) {
-      const retryAfterMs = attempt.firstAttempt.getTime() + WINDOW_MS - now.getTime();
+    if (attempt.count > limit) {
+      const retryAfterMs = attempt.first_attempt.getTime() + WINDOW_MS - now.getTime();
       return Math.max(1, Math.ceil(retryAfterMs / 1000));
     }
-
-    // Incrémente le compteur
-    await this.prisma.loginAttempt.update({
-      where: { id: attempt.id },
-      data: { count: attempt.count + 1, updatedAt: now },
-    });
 
     return undefined;
   }
