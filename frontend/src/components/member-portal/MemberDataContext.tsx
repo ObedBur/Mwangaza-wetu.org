@@ -1,7 +1,7 @@
 'use client';
 
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
-import { apiClient, getAuthUser } from '@/lib/auth';
+import { apiClient, fetchCurrentUser } from '@/lib/auth';
 
 export interface MemberPortalTransaction {
   id: string;
@@ -113,23 +113,21 @@ export function MemberDataProvider({ children }: { children: React.ReactNode }) 
 
   useEffect(() => {
     let active = true;
-    const user = getAuthUser();
-    if (!user || user.role !== 'member' || (!user.accountNumber && !user.id)) {
-      setError('Session membre introuvable. Reconnectez-vous pour charger vos données.');
-      setState('error');
-      return;
-    }
-
     setState('loading');
     setError('');
-    const identifier = encodeURIComponent(user.accountNumber || String(user.id));
-    Promise.all([
-      apiClient.get<MemberPortalDashboard>(`/membres/dashboard/${identifier}`),
-      apiClient.get<TransactionPage>('/membres/me/transactions', {
-        params: { page: 1, pageSize: 100 },
-      }),
-      apiClient.get<MemberDat[]>('/dat/moi'),
-    ]).then(([dashboardResponse, transactionsResponse, datResponse]) => {
+    void fetchCurrentUser().then((user) => {
+      if (user.role !== 'member' || (!user.accountNumber && !user.id)) {
+        throw new Error('Session membre introuvable. Reconnectez-vous pour charger vos données.');
+      }
+      const identifier = encodeURIComponent(user.accountNumber || String(user.id));
+      return Promise.all([
+        apiClient.get<MemberPortalDashboard>(`/membres/dashboard/${identifier}`),
+        apiClient.get<TransactionPage>('/membres/me/transactions', {
+          params: { page: 1, pageSize: 100 },
+        }),
+        apiClient.get<MemberDat[]>('/dat/moi'),
+      ]);
+    }).then(([dashboardResponse, transactionsResponse, datResponse]) => {
       if (!active) return;
       setDashboard(dashboardResponse.data);
       setTransactions(transactionsResponse.data.data);

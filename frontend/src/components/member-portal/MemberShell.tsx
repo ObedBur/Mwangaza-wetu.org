@@ -20,17 +20,14 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import { Avatar } from "@/components/member-portal/PortalUI";
+import { useMemberPortalData } from "@/components/member-portal/MemberDataContext";
 import {
   Sheet,
   SheetContent,
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
-import {
-  member,
-  memberNavigation,
-  navigationGroups,
-} from "@/lib/member-portal-config";
+import { memberNavigation, navigationGroups } from "@/lib/member-portal-config";
 import { apiClient, logout, getAuthUser } from "@/lib/auth";
 
 interface SearchContextValue {
@@ -102,14 +99,15 @@ function MemberSidebar({
   const [collapsed, setCollapsed] = useState(false);
   const [feedback, setFeedback] = useState("");
   const authUser = getAuthUser();
-  const displayName = authUser?.fullName || member.name;
+  const { dashboard } = useMemberPortalData();
+  const displayName = dashboard?.profile.nomComplet || authUser?.fullName || "Membre";
   const initials = displayName
     .split(" ")
     .map((part) => part[0])
     .slice(0, 2)
     .join("")
-    .toUpperCase() || member.initials;
-  const displayNumber = authUser?.accountNumber || member.number;
+    .toUpperCase() || "M";
+  const displayNumber = dashboard?.profile.numeroCompte || authUser?.accountNumber || "";
 
   const handleLogout = () => {
     if (authUser) {
@@ -212,8 +210,9 @@ function MemberPageToolbar({ activePath }: { activePath: string }) {
   const activeItem = memberNavigation.find((item) => item.href === activePath);
   const activeTitle = activeItem?.label ?? "Accueil";
   const authUser = getAuthUser();
-  const displayName = authUser?.fullName || member.name;
-  const firstName = authUser?.firstName || displayName.split(" ")[0];
+  const { dashboard } = useMemberPortalData();
+  const displayName = dashboard?.profile.nomComplet || authUser?.fullName || "Membre";
+  const firstName = authUser?.firstName || displayName.split(" ")[0] || "Membre";
 
   return (
     <div className="page-toolbar">
@@ -262,17 +261,18 @@ function MemberTopbar({ activePath }: { activePath: string }) {
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [unreadCount, setUnreadCount] = useState(0);
   const { query, setQuery } = useMemberSearch();
+  const { dashboard } = useMemberPortalData();
   const activeItem = memberNavigation.find((item) => item.href === activePath);
   const activeTitle = activeItem?.label ?? "Accueil";
   const authUser = getAuthUser();
-  const displayName = authUser?.fullName || member.name;
-  const displayNumber = authUser?.accountNumber || member.number;
+  const displayName = dashboard?.profile.nomComplet || authUser?.fullName || "Membre";
+  const displayNumber = dashboard?.profile.numeroCompte || authUser?.accountNumber || "";
   const initials = displayName
     .split(" ")
     .map((part: string) => part[0])
     .slice(0, 2)
     .join("")
-    .toUpperCase() || member.initials;
+    .toUpperCase() || "M";
 
   useEffect(() => {
     setIsDark(document.documentElement.classList.contains("dark"));
