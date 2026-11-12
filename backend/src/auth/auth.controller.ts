@@ -66,7 +66,7 @@ export class AuthController {
       response.cookie(CSRF_COOKIE_NAME, newToken, {
         httpOnly: true,
         secure,
-        sameSite: 'lax',
+        sameSite: secure ? 'none' : 'lax',
         path: '/',
       });
       return { csrfToken: newToken };
@@ -77,8 +77,9 @@ export class AuthController {
   @Post('logout')
   logout(@Res({ passthrough: true }) response: Response) {
     const secure = process.env.NODE_ENV === 'production';
-    response.clearCookie(SESSION_COOKIE_NAME, { path: '/', httpOnly: true, secure, sameSite: 'lax' });
-    response.clearCookie(CSRF_COOKIE_NAME, { path: '/', secure, sameSite: 'lax' });
+    const sameSite = secure ? 'none' : 'lax';
+    response.clearCookie(SESSION_COOKIE_NAME, { path: '/', httpOnly: true, secure, sameSite });
+    response.clearCookie(CSRF_COOKIE_NAME, { path: '/', secure, sameSite });
     return { success: true };
   }
 
@@ -126,11 +127,12 @@ export class AuthController {
     rememberMe: boolean,
   ) {
     const secure = process.env.NODE_ENV === 'production';
+    const sameSite = secure ? 'none' : 'lax';
     const persistentOptions = rememberMe ? { maxAge: 24 * 60 * 60 * 1000 } : {};
     response.cookie(SESSION_COOKIE_NAME, result.token, {
       httpOnly: true,
       secure,
-      sameSite: 'lax',
+      sameSite,
       path: '/',
       ...persistentOptions,
     });
@@ -138,7 +140,7 @@ export class AuthController {
     response.cookie(CSRF_COOKIE_NAME, csrfToken, {
       httpOnly: true, // ← JS ne peut plus le lire : protection contre le vol par XSS
       secure,
-      sameSite: 'lax',
+      sameSite,
       path: '/',
       ...persistentOptions,
     });
