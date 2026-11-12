@@ -59,11 +59,11 @@ async function bootstrap() {
   );
 
   const port = process.env.PORT ?? 4000;
-  await app.listen(port);
+  await app.listen(port, "0.0.0.0");
 
   const files = fs.readdirSync(uploadsPath);
   console.log(
-    `\n🚀 Backend Mwangaza Wetu démarré sur : http://localhost:${port}`,
+    `\n🚀 Backend Mwangaza Wetu démarré sur le port ${port} (0.0.0.0)`,
   );
   console.log(`📂 Dossier uploads : ${uploadsPath} (${files.length} fichiers)`);
   if (files.length > 0)
