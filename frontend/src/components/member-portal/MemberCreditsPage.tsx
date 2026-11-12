@@ -1,7 +1,7 @@
 'use client';
 
-import { useMemberPortalData } from '@/components/member-portal/member-data';
-import { AccountAmount, DataRegion, Panel, StatusBadge } from '@/components/member-portal/portal-ui';
+import { useMemberPortalData } from '@/components/member-portal/MemberDataContext';
+import { AccountAmount, DataRegion, Panel, StatusBadge } from '@/components/member-portal/PortalUI';
 import { formatCurrency, formatSignedCurrency } from '@/lib/format-currency';
 
 function dateLabel(value: string) {

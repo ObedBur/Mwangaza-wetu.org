@@ -1,8 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { useMemberPortalData } from '@/components/member-portal/member-data';
-import { AccountAmount, DataRegion, Panel } from '@/components/member-portal/portal-ui';
+import { useMemberPortalData } from '@/components/member-portal/MemberDataContext';
+import { AccountAmount, DataRegion, Panel } from '@/components/member-portal/PortalUI';
 import { formatCurrency } from '@/lib/format-currency';
 import { IconArrowDown, IconArrowUp, IconCreditCard, IconPigMoney, IconWallet } from '@/lib/tabler-icons';
 

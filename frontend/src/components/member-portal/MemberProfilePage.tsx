@@ -2,8 +2,8 @@
 
 import { FormEvent, useEffect, useState } from 'react';
 import { apiClient, getAuthUser, logout, setAuthSession } from '@/lib/auth';
-import { useMemberPortalData } from '@/components/member-portal/member-data';
-import { Panel } from '@/components/member-portal/portal-ui';
+import { useMemberPortalData } from '@/components/member-portal/MemberDataContext';
+import { Panel } from '@/components/member-portal/PortalUI';
 
 export function MemberProfilePage() {
   const { dashboard, state, error, reload } = useMemberPortalData();

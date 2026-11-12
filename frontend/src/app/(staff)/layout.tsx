@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { CooperativePageLayout } from '@/components/cooperative/CooperativePageLayout';
-import { RoleRouteGuard } from '@/components/auth/role-route-guard';
+import { RoleRouteGuard } from '@/components/auth/RoleRouteGuard';
 
 const STAFF_ROLES = ['admin', 'superadmin', 'agent'] as const;
 const STAFF_ROLE_REDIRECTS = { member: '/accueil' } as const;

@@ -2,6 +2,7 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import {
   IconBell,
@@ -33,7 +34,7 @@ import "@/app/home.css";
 import "./cooperative-pages.css";
 
 const sidebarCopy = {
-  adminSpace: "ESPACE ADMINISTRATEUR",
+  adminSpace: "Admin",
   adminTools: "GESTION DE LA COOPÉRATIVE",
   cooperative: "Coopérative d'épargne et de crédit",
   role: "Direction Générale",
@@ -48,7 +49,7 @@ export function CooperativePageLayout({
   const pathname = usePathname();
   const authUser = getAuthUser();
   const roleCopy = authUser?.role === "agent"
-    ? { ...sidebarCopy, adminSpace: "ESPACE AGENT", adminTools: "OUTILS DE L’AGENT" }
+    ? { ...sidebarCopy, adminSpace: "Agent", adminTools: "OUTILS DE L’AGENT" }
     : sidebarCopy;
   const [dark, setDark] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -214,6 +215,9 @@ export function CooperativePageLayout({
         <main className={`mw-main${isSidebarCollapsed ? " is-sidebar-collapsed" : ""}`}>
           <header className="mw-topbar">
             <div className="mw-top-left">
+              <Link className="mw-mobile-brand" href="/dashboard" aria-label="Mwangaza Wetu, accueil">
+                <Image src="/logo.png" alt="" width={32} height={32} />
+              </Link>
               <button
                 type="button"
                 className="mw-icon-button mw-mobile-menu"
@@ -267,7 +271,7 @@ export function CooperativePageLayout({
             <div className="mw-top-right">
               <button
                 type="button"
-                className="mw-icon-button"
+                className="mw-icon-button mw-theme-toggle"
                 aria-label={t.notifications}
                 title={t.notifications}
                 aria-expanded={notificationsOpen}
@@ -278,9 +282,6 @@ export function CooperativePageLayout({
                   ? (depositNotice.count + maturityNotices.length) > 0 && <span className="mw-notice-count" aria-label={`${depositNotice.count + maturityNotices.length} notifications`}>{depositNotice.count + maturityNotices.length > 99 ? "99+" : depositNotice.count + maturityNotices.length}</span>
                   : <span className="mw-notice-dot" />}
               </button>
-              <span className="mw-language" aria-label={t.selectedLanguage} title="Langue actuellement utilisée : français">
-                FR
-              </span>
               <button
                 type="button"
                 className="mw-icon-button"
@@ -315,6 +316,13 @@ export function CooperativePageLayout({
                       <strong>{profileName}</strong>
                       <span>{authUser?.email || authUser?.accountNumber || profileRole}</span>
                     </div>
+                  <div className="mw-profile-preferences">
+                    <span>Langue <strong>Français</strong></span>
+                    <button type="button" onClick={() => setDark((value) => !value)}>
+                      {dark ? <IconSun size={15} aria-hidden="true" /> : <IconMoon size={15} aria-hidden="true" />}
+                      {dark ? "Mode clair" : "Mode sombre"}
+                    </button>
+                  </div>
                     <Link href="/compte-agent" role="menuitem" onClick={() => setProfileOpen(false)}>
                       Gérer mon profil
                     </Link>

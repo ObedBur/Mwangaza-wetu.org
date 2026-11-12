@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { apiClient } from '@/lib/auth';
-import { Panel } from '@/components/member-portal/portal-ui';
+import { Panel } from '@/components/member-portal/PortalUI';
 
 type Ticket = { id: number; reference: string; sujet: string; categorie: string; statut: string; updatedAt: string; membre: { nomComplet: string; numeroCompte: string }; messages: Array<{ id: number; auteurRole: string; message: string; createdAt: string }> };
 type Page = { data: Ticket[] };

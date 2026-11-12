@@ -1,4 +1,4 @@
-import { MemberDashboard } from "@/components/member-portal/member-dashboard";
+import { MemberDashboard } from "@/components/member-portal/MemberDashboard";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = { title: "Accueil | Mwangaza Wetu" };

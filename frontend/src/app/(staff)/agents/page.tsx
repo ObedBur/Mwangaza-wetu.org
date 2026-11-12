@@ -18,7 +18,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { apiClient, getAuthUser } from '@/lib/auth';
-import { RoleRouteGuard } from '@/components/auth/role-route-guard';
+import { RoleRouteGuard } from '@/components/auth/RoleRouteGuard';
 
 type Agent = {
   id: number;

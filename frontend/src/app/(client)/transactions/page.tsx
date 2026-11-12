@@ -1,4 +1,4 @@
-import { MemberTransactionsPage } from "@/components/member-portal/member-transactions-page";
+import { MemberTransactionsPage } from "@/components/member-portal/MemberTransactionsPage";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {

@@ -4,8 +4,8 @@ import Link from 'next/link';
 import { FormEvent, useCallback, useEffect, useState } from 'react';
 import { apiClient } from '@/lib/auth';
 import { IconHelpCircle } from '@/lib/tabler-icons';
-import { useMemberPortalData } from '@/components/member-portal/member-data';
-import { Panel } from '@/components/member-portal/portal-ui';
+import { useMemberPortalData } from '@/components/member-portal/MemberDataContext';
+import { Panel } from '@/components/member-portal/PortalUI';
 
 type TicketMessage = { id: number; auteurRole: string; message: string; createdAt: string };
 type Ticket = { id: number; reference: string; sujet: string; categorie: string; statut: string; updatedAt: string; messages: TicketMessage[] };

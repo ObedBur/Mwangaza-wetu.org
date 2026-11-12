@@ -2,8 +2,8 @@
 
 import { IconDownload, IconFileText } from '@/lib/tabler-icons';
 import { useMemo, useState } from 'react';
-import { useMemberPortalData } from '@/components/member-portal/member-data';
-import { Panel } from '@/components/member-portal/portal-ui';
+import { useMemberPortalData } from '@/components/member-portal/MemberDataContext';
+import { Panel } from '@/components/member-portal/PortalUI';
 import { exportTransactionsCsv } from '@/lib/export-transactions';
 
 export function MemberDocumentsPage() {

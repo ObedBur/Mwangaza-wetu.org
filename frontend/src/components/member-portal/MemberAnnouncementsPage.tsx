@@ -3,7 +3,7 @@
 import { IconCalendar, IconCheck, IconSpeakerphone } from '@/lib/tabler-icons';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { apiClient } from '@/lib/auth';
-import { Panel } from '@/components/member-portal/portal-ui';
+import { Panel } from '@/components/member-portal/PortalUI';
 
 interface Notice {
   id: number;

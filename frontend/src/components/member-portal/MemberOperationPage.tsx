@@ -2,8 +2,8 @@
 
 import Link from 'next/link';
 import { IconArrowDown, IconArrowUp, IconBuildingBank } from '@/lib/tabler-icons';
-import { useMemberPortalData } from '@/components/member-portal/member-data';
-import { AccountAmount, Panel } from '@/components/member-portal/portal-ui';
+import { useMemberPortalData } from '@/components/member-portal/MemberDataContext';
+import { AccountAmount, Panel } from '@/components/member-portal/PortalUI';
 
 type OperationKind = 'depot' | 'retrait';
 

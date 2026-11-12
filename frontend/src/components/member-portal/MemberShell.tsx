@@ -19,7 +19,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-import { Avatar } from "@/components/member-portal/portal-ui";
+import { Avatar } from "@/components/member-portal/PortalUI";
 import {
   Sheet,
   SheetContent,

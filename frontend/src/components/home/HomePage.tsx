@@ -1,6 +1,6 @@
 'use client';
 
-import './vitrine.css';
+import './home.css';
 import Link from 'next/link';
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import {
@@ -217,7 +217,7 @@ const heroSlides: HeroSlide[] = [
   },
 ];
 
-export default function VitrinePage() {
+export default function HomePage() {
   const [lang, setLang] = useState<Lang>('FR');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [activeSegment, setActiveSegment] = useState<Segment>('particuliers');

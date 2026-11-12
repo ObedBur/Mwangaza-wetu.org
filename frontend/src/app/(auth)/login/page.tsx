@@ -201,21 +201,6 @@ function LoginForm() {
     if (!value) {
       return 'Le mot de passe est requis.';
     }
-    if (value.length < 12) {
-      return 'Le mot de passe doit contenir au moins 12 caractères.';
-    }
-    if (!/[A-Z]/.test(value)) {
-      return 'Le mot de passe doit contenir au moins une majuscule.';
-    }
-    if (!/[a-z]/.test(value)) {
-      return 'Le mot de passe doit contenir au moins une minuscule.';
-    }
-    if (!/[0-9]/.test(value)) {
-      return 'Le mot de passe doit contenir au moins un chiffre.';
-    }
-    if (!/[^A-Za-z0-9]/.test(value)) {
-      return 'Le mot de passe doit contenir au moins un caractère spécial.';
-    }
     return null;
   };
 
@@ -254,15 +239,15 @@ function LoginForm() {
     value: string,
   ): string => {
     const base =
-      'w-full min-w-0 rounded-none border-x-0 border-t-0 border-b-2 bg-transparent px-1 py-4 text-[15px] text-slate-900 placeholder:text-slate-400 transition-[border-color,box-shadow] duration-200 focus:outline-none focus:ring-0 sm:text-base';
+      'w-full min-w-0 min-h-14 rounded-xl border bg-white px-4 py-3.5 text-base text-slate-900 placeholder:text-slate-400 shadow-md shadow-slate-900/5 transition-[border-color,box-shadow,background-color] duration-200 focus:outline-none focus:ring-4 sm:text-base';
 
     if (fieldError && (touched || formSubmitted)) {
-      return `${base} border-b-red-500 hover:border-b-red-600 hover:shadow-[0_3px_4px_-3px_rgba(239,68,68,0.55)] focus:border-b-red-600 focus:shadow-[0_3px_4px_-3px_rgba(239,68,68,0.7)]`;
+      return `${base} border-red-300 bg-red-50/40 hover:border-red-400 focus:border-red-500 focus:ring-red-100 focus:shadow-[0_8px_24px_rgba(239,68,68,0.14)]`;
     }
     if (!fieldError && (touched || formSubmitted) && value.trim()) {
-      return `${base} border-b-emerald-500 hover:border-b-emerald-600 hover:shadow-[0_3px_4px_-3px_rgba(16,185,129,0.55)] focus:border-b-emerald-600 focus:shadow-[0_3px_4px_-3px_rgba(16,185,129,0.7)]`;
+      return `${base} border-emerald-300 hover:border-emerald-400 focus:border-emerald-500 focus:ring-emerald-100 focus:shadow-[0_8px_24px_rgba(16,185,129,0.12)]`;
     }
-    return `${base} border-b-slate-300 hover:border-b-slate-400 hover:shadow-[0_3px_4px_-3px_rgba(11,94,168,0.45)] focus:border-b-[#0B5EA8] focus:shadow-[0_3px_4px_-3px_rgba(11,94,168,0.6)]`;
+    return `${base} border-slate-300 hover:border-slate-400 focus:border-[#0B5EA8] focus:ring-blue-100 focus:shadow-[0_8px_24px_rgba(11,94,168,0.14)]`;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -386,8 +371,8 @@ function LoginForm() {
           ))}
           <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/45 to-slate-950/15" />
           <header className="relative z-10 flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white p-1 shadow-sm ring-1 ring-white/30">
-              <Image src="/images/logo.png" alt="" width={30} height={30} className="object-contain" priority />
+            <div className="flex h-11 w-11 items-center justify-center rounded-full bg-white p-0.5 shadow-sm">
+              <Image src="/images/logo.png" alt="" width={40} height={40} className="object-contain" style={{ width: 'auto', height: 'auto' }} priority />
             </div>
             <span className="text-sm font-bold tracking-wide text-white uppercase">{MWANGAZA_BRAND.name}</span>
           </header>
@@ -422,13 +407,14 @@ function LoginForm() {
         </aside>
         <div className="flex min-h-[calc(100svh-2rem)] flex-1 flex-col xl:min-h-svh xl:w-1/2 xl:px-12 2xl:px-20">
         <header className="flex items-center gap-3 py-1 xl:hidden">
-          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white p-1 shadow-sm ring-1 ring-slate-200/80">
+          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white p-0.5 shadow-sm">
             <Image
               src="/images/logo.png"
               alt="Logo Mwangaza Wetu"
-              width={32}
-              height={32}
+              width={44}
+              height={44}
               className="object-contain"
+              style={{ width: 'auto', height: 'auto' }}
               priority
             />
           </div>
@@ -438,21 +424,15 @@ function LoginForm() {
           </div>
         </header>
 
-        <div className="flex flex-1 items-center justify-center py-7 sm:py-10 xl:py-12">
-          <section className="w-full max-w-lg p-0">
-          <div className="mb-8">
-            <p className="mb-3 text-[11px] font-bold tracking-[0.16em] text-[#0B5EA8] uppercase">
-              Votre espace Mwangaza Wetu
-            </p>
+        <div className="flex flex-1 items-center justify-center py-4 sm:py-8 xl:py-12">
+          <section className="w-full max-w-lg p-0 md:rounded-2xl md:border md:border-slate-200/70 md:bg-slate-50/70 md:p-8 md:shadow-sm xl:border-white/70 xl:bg-white/90 xl:shadow-lg xl:shadow-slate-900/5">
+          <div className="mb-6 xl:mb-8">
             <h1 className="text-3xl sm:text-4xl font-bold text-slate-900 tracking-tight leading-tight">
               Connexion
             </h1>
-            <p className="mt-3 text-xs font-medium text-slate-500">
-              Membres, agents et administrateurs : utilisez votre identifiant habituel.
-            </p>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-6" autoComplete="on" noValidate>
+          <form onSubmit={handleSubmit} className="space-y-5 xl:space-y-6" autoComplete="on" noValidate>
             {formError && (
               <p className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm leading-relaxed text-red-800" role="alert">
                 <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
@@ -560,7 +540,7 @@ function LoginForm() {
             </div>
 
             {/* Ligne Se souvenir de moi / Aide */}
-            <div className="flex flex-col items-start justify-between gap-1 pt-1 text-xs sm:flex-row sm:items-center sm:gap-4 sm:text-sm">
+            <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 pt-0.5 text-xs sm:flex-row sm:gap-4 sm:text-sm">
               <label className="flex min-h-11 items-center gap-2 cursor-pointer select-none text-slate-600 font-medium">
                 <input
                   type="checkbox"
@@ -573,7 +553,7 @@ function LoginForm() {
 
               <Link
                 href="/aide-connexion"
-                className="flex min-h-11 items-center gap-1 whitespace-nowrap text-slate-500 hover:text-slate-900 font-semibold transition-colors"
+                className="flex min-h-11 items-center gap-1 whitespace-nowrap text-[#0B5EA8] font-semibold underline underline-offset-4 transition-colors hover:text-slate-900 focus-visible:rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0B5EA8]"
               >
                 <HelpCircle className="w-3.5 h-3.5" aria-hidden="true" />
                 <span>Besoin d&apos;aide ?</span>
@@ -599,12 +579,12 @@ function LoginForm() {
 
           {/* Lien d'activation membre pour nouveau compte */}
           <div className="mt-8 text-center text-sm text-slate-500">
-            <span>Nouveau membre ? </span>
+            <span>Votre compte n&apos;est pas encore activé ? </span>
             <Link
               href="/activate"
               className="font-bold text-slate-900 hover:underline inline-block ml-1"
             >
-              Activer mon compte
+              Activez-le
             </Link>
           </div>
           </section>

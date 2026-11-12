@@ -2,9 +2,9 @@
 
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
-import { useMemberSearch } from '@/components/member-portal/member-shell';
-import { useMemberPortalData } from '@/components/member-portal/member-data';
-import { DataRegion, ExportMenu, Panel, StatusBadge } from '@/components/member-portal/portal-ui';
+import { useMemberSearch } from '@/components/member-portal/MemberShell';
+import { useMemberPortalData } from '@/components/member-portal/MemberDataContext';
+import { DataRegion, ExportMenu, Panel, StatusBadge } from '@/components/member-portal/PortalUI';
 import { exportTransactionsCsv } from '@/lib/export-transactions';
 import { formatSignedCurrency } from '@/lib/format-currency';
 import { IconDatabaseOff, IconFilter, IconSearch } from '@/lib/tabler-icons';

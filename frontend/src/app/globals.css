@@ -18,6 +18,15 @@
   font-family: Inter, "Segoe UI", Roboto, Arial, sans-serif;
 }
 
+.login-page input:-webkit-autofill,
+.login-page input:-webkit-autofill:hover,
+.login-page input:-webkit-autofill:focus {
+  -webkit-text-fill-color: #0f172a;
+  -webkit-box-shadow: 0 0 0 1000px #fff inset;
+  box-shadow: 0 0 0 1000px #fff inset;
+  caret-color: #0f172a;
+}
+
 @keyframes slideProgress {
   0% {
     width: 0%;

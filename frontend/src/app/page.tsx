@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation';
 import { cookies } from 'next/headers';
 import { getPostLoginRedirect } from '@/lib/auth';
 import type { UserRole } from '@/types/auth';
-import VitrinePage from './VitrinePage';
+import HomePage from '@/components/home/HomePage';
 
 const KNOWN_ROLES: UserRole[] = ['superadmin', 'admin', 'member', 'agent'];
 
@@ -15,6 +15,6 @@ export default async function RootPage() {
     redirect(getPostLoginRedirect(role));
   }
 
-  // Public visitors see the landing / vitrine page
-  return <VitrinePage />;
+  // Public visitors see the home / landing page
+  return <HomePage />;
 }

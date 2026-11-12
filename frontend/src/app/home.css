@@ -108,8 +108,8 @@
 }
 .mw-sidebar-header {
   display: flex;
-  height: 68px;
-  min-height: 68px;
+  height: 64px;
+  min-height: 64px;
   align-items: center;
   justify-content: space-between;
   margin: 0 -14px 12px;
@@ -304,14 +304,12 @@
 .mw-brand-caption {
   display: inline-block;
   align-self: flex-start;
-  padding: 2px 6px;
-  border-radius: 4px;
-  background: var(--mw-primary-soft);
-  color: var(--mw-primary);
-  font-size: 8.5px;
-  font-weight: 700;
-  letter-spacing: 0.7px;
-  text-transform: uppercase;
+  padding: 0;
+  color: var(--mw-muted);
+  font-size: 10px;
+  font-weight: 550;
+  letter-spacing: 0;
+  text-transform: none;
   line-height: 1.2;
   white-space: nowrap;
 }
@@ -536,18 +534,19 @@ button.mw-nav-group-toggle,
   height: 36px;
   flex: none;
   place-items: center;
-  border: 1px solid var(--mw-line);
-  border-radius: 9px;
-  background: var(--mw-paper);
-  color: var(--mw-ink);
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--mw-muted);
   cursor: pointer;
   transition:
     background-color 140ms ease,
     border-color 140ms ease;
 }
 .mw-icon-button:hover {
-  border-color: #cbd7ce;
+  border-color: var(--mw-line);
   background: var(--mw-canvas);
+  color: var(--mw-ink);
 }
 .mw-icon-button svg {
   width: 17px;
@@ -639,13 +638,13 @@ button.mw-nav-group-toggle,
   top: 0;
   flex-shrink: 0;
   display: flex;
-  height: 68px;
-  min-height: 68px;
+  height: 64px;
+  min-height: 64px;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  border-bottom: 1px solid var(--mw-line);
-  background: color-mix(in srgb, var(--mw-paper) 95%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--mw-line) 72%, transparent);
+  background: color-mix(in srgb, var(--mw-paper) 96%, transparent);
   padding: 0 28px;
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
@@ -659,6 +658,19 @@ button.mw-nav-group-toggle,
 }
 .mw-top-left {
   flex: 0 1 auto;
+}
+.mw-mobile-brand {
+  display: none;
+  width: 32px;
+  height: 32px;
+  flex: none;
+  overflow: hidden;
+  border-radius: 50%;
+}
+.mw-mobile-brand img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 .mw-top-right {
   flex: none;
@@ -707,21 +719,21 @@ button.mw-nav-group-toggle,
 }
 .mw-search {
   display: flex;
-  width: min(300px, 100%);
+  width: min(320px, 100%);
   flex: none;
   height: 38px;
   align-items: center;
   gap: 9px;
-  border: 1px solid var(--mw-line);
-  border-radius: 9px;
-  background: var(--mw-canvas);
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--mw-canvas) 72%, var(--mw-paper));
   padding: 0 12px;
   color: var(--mw-muted);
   transition: border-color 140ms ease, box-shadow 140ms ease;
 }
 .mw-search:focus-within {
-  border-color: var(--mw-primary);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--mw-primary) 14%, transparent);
+  border-color: var(--mw-orange);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--mw-orange) 12%, transparent);
 }
 .mw-search svg {
   width: 16px;
@@ -794,12 +806,41 @@ button.mw-nav-group-toggle,
   white-space: nowrap;
 }
 .mw-profile-trigger-copy strong {
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 650;
 }
 .mw-profile-trigger-copy small {
   color: var(--mw-muted);
-  font-size: 9px;
+  font-size: 10px;
+}
+.mw-profile-preferences {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid var(--mw-line);
+  padding: 10px 14px;
+  color: var(--mw-muted);
+  font-size: 12px;
+}
+.mw-profile-preferences > span strong {
+  margin-left: 6px;
+  color: var(--mw-ink);
+  font-weight: 600;
+}
+.mw-profile-preferences button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  padding: 5px 7px;
+  color: var(--mw-ink);
+  cursor: pointer;
+}
+.mw-profile-preferences button:hover {
+  background: var(--mw-canvas);
 }
 .mw-profile-pop {
   position: absolute;
@@ -2777,8 +2818,8 @@ button.mw-nav-group-toggle,
 @media (max-width: 760px) {
   /* Topbar */
   .mw-topbar {
-    height: 60px;
-    min-height: 60px;
+    height: 64px;
+    min-height: 64px;
     gap: 8px;
     padding: 0 14px;
   }
@@ -2791,6 +2832,13 @@ button.mw-nav-group-toggle,
   }
   .mw-top-context {
     display: none;
+  }
+  .mw-mobile-brand {
+    display: block;
+  }
+  .mw-language,
+  .mw-theme-toggle {
+    display: none !important;
   }
   .mw-mobile-search-trigger {
     display: inline-grid;

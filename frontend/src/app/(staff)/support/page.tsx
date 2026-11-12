@@ -1,4 +1,4 @@
-import { StaffSupportPage } from '@/components/staff-support-page';
+import { StaffSupportPage } from '@/components/StaffSupportPage';
 
 export default function SupportPage() {
   return <StaffSupportPage />;

@@ -2,8 +2,8 @@
 
 import Link from 'next/link';
 import { useState, useMemo } from 'react';
-import { useMemberPortalData, type MemberPortalDashboard, type MemberPortalTransaction } from '@/components/member-portal/member-data';
-import { DataRegion, Panel, StatusBadge } from '@/components/member-portal/portal-ui';
+import { useMemberPortalData, type MemberPortalDashboard, type MemberPortalTransaction } from '@/components/member-portal/MemberDataContext';
+import { DataRegion, Panel, StatusBadge } from '@/components/member-portal/PortalUI';
 import { formatCurrency, formatSignedCurrency } from '@/lib/format-currency';
 import {
   IconArrowDown,
@@ -19,7 +19,7 @@ import {
   IconTrendingUp,
   IconWallet,
 } from '@/lib/tabler-icons';
-import type { PortalDataState } from '@/components/member-portal/portal-ui';
+import type { PortalDataState } from '@/components/member-portal/PortalUI';
 
 function transactionKind(type: string) {
   if (type === 'remboursement') return 'Remboursement';

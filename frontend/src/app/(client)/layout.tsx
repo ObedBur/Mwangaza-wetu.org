@@ -1,9 +1,9 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { MemberShell } from '@/components/member-portal/member-shell';
-import { RoleRouteGuard } from '@/components/auth/role-route-guard';
-import { MemberDataProvider } from '@/components/member-portal/member-data';
+import { MemberShell } from '@/components/member-portal/MemberShell';
+import { RoleRouteGuard } from '@/components/auth/RoleRouteGuard';
+import { MemberDataProvider } from '@/components/member-portal/MemberDataContext';
 import '@/app/member-portal.css';
 
 const MEMBER_ROLES = ['member'] as const;
