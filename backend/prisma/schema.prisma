@@ -15,6 +15,21 @@ model Attendance {
   membre    Membre?  @relation(fields: [membreId], references: [id])
 }
 
+model ZktecoCommand {
+  id          String    @id @default(cuid())
+  action      String    @db.VarChar(40)
+  payload     Json?
+  status      String    @default("PENDING") @db.VarChar(20)
+  result      Json?
+  error       String?
+  createdAt   DateTime  @default(now()) @map("created_at")
+  startedAt   DateTime? @map("started_at")
+  completedAt DateTime? @map("completed_at")
+
+  @@index([status, createdAt])
+  @@map("zkteco_commands")
+}
+
 model Membre {
   id                  Int             @id @default(autoincrement())
   numeroCompte        String          @unique @map("numero_compte")

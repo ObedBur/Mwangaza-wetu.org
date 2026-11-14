@@ -144,4 +144,8 @@ https://NOM-DU-SERVICE.onrender.com/api
 
 `FRONTEND_URL` accepte plusieurs origines separees par des virgules. Les URLs de preview Vercel ne seront pas autorisees par CORS tant qu'elles ne sont pas ajoutees a cette variable. Pour une configuration plus stable, utiliser un domaine de production Vercel fixe.
 
+### Relais local ZKTeco (Windows)
+
+Le backend Render communique avec le terminal via un relais executé sur un PC du même réseau local. Configuration et démarrage : [backend/ZKTECO_AGENT.md](backend/ZKTECO_AGENT.md).
+
 > Toute variable `NEXT_PUBLIC_*` est integree au code client lors de la compilation et devient visible dans le navigateur. Ne jamais y placer de secret. Ne pas commiter de secrets Render, de variables Vercel privees ni de fichiers `.env`.

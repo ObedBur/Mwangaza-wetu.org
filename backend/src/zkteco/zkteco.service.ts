@@ -1,6 +1,7 @@
 // src/zkteco/zkteco.service.ts
-import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
+import { Injectable, Logger, OnModuleDestroy, Optional, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { ZktecoBridgeService } from './agent/zkteco-bridge.service';
 
 // node-zklib utilise module.exports = ZKLib (CommonJS)
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -46,13 +47,25 @@ export class ZktecoService implements OnModuleDestroy {
   private readonly timeout: number;
   private readonly inport: number;
   private readonly captureTimeout: number;
+  private readonly useBridge: boolean;
 
-  constructor(config: ConfigService) {
+  constructor(
+    config: ConfigService,
+    @Optional() private readonly bridge?: ZktecoBridgeService,
+  ) {
     this.ip = config.get<string>('ZKTECO_IP') ?? '10.25.114.235';
     this.port = Number(config.get('ZKTECO_PORT') ?? 4370);
     this.timeout = Number(config.get('ZKTECO_TIMEOUT') ?? 10000);
     this.inport = Number(config.get('ZKTECO_INPORT') ?? 4000);
     this.captureTimeout = Number(config.get('ZKTECO_CAPTURE_TIMEOUT') ?? 30000);
+    this.useBridge = config.get<string>('ZKTECO_MODE') === 'bridge';
+  }
+
+  private remoteBridge(): ZktecoBridgeService {
+    if (!this.bridge) {
+      throw new ServiceUnavailableException('Le relais ZKTeco n’est pas disponible');
+    }
+    return this.bridge;
   }
 
   /** Adresse affichable de l'appareil (logs + messages d'erreur) */
@@ -65,6 +78,7 @@ export class ZktecoService implements OnModuleDestroy {
    * La lib utilise createSocket() pour initier la connexion TCP/UDP
    */
   async connect(): Promise<boolean> {
+    if (this.useBridge) return this.remoteBridge().execute<boolean>('connect');
     if (this.isConnected) return true;
 
     try {
@@ -113,6 +127,10 @@ export class ZktecoService implements OnModuleDestroy {
    * Déconnexion propre
    */
   async disconnect(): Promise<void> {
+    if (this.useBridge) {
+      await this.remoteBridge().execute('disconnect');
+      return;
+    }
     if (this.zkInstance && this.isConnected) {
       try {
         await this.zkInstance.disconnect();
@@ -135,6 +153,7 @@ export class ZktecoService implements OnModuleDestroy {
   }
 
   async getUsers(): Promise<ZkDeviceUser[]> {
+    if (this.useBridge) return this.remoteBridge().execute<ZkDeviceUser[]>('get_users');
     await this.ensureConnection();
     try {
       const users = await this.zkInstance.getUsers();
@@ -147,6 +166,7 @@ export class ZktecoService implements OnModuleDestroy {
   }
 
   async getAttendances(): Promise<ZkAttendanceLog[]> {
+    if (this.useBridge) return this.remoteBridge().execute<ZkAttendanceLog[]>('get_attendances');
     await this.ensureConnection();
     try {
       const attendances = await this.zkInstance.getAttendances();
@@ -165,6 +185,10 @@ export class ZktecoService implements OnModuleDestroy {
    * Méthode réelle dans node-zklib : clearAttendanceLog()
    */
   async clearAttendance(): Promise<void> {
+    if (this.useBridge) {
+      await this.remoteBridge().execute('clear_attendance');
+      return;
+    }
     await this.ensureConnection();
 
     this.logger.warn(
@@ -201,6 +225,10 @@ export class ZktecoService implements OnModuleDestroy {
    * Temps réel – utilise getRealTimeLogs() de node-zklib
    */
   async startRealtime(callback: (log: any) => void): Promise<void> {
+    if (this.useBridge) {
+      await this.remoteBridge().execute('start_realtime');
+      return;
+    }
     await this.ensureConnection();
     this.logger.log("Démarrage de l'écoute en temps réel...");
 
@@ -261,6 +289,9 @@ export class ZktecoService implements OnModuleDestroy {
   }
 
   private async captureOnce(timeout: number): Promise<string> {
+    if (this.useBridge) {
+      return this.remoteBridge().execute<string>('capture_fingerprint', { timeout });
+    }
     await this.ensureConnection();
     this.logger.log(
       `Démarrage capture empreinte (Polling + RT, timeout: ${timeout}ms)`,
@@ -368,6 +399,6 @@ export class ZktecoService implements OnModuleDestroy {
    * Nettoyage à l'arrêt de l'app
    */
   async onModuleDestroy() {
-    await this.disconnect();
+    if (!this.useBridge) await this.disconnect();
   }
 }

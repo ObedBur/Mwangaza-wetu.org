@@ -7,7 +7,7 @@ services:
     region: frankfurt
     rootDir: backend
     buildCommand: npm install -g bun && bun install && bunx prisma generate && bun run build && test -f dist/main.js
-    startCommand: bun run start:prod
+    startCommand: bunx prisma migrate deploy && bun run start:prod
     envVars:
       - key: NODE_ENV
         value: production
@@ -41,6 +41,12 @@ services:
         sync: false
       - key: MEMBER_LOGIN_URL
         sync: false
+      - key: ZKTECO_MODE
+        value: bridge
+      - key: ZKTECO_AGENT_TOKEN
+        sync: false
+      - key: ZKTECO_COMMAND_TIMEOUT
+        value: 45000
 
   # Render Free bloque les ports SMTP sortants 25, 465 et 587.
 
