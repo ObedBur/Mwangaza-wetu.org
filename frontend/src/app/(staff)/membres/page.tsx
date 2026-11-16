@@ -5,7 +5,6 @@ import { useSearchParams } from "next/navigation";
 import {
   IconArrowDown,
   IconArrowsDownUp,
-  IconDownload,
   IconSearch,
   IconUserPlus,
   IconUsers,
@@ -16,6 +15,7 @@ import {
 } from "@tabler/icons-react";
 
 import { CooperativeDataState } from "@/components/cooperative/CooperativeDataState";
+import { ExcelFileIcon, PdfFileIcon } from "@/components/cooperative/ExportFormatIcons";
 import { CooperativePagination } from "@/components/cooperative/CooperativePagination";
 import {
   AccountPills,
@@ -283,21 +283,23 @@ function MembersContent() {
             Actualiser
           </button>
           <button
-            className="mw-secondary"
+            className="mw-secondary mw-export-pdf"
             type="button"
             onClick={exportMembersPdf}
             disabled={loading || loadError || totalMembers === 0 || exporting}
+            title="Exporter la liste des membres en PDF"
           >
-            <IconDownload aria-hidden="true" />
+            <PdfFileIcon />
             {exporting ? "Préparation…" : "Exporter PDF"}
           </button>
           <button
-            className="mw-secondary"
+            className="mw-secondary mw-export-excel"
             type="button"
             onClick={exportMembersCsv}
             disabled={loading || loadError || totalMembers === 0 || exporting}
+            title="Exporter la liste des membres en CSV / Excel"
           >
-            <IconDownload aria-hidden="true" />
+            <ExcelFileIcon />
             {exporting ? "Préparation…" : "Exporter CSV"}
           </button>
           <button

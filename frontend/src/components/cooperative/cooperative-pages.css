@@ -596,6 +596,29 @@
   width: 16px;
   height: 16px;
 }
+/* Couleurs universelles des formats : PDF rouge/blanc, Excel vert/blanc. */
+.coop-page-actions .mw-export-pdf {
+  background: color-mix(in srgb, #d93025 10%, var(--mw-paper));
+  border-color: color-mix(in srgb, #d93025 24%, transparent);
+  color: #b3261e !important;
+}
+.coop-page-actions .mw-export-pdf:hover {
+  background: color-mix(in srgb, #d93025 18%, var(--mw-paper));
+}
+.coop-page-actions .mw-export-excel {
+  background: color-mix(in srgb, #217346 10%, var(--mw-paper));
+  border-color: color-mix(in srgb, #217346 24%, transparent);
+  color: #17653a !important;
+}
+.coop-page-actions .mw-export-excel:hover {
+  background: color-mix(in srgb, #217346 18%, var(--mw-paper));
+}
+.mw-app[data-theme="dark"] .coop-page-actions .mw-export-pdf {
+  color: #ff8a80 !important;
+}
+.mw-app[data-theme="dark"] .coop-page-actions .mw-export-excel {
+  color: #7be0a6 !important;
+}
 .coop-stat-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));

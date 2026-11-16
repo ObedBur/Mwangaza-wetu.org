@@ -5,8 +5,6 @@ import {
   IconArrowUp,
   IconCheck,
   IconClock,
-  IconFileSpreadsheet,
-  IconFileText,
   IconPrinter,
   IconSearch,
   IconWallet,
@@ -15,6 +13,7 @@ import {
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 
 import { CooperativeDataState } from "@/components/cooperative/CooperativeDataState";
+import { ExcelFileIcon, PdfFileIcon } from "@/components/cooperative/ExportFormatIcons";
 import { CooperativePagination } from "@/components/cooperative/CooperativePagination";
 import {
   CooperativeBreadcrumb,
@@ -617,23 +616,23 @@ export default function WithdrawalsRoute() {
         <div className="coop-page-actions coop-export-actions">
           {/* Boutons d'export comptable (PDF et CSV) */}
           <button
-            className="mw-secondary"
+            className="mw-secondary mw-export-pdf"
             type="button"
             onClick={exportWithdrawalsPdf}
             disabled={loading || Boolean(loadError) || filtered.length === 0}
             title="Exporter le journal des retraits en PDF"
           >
-            <IconFileText aria-hidden="true" />
+            <PdfFileIcon />
             Exporter PDF
           </button>
           <button
-            className="mw-secondary"
+            className="mw-secondary mw-export-excel"
             type="button"
             onClick={exportWithdrawalsCsv}
             disabled={loading || Boolean(loadError) || filtered.length === 0}
             title="Exporter le journal des retraits en format CSV / Excel"
           >
-            <IconFileSpreadsheet aria-hidden="true" />
+            <ExcelFileIcon />
             Exporter CSV
           </button>
 

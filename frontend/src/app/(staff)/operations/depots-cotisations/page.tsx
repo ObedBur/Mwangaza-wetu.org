@@ -13,6 +13,7 @@ import {
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 
 import { CooperativeDataState } from "@/components/cooperative/CooperativeDataState";
+import { ExcelFileIcon, PdfFileIcon } from "@/components/cooperative/ExportFormatIcons";
 import { CooperativePagination } from "@/components/cooperative/CooperativePagination";
 import {
   AccountPills,
@@ -331,11 +332,11 @@ export default function DepositsContributionsRoute() {
           <p>Suivi des dépôts enregistrés dans le journal de la coopérative.</p>
         </div>
         <div className="coop-page-actions coop-export-actions">
-          <button className="mw-secondary" type="button" onClick={exportDepositsPdf} disabled={loading || Boolean(loadError) || filtered.length === 0}>
-            <IconReceipt aria-hidden="true" /> Exporter PDF
+          <button className="mw-secondary mw-export-pdf" type="button" onClick={exportDepositsPdf} disabled={loading || Boolean(loadError) || filtered.length === 0} title="Exporter le journal des dépôts en PDF">
+            <PdfFileIcon /> Exporter PDF
           </button>
-          <button className="mw-secondary" type="button" onClick={exportDepositsCsv} disabled={loading || Boolean(loadError) || filtered.length === 0}>
-            <IconReceipt aria-hidden="true" /> Exporter CSV
+          <button className="mw-secondary mw-export-excel" type="button" onClick={exportDepositsCsv} disabled={loading || Boolean(loadError) || filtered.length === 0} title="Exporter le journal des dépôts en CSV / Excel">
+            <ExcelFileIcon /> Exporter CSV
           </button>
           {/* Ouvre directement le modal de dépôt sur la page sans redirection */}
           <button
