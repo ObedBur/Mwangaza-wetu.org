@@ -186,7 +186,7 @@ export function CooperativePageLayout({
       : pathname === "/membres"
         ? "Membres"
         : pathname === "/operations/depots-cotisations"
-          ? "Dépôts & Epargnes"
+          ? "Dépôts et épargne"
           : pathname === "/operations/retraits"
             ? "Retraits"
             : pathname === "/operations/credits"

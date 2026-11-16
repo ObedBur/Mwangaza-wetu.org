@@ -3,9 +3,11 @@
 import {
   IconArrowDown,
   IconCheck,
+  IconCurrencyDollar,
   IconPrinter,
   IconReceipt,
   IconSearch,
+  IconUsers,
   IconX,
 } from "@tabler/icons-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
@@ -62,7 +64,7 @@ type DepositResponse = {
 const periods = ["Aujourd’hui", "Toutes les périodes", "Ce mois", "30 derniers jours"] as const;
 
 export function meta() {
-  return [{ title: "Dépôts & Epargnes — Mwangaza Wetu" }];
+  return [{ title: "Dépôts et épargne — Mwangaza Wetu" }];
 }
 
 function accountSlugFor(record: DepositRecord): AccountSlug | null {
@@ -187,16 +189,23 @@ export default function DepositsContributionsRoute() {
   ]);
 
   function exportDepositsCsv() {
-    downloadReportCsv("journal-depots-Epargnes", depositExportHeaders, depositExportRows);
+    downloadReportCsv("journal-depots-epargne", depositExportHeaders, depositExportRows);
   }
 
   async function exportDepositsPdf() {
-    await downloadReportPdf("Journal des dépôts & Epargnes · Mwangaza Wetu", "journal-depots-Epargnes", depositExportHeaders, depositExportRows);
+    await downloadReportPdf("Journal des dépôts et de l’épargne · Mwangaza Wetu", "journal-depots-epargne", depositExportHeaders, depositExportRows);
   }
 
   function changeFilter(action: () => void) {
     action();
     setPage(1);
+  }
+
+  function openCreateDeposit() {
+    setCreateOpen(true);
+    setFormError("");
+    setMemberCheck(null);
+    setCompteInput("");
   }
 
   async function verifyMember() {
@@ -317,8 +326,8 @@ export default function DepositsContributionsRoute() {
     <div className="coop-operations-page">
       <div className="coop-page-heading">
         <div>
-          <CooperativeBreadcrumb section="Opérations" current="Dépôts & Epargnes" />
-          <h1>Dépôts & Epargnes</h1>
+          <CooperativeBreadcrumb section="Opérations" current="Dépôts et épargne" />
+          <h1>Dépôts et épargne</h1>
           <p>Suivi des dépôts enregistrés dans le journal de la coopérative.</p>
         </div>
         <div className="coop-page-actions coop-export-actions">
@@ -360,29 +369,32 @@ export default function DepositsContributionsRoute() {
 
       <section className="coop-stat-grid" aria-label="Indicateurs réels des dépôts">
         <CooperativeStatCard
-          label="Dépôts USD ce mois"
+          label="Dépôts du mois · USD"
           value={formatCurrency(monthUsd, "USD")}
-          detail="Selon le journal des opérations"
-          icon={IconArrowDown}
+          detail="Total versé ce mois"
+          icon={IconCurrencyDollar}
+          accent="var(--mw-primary)"
         />
         <CooperativeStatCard
-          label="Dépôts FC ce mois"
+          label="Dépôts du mois · FC"
           value={formatCurrency(monthFc, "FC")}
-          detail="Selon le journal des opérations"
+          detail="Total versé ce mois"
           icon={IconArrowDown}
-          accent="#16834a"
+          accent="var(--mw-amber)"
         />
         <CooperativeStatCard
           label="Dépôts enregistrés"
           value={records.length}
           detail="Toutes périodes et devises"
           icon={IconReceipt}
+          accent="var(--mw-green)"
         />
         <CooperativeStatCard
-          label="Membres concernés ce mois"
+          label="Membres déposants"
           value={memberCount}
-          detail="Membres distincts"
-          icon={IconReceipt}
+          detail="Depuis le début du mois"
+          icon={IconUsers}
+          accent="var(--mw-primary)"
         />
       </section>
 
@@ -415,7 +427,23 @@ export default function DepositsContributionsRoute() {
 
         {loadError && <p className="coop-form-error" role="alert">{loadError} <button type="button" onClick={() => void loadDeposits()}>Réessayer</button></p>}
 
-        <CooperativeDataState loading={loading} error={Boolean(loadError)} empty={filtered.length === 0} emptyMessage={records.length === 0 ? "Aucun dépôt réel n’est enregistré pour le moment." : "Aucun dépôt ne correspond à ces filtres."}>
+        <CooperativeDataState loading={loading} error={Boolean(loadError)}>
+          {filtered.length === 0 ? (
+            <div className="coop-deposits-empty" role="status">
+              <span className="coop-deposits-empty-icon"><IconReceipt aria-hidden="true" /></span>
+              <div className="coop-deposits-empty-copy">
+                <strong>{records.length === 0 ? "Aucun dépôt enregistré" : "Aucun dépôt ne correspond à ces filtres"}</strong>
+                <p>{records.length === 0
+                  ? "Les dépôts apparaîtront ici une fois enregistrés dans le journal de la coopérative."
+                  : "Essayez une autre période ou un autre compte d’épargne."}</p>
+                {records.length === 0 && (
+                  <button type="button" className="mw-primary" onClick={openCreateDeposit}>
+                    <IconArrowDown aria-hidden="true" /> Enregistrer le premier dépôt
+                  </button>
+                )}
+              </div>
+            </div>
+          ) : (
           <div className="coop-table-scroll">
             <table className="mw-table coop-operation-table">
               <thead>
@@ -466,9 +494,10 @@ export default function DepositsContributionsRoute() {
               </tbody>
             </table>
           </div>
+          )}
         </CooperativeDataState>
 
-        <CooperativePagination
+        {filtered.length > 0 && <CooperativePagination
           totalItems={filtered.length}
           page={page}
           pageSize={pageSize}
@@ -477,7 +506,7 @@ export default function DepositsContributionsRoute() {
           itemLabel="dépôts"
           previousLabel={t.previous}
           nextLabel={t.next}
-        />
+        />}
       </section>
 
       {/* Modal Nouveau Dépôt Direct */}

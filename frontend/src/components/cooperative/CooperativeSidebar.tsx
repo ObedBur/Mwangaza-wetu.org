@@ -79,7 +79,7 @@ const navigationGroups: NavigationGroup[] = [
     title: "Opérations",
     items: [
       {
-        label: "Dépôts & Epargnes",
+        label: "Dépôts et épargne",
         href: "/operations/depots-cotisations",
         icon: IconArrowDown,
       },

@@ -87,6 +87,7 @@ type Cashbox = {
   agentId: number;
   agentName: string;
   guichet: string | null;
+  actif?: boolean;
   balances: { devise: Currency; solde: number }[];
 };
 
@@ -203,6 +204,8 @@ export default function WithdrawalsRoute() {
   const [records, setRecords] = useState<BackendWithdrawal[]>([]);
   const [movements, setMovements] = useState<CashMovement[]>([]);
   const [cashbox, setCashbox] = useState<Cashbox | null>(null);
+  const [adminCashboxes, setAdminCashboxes] = useState<Cashbox[]>([]);
+  const [selectedAgentId, setSelectedAgentId] = useState("");
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [activeTab, setActiveTab] = useState<string>("Tous");
@@ -274,11 +277,26 @@ export default function WithdrawalsRoute() {
         setRecords(all);
         setMovements([]);
         setCashbox(null);
+        try {
+          const cashboxesResponse = await apiClient.get<Cashbox[]>("/withdrawals/caisses");
+          const activeCashboxes = cashboxesResponse.data.filter((item) => item.actif);
+          setAdminCashboxes(activeCashboxes);
+          setSelectedAgentId((current) =>
+            activeCashboxes.some((item) => String(item.agentId) === current)
+              ? current
+              : String(activeCashboxes[0]?.agentId ?? ""),
+          );
+        } catch {
+          setAdminCashboxes([]);
+          setSelectedAgentId("");
+        }
       }
     } catch (error) {
       setRecords([]);
       setMovements([]);
       setCashbox(null);
+      setAdminCashboxes([]);
+      setSelectedAgentId("");
       setLoadError(
         apiErrorMessage(
           error,
@@ -460,6 +478,13 @@ export default function WithdrawalsRoute() {
     setPage(1);
   }
 
+  function openCreateRequest() {
+    setCreateOpen(true);
+    setFormError("");
+    setCompteInput("");
+    setMemberCheck(null);
+  }
+
   async function verifyMember() {
     const compte = compteInput.trim();
     if (!compte) {
@@ -506,6 +531,11 @@ export default function WithdrawalsRoute() {
     const montant = Number(form.get("montant"));
     const description = String(form.get("description") || "").trim();
     const compte = compteInput.trim();
+    const agentId = isAdmin ? Number(form.get("agentId")) : undefined;
+    if (isAdmin && (!Number.isInteger(agentId) || !adminCashboxes.some((item) => item.agentId === agentId))) {
+      setFormError("Choisissez une caisse active avant de poursuivre.");
+      return;
+    }
     if (!memberCheck || memberCheck.compte !== compte) {
       setFormError("Vérifiez d’abord le compte du membre.");
       return;
@@ -523,6 +553,7 @@ export default function WithdrawalsRoute() {
           compte,
           devise,
           montant,
+          ...(isAdmin ? { agentId } : {}),
           description: description || undefined,
           idempotencyKey: crypto.randomUUID(),
         },
@@ -569,6 +600,7 @@ export default function WithdrawalsRoute() {
   }
 
   const isAdmin = role === "admin" || role === "superadmin";
+  const selectedAdminCashbox = adminCashboxes.find((item) => String(item.agentId) === selectedAgentId) ?? null;
 
   return (
     <div className="coop-operations-page">
@@ -605,14 +637,13 @@ export default function WithdrawalsRoute() {
             Exporter CSV
           </button>
 
-          {isAgent && (
+          {(isAgent || isAdmin) && (
             <button
               className="mw-primary"
               type="button"
-              onClick={() => {
-                setCreateOpen(true);
-                setFormError("");
-              }}
+              onClick={openCreateRequest}
+              disabled={isAdmin && adminCashboxes.length === 0}
+              title={isAdmin && adminCashboxes.length === 0 ? "Aucune caisse active n’est disponible" : undefined}
             >
               <IconArrowUp aria-hidden="true" />
               Nouveau retrait
@@ -811,18 +842,46 @@ export default function WithdrawalsRoute() {
           </label>
         </div>
 
-        <CooperativeDataState
-          loading={loading}
-          error={Boolean(loadError)}
-          empty={filtered.length === 0}
-          emptyMessage={
-            rows.length === 0
-              ? isAgent
-                ? "Aucun mouvement de caisse enregistré pour le moment."
-                : "Aucun retrait enregistré pour le moment."
-              : "Aucune demande ne correspond à ces filtres."
-          }
-        >
+        <CooperativeDataState loading={loading} error={Boolean(loadError)}>
+          {filtered.length === 0 ? (
+            <div className="coop-withdrawals-empty" role="status">
+              <span className="coop-deposits-empty-icon"><IconArrowUp aria-hidden="true" /></span>
+              <div className="coop-deposits-empty-copy">
+                <strong>{rows.length === 0 ? "Aucun retrait enregistré" : "Aucun retrait ne correspond aux filtres"}</strong>
+                <p>{rows.length === 0
+                  ? isAgent
+                    ? "Les retraits et mouvements de votre caisse apparaîtront ici après leur enregistrement."
+                    : "Aucune opération n’a encore été enregistrée. Vous pouvez lancer un retrait depuis une caisse active."
+                  : "Modifiez la période, le statut ou votre recherche."}</p>
+                {rows.length === 0 && isAgent && (
+                  <button type="button" className="mw-primary" onClick={openCreateRequest}>
+                    <IconArrowUp aria-hidden="true" /> Nouveau retrait
+                  </button>
+                )}
+                {rows.length === 0 && isAdmin && adminCashboxes.length > 0 && (
+                  <button type="button" className="mw-primary" onClick={openCreateRequest}>
+                    <IconArrowUp aria-hidden="true" /> Nouveau retrait
+                  </button>
+                )}
+                {rows.length === 0 && isAdmin && adminCashboxes.length === 0 && (
+                  <a href="/agents" className="mw-secondary coop-withdrawals-agents-link">Gérer les agents</a>
+                )}
+                {rows.length > 0 && (
+                  <button
+                    type="button"
+                    className="mw-secondary coop-withdrawals-reset"
+                    onClick={() => changeFilter(() => {
+                      setActiveTab("Tous");
+                      setQuery("");
+                      setPeriod(periods[0]);
+                    })}
+                  >
+                    Effacer les filtres
+                  </button>
+                )}
+              </div>
+            </div>
+          ) : (
           <div className="coop-table-scroll">
             <table className="mw-table coop-operation-table coop-withdrawal-table">
               <thead>
@@ -898,9 +957,10 @@ export default function WithdrawalsRoute() {
               </tbody>
             </table>
           </div>
+          )}
         </CooperativeDataState>
 
-        <CooperativePagination
+        {filtered.length > 0 && <CooperativePagination
           totalItems={filtered.length}
           page={page}
           pageSize={pageSize}
@@ -910,7 +970,7 @@ export default function WithdrawalsRoute() {
             setPage(1);
           }}
           itemLabel="demandes"
-        />
+        />}
       </section>
 
       {/* Volet latéral d'examen détaillé */}
@@ -1098,8 +1158,8 @@ export default function WithdrawalsRoute() {
         </DialogContent>
       </Dialog>
 
-      {/* Modal Nouveau Retrait (Agent) */}
-      {isAgent && (
+      {/* Nouveau retrait : caisse propre pour l’agent, caisse sélectionnée pour l’admin */}
+      {(isAgent || isAdmin) && (
         <Dialog open={createOpen} onOpenChange={setCreateOpen}>
           <DialogContent
             data-theme={dark ? "dark" : "light"}
@@ -1108,12 +1168,35 @@ export default function WithdrawalsRoute() {
             <DialogHeader>
               <DialogTitle>Nouveau retrait</DialogTitle>
               <DialogDescription>
-                Le décaissement est enregistré au guichet : les limites, les
-                frais et le solde sont vérifiés par le serveur, puis le
-                lecteur biométrique du membre est déclenché.
+                {isAdmin
+                  ? "Choisissez la caisse à débiter. Le serveur vérifie les limites, les frais et le solde, puis déclenche le contrôle biométrique du membre."
+                  : "Le décaissement est enregistré dans votre caisse. Le serveur vérifie les limites, les frais et le solde, puis déclenche le contrôle biométrique du membre."}
               </DialogDescription>
             </DialogHeader>
             <form className="coop-operation-form" onSubmit={createRequest}>
+              {isAdmin && (
+                <label className="coop-form-field" htmlFor="retrait-agent">
+                  Caisse de l’agent
+                  <select
+                    id="retrait-agent"
+                    name="agentId"
+                    value={selectedAgentId}
+                    onChange={(event) => setSelectedAgentId(event.target.value)}
+                    required
+                  >
+                    {adminCashboxes.map((item) => (
+                      <option key={item.agentId} value={item.agentId}>
+                        {item.agentName} · {item.guichet || "Guichet non précisé"}
+                      </option>
+                    ))}
+                  </select>
+                  {selectedAdminCashbox && (
+                    <small className="coop-withdrawal-cashbox-hint">
+                      Disponible : {formatMixedCurrency(selectedAdminCashbox.balances.map((balance) => ({ amount: balance.solde, currency: balance.devise })))}
+                    </small>
+                  )}
+                </label>
+              )}
               <div className="coop-form-field">
                 <label htmlFor="retrait-compte">Compte du membre</label>
                 <span className="coop-form-grid">

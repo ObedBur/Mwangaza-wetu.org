@@ -56,15 +56,17 @@ export function CooperativeStatCard({
         </span>
       </div>
       <strong>{value}</strong>
-      <span className="coop-stat-detail">
-        {trend && (
-          <>
-            <IconArrowUpRight aria-hidden="true" />
-            {trend}
-          </>
-        )}
-        {detail}
-      </span>
+      {(trend || detail) && (
+        <span className="coop-stat-detail">
+          {trend && (
+            <>
+              <IconArrowUpRight aria-hidden="true" />
+              {trend}
+            </>
+          )}
+          {detail}
+        </span>
+      )}
     </article>
   );
 }

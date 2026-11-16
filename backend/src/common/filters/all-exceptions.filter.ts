@@ -59,17 +59,15 @@ export class AllExceptionsFilter implements ExceptionFilter {
           : exception.message;
     }
 
-    // Journalisation ciblée dans les logs serveur (Render / terminal)
-    const logPrefix = `[${request.method}] ${request.url} - Status: ${status}`;
+    // Ne pas journaliser URL, contenu d'exception ni stack : ils peuvent
+    // contenir des paramètres, chemins locaux, données SQL ou détails internes.
+    const logPrefix = `[${request.method}] Status: ${status}`;
     if (status >= 500) {
-      const stack = exception instanceof Error ? exception.stack : undefined;
-      this.logger.error(`${logPrefix} - Erreur interne: ${userMessage}`, stack);
+      this.logger.error(`${logPrefix} - Erreur interne.`);
     } else if (status === HttpStatus.BAD_REQUEST) {
-      this.logger.warn(
-        `${logPrefix} - Validation échouée: ${JSON.stringify(rawErrors.length > 0 ? rawErrors : userMessage)}`,
-      );
+      this.logger.warn(`${logPrefix} - Validation échouée.`);
     } else {
-      this.logger.warn(`${logPrefix} - ${userMessage}`);
+      this.logger.warn(`${logPrefix} - Requête rejetée.`);
     }
 
     response.status(status).json({

@@ -9,6 +9,7 @@ type CooperativePaginationProps = {
   onPageChange: (page: number) => void;
   onPageSizeChange: (pageSize: number) => void;
   itemLabel: string;
+  itemLabelSingular?: string;
   previousLabel?: string;
   nextLabel?: string;
 };
@@ -22,6 +23,7 @@ export function CooperativePagination({
   onPageChange,
   onPageSizeChange,
   itemLabel,
+  itemLabelSingular,
   previousLabel = "Précédent",
   nextLabel = "Suivant",
 }: CooperativePaginationProps) {
@@ -36,7 +38,7 @@ export function CooperativePagination({
   return (
     <nav className="coop-pagination" aria-label="Pagination">
       <span aria-live="polite">
-        {firstItem}–{lastItem} sur {totalItems} {itemLabel}
+        {firstItem}–{lastItem} sur {totalItems} {totalItems === 1 ? itemLabelSingular ?? itemLabel : itemLabel}
       </span>
       <div className="coop-pagination-controls">
         <label className="coop-page-size">

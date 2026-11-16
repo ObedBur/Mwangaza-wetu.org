@@ -76,13 +76,7 @@ async function bootstrap() {
   const port = process.env.PORT ?? 4000;
   await app.listen(port, "0.0.0.0");
 
-  const files = fs.readdirSync(uploadsPath);
-  console.log(
-    `\n🚀 Backend Mwangaza Wetu démarré sur le port ${port} (0.0.0.0)`,
-  );
-  console.log(`📂 Dossier uploads : ${uploadsPath} (${files.length} fichiers)`);
-  if (files.length > 0)
-    console.log(`📄 Dernier fichier : ${files[files.length - 1]}`);
-  console.log(`🌐 Accès images : http://localhost:${port}/uploads/...\n`);
+  console.log(`\n🚀 Backend Mwangaza Wetu démarré sur le port ${port}.`);
+  console.log('📂 Stockage des fichiers prêt.\n');
 }
 void bootstrap();

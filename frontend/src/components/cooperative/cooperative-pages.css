@@ -678,7 +678,28 @@
   background: var(--mw-line);
 }
 .coop-members-table {
-  min-width: 1020px;
+  min-width: 900px;
+  table-layout: fixed;
+}
+.coop-members-table th:nth-child(1) { width: 24%; }
+.coop-members-table th:nth-child(2) { width: 13%; }
+.coop-members-table th:nth-child(3) { width: 13%; }
+.coop-members-table th:nth-child(4) { width: 12%; }
+.coop-members-table th:nth-child(5) { width: 13%; }
+.coop-members-table th:nth-child(6) { width: 13%; }
+.coop-members-table th:nth-child(7) { width: 12%; }
+.coop-member-primary {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+.coop-member-primary > strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.coop-member-primary .coop-biometric-status {
+  font-size: 9px;
 }
 .coop-members-table th,
 .coop-holder-table th {
@@ -1553,6 +1574,77 @@
 }
 .coop-operations-panel .coop-filter-bar {
   padding-block: 11px;
+}
+.coop-deposits-empty {
+  display: flex;
+  min-height: 176px;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 24px;
+}
+.coop-deposits-empty-icon {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  flex: none;
+  place-items: center;
+  border-radius: 12px;
+  background: var(--mw-primary-soft);
+  color: var(--mw-primary);
+}
+.coop-deposits-empty-icon svg {
+  width: 21px;
+  height: 21px;
+}
+.coop-deposits-empty-copy {
+  max-width: 440px;
+}
+.coop-deposits-empty-copy > strong {
+  color: var(--mw-ink);
+  font-size: 14px;
+}
+.coop-deposits-empty-copy p {
+  margin: 5px 0 12px;
+  color: var(--mw-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.coop-deposits-empty-copy .mw-primary {
+  min-height: 34px;
+  padding-inline: 11px;
+  font-size: 11px;
+}
+.coop-deposits-empty-copy .mw-primary svg {
+  width: 15px;
+  height: 15px;
+}
+.coop-withdrawals-empty {
+  display: flex;
+  min-height: 176px;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 24px;
+}
+.coop-withdrawals-agents-link {
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  margin-top: 2px;
+  padding-inline: 11px;
+  text-decoration: none;
+  font-size: 11px;
+}
+.coop-withdrawals-reset {
+  min-height: 34px;
+  padding-inline: 11px;
+  font-size: 11px;
+}
+.coop-withdrawal-cashbox-hint {
+  color: var(--mw-muted);
+  font-size: 11px;
+  font-weight: 500;
 }
 .coop-operation-table {
   min-width: 1120px;

@@ -634,6 +634,7 @@ useEffect(() => {
   }, [dashboard, period, currency, chartMetric]);
 
   const chartTotal = chartData.reduce((sum, point) => sum + point.savings, 0);
+  const hasChartData = chartData.some((point) => point.savings !== 0 || point.loans !== 0);
 
   // Distribution
   const activityTotal = dashboard?.activityDistribution.reduce((sum, item) => sum + item.total, 0) || 0;
@@ -729,7 +730,9 @@ useEffect(() => {
             <div className="mw-kpi-main">
               <div className="mw-kpi-value">{loading ? "…" : memberCount.toLocaleString("fr-FR")}</div>
               <div className="mw-kpi-sub">
-                <span className="mw-kpi-subtext">{dashboard?.overview.activeMembersCount ?? 0} adhérents actifs</span>
+                <span className="mw-kpi-subtext">
+                  {dashboard?.overview.activeMembersCount ?? 0} adhérent{(dashboard?.overview.activeMembersCount ?? 0) > 1 ? "s" : ""} actif{(dashboard?.overview.activeMembersCount ?? 0) > 1 ? "s" : ""}
+                </span>
               </div>
             </div>
           </article>
@@ -786,14 +789,14 @@ useEffect(() => {
           {/* Carte 4 : Portefeuille à Risque (PAR / Impayés) */}
           <article className="mw-kpi mw-kpi-bento">
             <div className="mw-kpi-top">
-              <span className="mw-kpi-title">Crédits en Souffrance (PAR)</span>
+              <span className="mw-kpi-title">Crédits en souffrance (PAR)</span>
               <span className={`mw-kpi-icon ${(dashboard?.overview.overdueCreditsCount ?? 0) > 0 ? "red" : "green"}`}>
                 {(dashboard?.overview.overdueCreditsCount ?? 0) > 0 ? <IconAlertTriangle /> : <IconCheck />}
               </span>
             </div>
             <div className="mw-kpi-main">
               <div className="mw-kpi-value" style={{ color: (dashboard?.overview.overdueCreditsCount ?? 0) > 0 ? "var(--mw-red)" : "inherit" }}>
-                {loading ? "…" : `${dashboard?.overview.overdueCreditsCount ?? 0} impayé${(dashboard?.overview.overdueCreditsCount ?? 0) > 1 ? "s" : ""}`}
+                {loading ? "…" : (dashboard?.overview.overdueCreditsCount ?? 0) === 0 ? "Aucun impayé" : `${dashboard?.overview.overdueCreditsCount} impayé${(dashboard?.overview.overdueCreditsCount ?? 0) > 1 ? "s" : ""}`}
               </div>
               <div className="mw-kpi-sub">
                 {(dashboard?.overview.overdueCreditsCount ?? 0) > 0 ? (
@@ -879,7 +882,9 @@ useEffect(() => {
             <div className="mw-kpi-main">
               <div className="mw-kpi-value">{loading ? "…" : memberCount.toLocaleString("fr-FR")}</div>
               <div className="mw-kpi-sub">
-                <span className="mw-kpi-subtext">{dashboard?.overview.activeMembersCount ?? 0} adhérents actifs</span>
+                <span className="mw-kpi-subtext">
+                  {dashboard?.overview.activeMembersCount ?? 0} adhérent{(dashboard?.overview.activeMembersCount ?? 0) > 1 ? "s" : ""} actif{(dashboard?.overview.activeMembersCount ?? 0) > 1 ? "s" : ""}
+                </span>
               </div>
             </div>
           </article>
@@ -907,7 +912,7 @@ useEffect(() => {
         </section>
       )}
 
-      {isAdmin && (
+      {isAdmin && (loadError || priorityAlerts.some((alert) => alert.count > 0)) && (
         <section className="mw-panel" aria-label="Alertes prioritaires" style={{ marginTop: 14 }}>
           <div className="mw-panel-header">
             <h2 style={{ margin: 0 }}>À traiter prochainement</h2>
@@ -938,7 +943,7 @@ useEffect(() => {
             <div className="mw-panel-header" style={{ flexWrap: "wrap", gap: "10px" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                 <h2 id="mw-chart-title" style={{ margin: 0 }}>
-                  {chartMetric === "contributions" ? "Epargnes & Crédits" : "Flux de Trésorerie (Dépôts vs Retraits)"}
+                  {chartMetric === "contributions" ? "Épargne et crédits" : "Flux de trésorerie (dépôts et retraits)"}
                 </h2>
                 <div className="mw-periods" role="group" aria-label="Métrique">
                   <button
@@ -946,7 +951,7 @@ useEffect(() => {
                     className={`mw-period${chartMetric === "contributions" ? " is-active" : ""}`}
                     onClick={() => setChartMetric("contributions")}
                   >
-                    Epargnes & Crédits
+                    Épargne et crédits
                   </button>
                   <button
                     type="button"
@@ -1006,12 +1011,15 @@ useEffect(() => {
                 {[26, 67, 108, 149].map((y) => (
                   <g key={y}>
                     <line x1="46" x2="687" y1={y} y2={y} className="mw-chart-grid" />
-                    <text x="1" y={y + 3} className="mw-chart-axis">
-                      {Math.round((180 - y) * (Math.max(1, ...chartData.map((point) => point.savings), ...chartData.map((point) => point.loans)) / 150))}
-                    </text>
+                    {hasChartData && (
+                      <text x="1" y={y + 3} className="mw-chart-axis">
+                        {Math.round((180 - y) * (Math.max(1, ...chartData.map((point) => point.savings), ...chartData.map((point) => point.loans)) / 150))}
+                      </text>
+                    )}
                   </g>
                 ))}
                 {(() => {
+                  if (!hasChartData || chartData.length === 0) return null;
                   const max = Math.max(1, ...chartData.flatMap((point) => [point.savings, point.loans]));
                   const coords = (key: "savings" | "loans") =>
                     chartData.map((point, index) => `${48 + (chartData.length < 2 ? 319 : (index * 638) / (chartData.length - 1))},${158 - (point[key] / max) * 132}`).join(" ");
@@ -1035,6 +1043,11 @@ useEffect(() => {
                   );
                 })()}
               </svg>
+              {!hasChartData && (
+                <div className="mw-chart-empty-state" role="status">
+                  Aucune donnée enregistrée sur cette période.
+                </div>
+              )}
               <div className="mw-chart-legend">
                 <span className="mw-legend-item">
                   <i className="mw-legend-dot" />

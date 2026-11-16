@@ -37,9 +37,11 @@ export class WithdrawalsService {
     private comptabiliteService: ComptabiliteService,
   ) {}
 
-  private assertWithdrawalReplayMatches(
+  private async assertWithdrawalReplayMatches(
     retrait: {
+      id: number;
       executeParId: number | null;
+      executeParRole: string | null;
       compte: string;
       devise: Devise;
       montant: Prisma.Decimal;
@@ -47,9 +49,11 @@ export class WithdrawalsService {
     },
     dto: CreateWithdrawalDto,
     actor: AuthUser,
+    cashboxAgentId: number,
+    db: WithdrawalDb = this.prisma,
   ) {
-    if (retrait.executeParId !== actor.userId) {
-      throw new ForbiddenException('Cette clé idempotente appartient à un autre agent.');
+    if (retrait.executeParId !== actor.userId || retrait.executeParRole !== actor.role) {
+      throw new ForbiddenException('Cette clé idempotente appartient à un autre utilisateur.');
     }
     if (
       retrait.compte !== dto.compte ||
@@ -59,6 +63,13 @@ export class WithdrawalsService {
         (dto.description?.trim() || 'Retrait au guichet')
     ) {
       throw new ConflictException('La clé idempotente a déjà été utilisée pour un autre retrait.');
+    }
+    const movement = await db.mouvementCaisseAgent.findFirst({
+      where: { retraitId: retrait.id, type: 'RETRAIT' },
+      select: { caisse: { select: { agentId: true } } },
+    });
+    if (movement && movement.caisse.agentId !== cashboxAgentId) {
+      throw new ConflictException('La clé idempotente a déjà été utilisée avec une autre caisse.');
     }
   }
 
@@ -242,8 +253,34 @@ export class WithdrawalsService {
   }
 
   async create(dto: CreateWithdrawalDto, actor: AuthUser) {
-    if (actor.role !== 'agent' || !actor.userId) {
-      throw new ForbiddenException('Seul un agent peut exécuter un retrait au guichet');
+    const isAgent = actor.role === 'agent';
+    const isAdmin = actor.role === 'admin' || actor.role === 'superadmin';
+    if ((!isAgent && !isAdmin) || !actor.userId) {
+      throw new ForbiddenException('Seuls un agent ou un administrateur peuvent exécuter un retrait au guichet');
+    }
+
+    let cashboxAgentId: number;
+    if (isAgent) {
+      if (dto.agentId !== undefined && dto.agentId !== actor.userId) {
+        throw new ForbiddenException('Un agent ne peut utiliser que sa propre caisse.');
+      }
+      cashboxAgentId = actor.userId;
+    } else {
+      if (!dto.agentId) {
+        throw new BadRequestException('Sélectionnez l’agent dont la caisse doit être débitée.');
+      }
+      const targetAgent = await this.prisma.agent.findUnique({
+        where: { id: dto.agentId },
+        select: { id: true, actif: true },
+      });
+      if (!targetAgent || !targetAgent.actif) {
+        throw new NotFoundException('Agent actif introuvable.');
+      }
+      cashboxAgentId = targetAgent.id;
+    }
+
+    if (dto.skipBiometric && !isAgent) {
+      throw new ForbiddenException('Le contournement biométrique est réservé aux agents du guichet.');
     }
 
     const replay = await this.prisma.retrait.findUnique({
@@ -251,7 +288,7 @@ export class WithdrawalsService {
       include: { membre: { select: { nomComplet: true } } },
     });
     if (replay) {
-      this.assertWithdrawalReplayMatches(replay, dto, actor);
+      await this.assertWithdrawalReplayMatches(replay, dto, actor, cashboxAgentId);
       return replay;
     }
 
@@ -356,27 +393,36 @@ export class WithdrawalsService {
         );
       }
 
+      const activeCashboxAgent = await tx.$queryRaw<Array<{ id: number }>>`
+        SELECT "id" FROM "agents"
+        WHERE "id" = ${cashboxAgentId} AND "actif" = TRUE
+        FOR UPDATE
+      `;
+      if (activeCashboxAgent.length === 0) {
+        throw new NotFoundException('La caisse appartient à un agent inactif ou introuvable.');
+      }
+
       // L'idempotence est revérifiée après le verrou pour les requêtes concurrentes.
       const duplicate = await tx.retrait.findUnique({
         where: { idempotencyKey: dto.idempotencyKey },
         include: { membre: { select: { nomComplet: true } } },
       });
       if (duplicate) {
-        this.assertWithdrawalReplayMatches(duplicate, dto, actor);
+        await this.assertWithdrawalReplayMatches(duplicate, dto, actor, cashboxAgentId, tx);
         return duplicate;
       }
 
       await tx.$queryRaw<Array<{ id: number }>>`
         SELECT "id" FROM "caisses_agents"
-        WHERE "agent_id" = ${actor.userId} AND "devise" = ${dto.devise}::"Devise"
+        WHERE "agent_id" = ${cashboxAgentId} AND "devise" = ${dto.devise}::"Devise"
         FOR UPDATE
       `;
       const caisse = await tx.caisseAgent.findUnique({
-        where: { agentId_devise: { agentId: actor.userId!, devise: dto.devise } },
+        where: { agentId_devise: { agentId: cashboxAgentId, devise: dto.devise } },
       });
       if (!caisse) {
         throw new BadRequestException(
-          'La caisse de cet agent n’est pas initialisée pour cette devise. Contactez un administrateur.',
+          'La caisse sélectionnée n’est pas initialisée pour cette devise. Contactez un administrateur.',
         );
       }
 
@@ -388,7 +434,7 @@ export class WithdrawalsService {
       );
       if (Number(caisse.solde) < dto.montant) {
         throw new BadRequestException(
-          `Fonds insuffisants dans votre caisse : ${Number(caisse.solde)} ${dto.devise} disponibles.`,
+          `Fonds insuffisants dans la caisse sélectionnée : ${Number(caisse.solde)} ${dto.devise} disponibles.`,
         );
       }
 
@@ -457,7 +503,7 @@ export class WithdrawalsService {
       await tx.adminLog.create({
         data: {
           action: 'RETRAIT_GUICHET',
-          details: `Retrait ${retraitRecord.reference}, compte ${dto.compte}, montant ${dto.montant} ${dto.devise}, frais ${verification.frais} ${dto.devise}, agent #${actor.userId}, solde membre ${verification.soldeActuel} → ${soldeApres}, caisse ${caisse.solde} → ${caisseApres}${biometricSkipped ? ' [BIOMÉTRIE CONTOURNÉE]' : ''}.`,
+          details: `Retrait ${retraitRecord.reference}, compte ${dto.compte}, montant ${dto.montant} ${dto.devise}, frais ${verification.frais} ${dto.devise}, caisse agent #${cashboxAgentId}, exécuté par ${actor.role} #${actor.userId}, solde membre ${verification.soldeActuel} → ${soldeApres}, caisse ${caisse.solde} → ${caisseApres}${biometricSkipped ? ' [BIOMÉTRIE CONTOURNÉE]' : ''}.`,
           success: true,
           userId: actor.userId,
         },
@@ -475,7 +521,7 @@ export class WithdrawalsService {
           include: { membre: { select: { nomComplet: true } } },
         });
         if (duplicate) {
-          this.assertWithdrawalReplayMatches(duplicate, dto, actor);
+          await this.assertWithdrawalReplayMatches(duplicate, dto, actor, cashboxAgentId);
           return duplicate;
         }
       }

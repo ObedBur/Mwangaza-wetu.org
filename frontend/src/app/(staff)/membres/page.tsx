@@ -323,6 +323,7 @@ function MembersContent() {
             detail=""
             trend=""
             icon={IconUsers}
+            accent="var(--mw-primary)"
           />
           <CooperativeStatCard
             label={t.activeMembers}
@@ -330,6 +331,7 @@ function MembersContent() {
             detail=""
             trend=""
             icon={IconCircleCheck}
+            accent="var(--mw-green)"
           />
           <CooperativeStatCard
             label="Membres inactifs"
@@ -337,13 +339,15 @@ function MembersContent() {
             detail=""
             trend=""
             icon={IconAlertTriangle}
+            accent="var(--mw-amber)"
           />
           <CooperativeStatCard
-            label={t.newThisMonth}
+            label="Nouveaux ce mois-ci"
             value={memberStats.nouveauxCeMois}
             detail=""
             trend=""
             icon={IconArrowDown}
+            accent="var(--mw-primary)"
           />
         </section>
       </CooperativeDataState>
@@ -429,7 +433,6 @@ function MembersContent() {
                   <th>{t.accounts}</th>
                   <th>{t.savings}</th>
                   <th>{t.status}</th>
-                  <th>Empreinte</th>
                 </tr>
               </thead>
               <tbody>
@@ -455,7 +458,13 @@ function MembersContent() {
                             .slice(0, 2)
                             .join("")}
                         </span>
-                        <strong>{member.name}</strong>
+                        <span className="coop-member-primary">
+                          <strong>{member.name}</strong>
+                          <span className={`coop-biometric-status${member.empreinteEnregistree ? " is-registered" : " is-pending"}`}>
+                            <IconFingerprint aria-hidden="true" />
+                            {member.empreinteEnregistree ? "Empreinte enregistrée" : "Empreinte à enregistrer"}
+                          </span>
+                        </span>
                       </span>
                     </td>
                     <td>{member.memberNumber}</td>
@@ -475,12 +484,6 @@ function MembersContent() {
                     <td>
                       <CooperativeStatus status={member.status} />
                     </td>
-                    <td>
-                      <span className={`coop-biometric-status${member.empreinteEnregistree ? " is-registered" : " is-pending"}`}>
-                        <IconFingerprint aria-hidden="true" />
-                        {member.empreinteEnregistree ? "Enregistrée" : "À capturer"}
-                      </span>
-                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -494,6 +497,7 @@ function MembersContent() {
           onPageChange={setPage}
           onPageSizeChange={(value) => { setPageSize(value); setPage(1); }}
           itemLabel={t.records}
+          itemLabelSingular="membre"
           previousLabel={t.previous}
           nextLabel={t.next}
         />
