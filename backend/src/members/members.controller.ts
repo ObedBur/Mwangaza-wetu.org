@@ -14,6 +14,7 @@ import {
 } from '@nestjs/common';
 import { MembersService } from './members.service';
 import { CreateMemberDto } from './dto/create-member.dto';
+import { ActivateMemberDto } from './dto/activate-member.dto';
 import { UpdateOwnProfileDto } from './dto/update-own-profile.dto';
 import { Public } from '../auth/jwt-auth.guard';
 import {
@@ -205,8 +206,8 @@ export class MembersController {
 
   @Public()
   @Post('activate')
-  async activate(@Body() body: { token: string; motDePasse: string }) {
-    return this.membersService.activate(body.token, body.motDePasse);
+  async activate(@Body() dto: ActivateMemberDto) {
+    return this.membersService.activate(dto.token, dto.motDePasse);
   }
 
   @Put(':id')

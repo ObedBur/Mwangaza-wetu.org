@@ -29,8 +29,8 @@ function ActivateForm() {
       setErrorMsg("Lien d'activation manquant ou invalide.");
       return;
     }
-    if (password.length < 6) {
-      setErrorMsg('Le mot de passe doit contenir au moins 6 caractères.');
+    if (password.length < 8) {
+      setErrorMsg('Le mot de passe doit contenir au moins 8 caractères.');
       return;
     }
     if (password !== confirm) {

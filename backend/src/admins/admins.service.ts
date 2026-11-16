@@ -180,6 +180,12 @@ export class AdminsService {
         );
       }
       data.motDePasse = await bcrypt.hash(dto.motDePasse, 10);
+      // Un reset administratif doit invalider les sessions existantes et
+      // lever un éventuel verrouillage lié aux échecs de connexion.
+      data.authVersion = { increment: 1 };
+      data.loginFailures = 0;
+      data.loginFailuresSince = null;
+      data.lockedUntil = null;
     } else {
       delete data.motDePasse;
     }

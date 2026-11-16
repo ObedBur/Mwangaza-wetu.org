@@ -2,6 +2,7 @@ import {
   Injectable,
   UnauthorizedException,
   BadRequestException,
+  NotFoundException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
@@ -17,10 +18,23 @@ const INVALID_LOGIN_MESSAGE = 'Identifiants incorrects';
 
 /** Nombre d'échecs avant verrouillage temporaire du compte. */
 const MAX_LOGIN_FAILURES = 10;
+/** Fenêtre glissante dans laquelle les échecs sont comptés. */
+const LOGIN_FAILURE_WINDOW_MS = 15 * 60 * 1000;
 /** Durée du verrouillage : 15 minutes. */
 const LOCK_DURATION_MS = 15 * 60 * 1000;
 
 type LoginRole = 'admin' | 'superadmin' | 'agent' | 'member';
+
+/**
+ * Tables porteuses du verrouillage. Ce sont des constantes internes (jamais
+ * une entrée utilisateur) : l'interpolation du nom de table est donc sûre.
+ */
+const LOCK_TABLES: Record<LoginRole, string> = {
+  admin: 'administrateurs',
+  superadmin: 'administrateurs',
+  agent: 'agents',
+  member: 'membres',
+};
 
 interface LoginCandidate {
   role: LoginRole;
@@ -73,17 +87,17 @@ export class AuthService {
     if (role === 'member') {
       await this.prisma.membre.update({
         where: { id },
-        data: { loginFailures: 0, lockedUntil: null },
+        data: { loginFailures: 0, loginFailuresSince: null, lockedUntil: null },
       });
     } else if (role === 'agent') {
       await this.prisma.agent.update({
         where: { id },
-        data: { loginFailures: 0, lockedUntil: null },
+        data: { loginFailures: 0, loginFailuresSince: null, lockedUntil: null },
       });
     } else if (role === 'admin' || role === 'superadmin') {
       await this.prisma.administrateur.update({
         where: { id },
-        data: { loginFailures: 0, lockedUntil: null },
+        data: { loginFailures: 0, loginFailuresSince: null, lockedUntil: null },
       });
     }
   }
@@ -97,45 +111,94 @@ export class AuthService {
    * Enregistre un échec de connexion et verrouille le compte au seuil.
    * Le compteur est porté par le compte (et non par l'IP) : il protège donc
    * aussi contre le brute-force distribué sur plusieurs adresses IP.
+   *
+   * Les échecs sont comptés sur une fenêtre glissante : hors fenêtre le
+   * compteur repart de zéro, et un verrou expiré ne rallonge jamais le
+   * suivant. Sans cela, un compte verrouillé une première fois le restait
+   * à chaque nouvel échec (verrouillage permanent de fait).
    */
   private async registerLoginFailure(
     role: LoginRole,
     id: number,
   ): Promise<void> {
-    const lockedUntil = new Date(Date.now() + LOCK_DURATION_MS);
+    const table = LOCK_TABLES[role];
+    const now = new Date();
+    const windowStart = new Date(now.getTime() - LOGIN_FAILURE_WINDOW_MS);
+    const lockUntil = new Date(now.getTime() + LOCK_DURATION_MS);
 
-    if (role === 'member') {
-      const member = await this.prisma.membre.update({
-        where: { id },
-        data: { loginFailures: { increment: 1 } },
-        select: { loginFailures: true },
-      });
-      if (member.loginFailures >= MAX_LOGIN_FAILURES) {
-        await this.prisma.membre.update({ where: { id }, data: { lockedUntil } });
-      }
-      return;
+    // 1. Verrou expiré : on repart d'un compteur neuf.
+    await this.prisma.$executeRawUnsafe(
+      `UPDATE "${table}"
+       SET "login_failures" = 0, "login_failures_since" = NULL, "locked_until" = NULL
+       WHERE "id" = $1 AND "locked_until" IS NOT NULL AND "locked_until" <= $2`,
+      id,
+      now,
+    );
+
+    // 2. Hors fenêtre : même remise à zéro.
+    await this.prisma.$executeRawUnsafe(
+      `UPDATE "${table}"
+       SET "login_failures" = 0, "login_failures_since" = $2
+       WHERE "id" = $1
+         AND ("login_failures_since" IS NULL OR "login_failures_since" < $3)`,
+      id,
+      now,
+      windowStart,
+    );
+
+    // 3. Incrément atomique (plusieurs échecs concurrents ne se perdent pas).
+    const rows = await this.prisma.$queryRawUnsafe<
+      Array<{ login_failures: number }>
+    >(
+      `UPDATE "${table}"
+       SET "login_failures" = "login_failures" + 1
+       WHERE "id" = $1
+       RETURNING "login_failures"`,
+      id,
+    );
+
+    const failures = rows[0]?.login_failures ?? 0;
+    if (failures < MAX_LOGIN_FAILURES) return;
+
+    // 4. Seuil atteint : verrou temporaire. Le compteur est remis à zéro pour
+    // qu'après expiration l'utilisateur retrouve une fenêtre complète.
+    await this.prisma.$executeRawUnsafe(
+      `UPDATE "${table}"
+       SET "locked_until" = $2, "login_failures" = 0, "login_failures_since" = NULL
+       WHERE "id" = $1`,
+      id,
+      lockUntil,
+    );
+  }
+
+  /**
+   * Déverrouille un compte (déverrouillage manuel par un administrateur).
+   * À utiliser notamment quand un membre a épuisé ses tentatives et ne peut
+   * pas attendre la fin du verrou.
+   */
+  async unlockAccount(role: LoginRole, id: number) {
+    const table = LOCK_TABLES[role];
+    const updated = await this.prisma.$executeRawUnsafe(
+      `UPDATE "${table}"
+       SET "login_failures" = 0, "login_failures_since" = NULL, "locked_until" = NULL
+       WHERE "id" = $1`,
+      id,
+    );
+
+    if (updated === 0) {
+      throw new NotFoundException('Compte introuvable');
     }
 
-    if (role === 'agent') {
-      const agent = await this.prisma.agent.update({
-        where: { id },
-        data: { loginFailures: { increment: 1 } },
-        select: { loginFailures: true },
-      });
-      if (agent.loginFailures >= MAX_LOGIN_FAILURES) {
-        await this.prisma.agent.update({ where: { id }, data: { lockedUntil } });
-      }
-      return;
-    }
-
-    const admin = await this.prisma.administrateur.update({
-      where: { id },
-      data: { loginFailures: { increment: 1 } },
-      select: { loginFailures: true },
+    await this.prisma.adminLog.create({
+      data: {
+        action: 'ACCOUNT_UNLOCKED',
+        details: `Déverrouillage du compte ${role} #${id}.`,
+        success: true,
+        userId: id,
+      },
     });
-    if (admin.loginFailures >= MAX_LOGIN_FAILURES) {
-      await this.prisma.administrateur.update({ where: { id }, data: { lockedUntil } });
-    }
+
+    return { success: true, message: 'Compte déverrouillé.' };
   }
 
   async loginUnified(loginDto: LoginDto) {
@@ -358,7 +421,13 @@ export class AuthService {
     await this.prisma.$transaction(async (tx) => {
       await tx.membre.update({
         where: { id: member.id },
-        data: { motDePasse: passwordHash, authVersion: { increment: 1 } },
+        data: {
+          motDePasse: passwordHash,
+          authVersion: { increment: 1 },
+          loginFailures: 0,
+          loginFailuresSince: null,
+          lockedUntil: null,
+        },
       });
       await tx.adminLog.create({
         data: {
@@ -400,7 +469,13 @@ export class AuthService {
     await this.prisma.$transaction(async (tx) => {
       await tx.administrateur.update({
         where: { id: admin.id },
-        data: { motDePasse: passwordHash, authVersion: { increment: 1 } },
+        data: {
+          motDePasse: passwordHash,
+          authVersion: { increment: 1 },
+          loginFailures: 0,
+          loginFailuresSince: null,
+          lockedUntil: null,
+        },
       });
       await tx.adminLog.create({
         data: {

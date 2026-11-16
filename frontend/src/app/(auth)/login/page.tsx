@@ -548,7 +548,7 @@ function LoginForm() {
                   onChange={(e) => setRememberMe(e.target.checked)}
                   className="h-4 w-4 rounded border-slate-300 accent-slate-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
                 />
-                <span>Rester connecté</span>
+                <span>Garder ma session sur cet appareil pendant 24 h</span>
               </label>
 
               <Link

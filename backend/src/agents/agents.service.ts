@@ -217,12 +217,16 @@ export class AgentsService {
           where: { id: userId },
           data: {
             motDePasse: await bcrypt.hash(dto.newPassword, 12),
+            authVersion: { increment: 1 },
+            loginFailures: 0,
+            loginFailuresSince: null,
+            lockedUntil: null,
           },
         });
         await tx.adminLog.create({
           data: {
             action: 'ADMIN_PASSWORD_CHANGED',
-            details: `L’administrateur #${userId} (${admin.email}) a modifié son mot de passe.`,
+            details: `L’administrateur #${userId} (${admin.email}) a modifié son mot de passe. Ses sessions existantes ont été révoquées.`,
             success: true,
             userId: userId,
           },
@@ -247,6 +251,9 @@ export class AgentsService {
         data: {
           motDePasse: await bcrypt.hash(dto.newPassword, 12),
           authVersion: { increment: 1 },
+          loginFailures: 0,
+          loginFailuresSince: null,
+          lockedUntil: null,
         },
       });
       await tx.adminLog.create({
@@ -329,6 +336,9 @@ export class AgentsService {
         ...(dto.motDePasse !== undefined && {
           motDePasse: await bcrypt.hash(dto.motDePasse, 10),
           authVersion: { increment: 1 },
+          loginFailures: 0,
+          loginFailuresSince: null,
+          lockedUntil: null,
         }),
       },
     });

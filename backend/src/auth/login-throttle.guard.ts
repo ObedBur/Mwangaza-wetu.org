@@ -20,14 +20,31 @@ export class LoginThrottleGuard implements CanActivate {
 
   /**
    * Réinitialise les compteurs après une connexion réussie.
-   * On purge TOUS les buckets de l'IP (limite globale et limites par
-   * identifiant) pour que les connexions légitimes ne consomment jamais
-   * le quota d'échecs — sinon un bureau en NAT se retrouve bloqué après
-   * quelques dizaines de connexions normales.
+   *
+   * On ne purge QUE le bucket (IP, identifiant) de la connexion réussie, et on
+   * décrémente le bucket global de l'IP : les échecs essuyés sur d'autres
+   * comptes restent comptabilisés. Purger tous les buckets de l'IP permettait
+   * à un attaquant disposant d'un compte valide de remettre ses compteurs à
+   * zéro à volonté (et donc de contourner la limitation par identifiant).
    */
   async resetAfterSuccessfulLogin(request: Request) {
     const ip = request.ip || request.socket.remoteAddress || 'unknown';
-    await this.prisma.loginAttempt.deleteMany({ where: { ip } });
+    const identifier = this.getIdentifier(request);
+
+    await this.prisma.$transaction([
+      // Le succès efface les échecs du compte concerné pour cette IP.
+      ...(identifier
+        ? [this.prisma.loginAttempt.deleteMany({ where: { ip, identifier } })]
+        : []),
+      // Le bucket global compte aussi les succès : on retire uniquement la
+      // tentative courante pour que les connexions légitimes en NAT ne
+      // consomment pas le quota d'échecs.
+      this.prisma.$executeRaw`
+        UPDATE "login_attempts"
+        SET "count" = GREATEST("count" - 1, 0), "updated_at" = now()
+        WHERE "ip" = ${ip} AND "identifier" = ''
+      `,
+    ]);
   }
 
   async canActivate(context: ExecutionContext): Promise<boolean> {

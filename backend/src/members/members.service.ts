@@ -23,6 +23,7 @@ import * as path from 'path';
 import * as crypto from 'crypto';
 import {
   Prisma,
+  Membre,
   StatutMembre as PrismaStatutMembre,
   Devise,
   TypeOperationEpargne,
@@ -790,6 +791,12 @@ export class MembersService {
       } else {
         data.motDePasse = updateDto.motDePasse;
       }
+      // Un reset administratif invalide les sessions en cours et lève le
+      // verrouillage éventuel.
+      data.authVersion = { increment: 1 };
+      data.loginFailures = 0;
+      data.loginFailuresSince = null;
+      data.lockedUntil = null;
     }
 
     if (updateDto.nomComplet) data.nomComplet = updateDto.nomComplet;
@@ -845,7 +852,7 @@ export class MembersService {
       }
     }
 
-    let updatedMembre;
+    let updatedMembre!: Membre;
     try {
       updatedMembre = await this.prisma.$transaction(async (tx) => {
       const updatedMembre = await tx.membre.update({
@@ -915,7 +922,10 @@ export class MembersService {
           ]
         : []),
     ]);
-    return updatedMembre;
+    // Ne jamais renvoyer le hash de mot de passe dans la réponse API.
+    const safeMembre = { ...updatedMembre };
+    Reflect.deleteProperty(safeMembre, 'motDePasse');
+    return safeMembre;
   }
 
   async remove(id: number) {
@@ -1303,16 +1313,51 @@ export class MembersService {
       throw new BadRequestException("Lien d'activation invalide ou expiré");
     }
 
-    const hashedPassword = await bcrypt.hash(password, 10);
+    const hashedPassword = await bcrypt.hash(password, 12);
 
-    return this.prisma.membre.update({
+    const activated = await this.prisma.membre.update({
       where: { id: membre.id },
       data: {
         motDePasse: hashedPassword,
         isActivated: true,
         activationToken: null,
         activationExpires: null,
+        // Le mot de passe est (re)défini : on invalide toute session
+        // antérieure et on repart d'un état de verrouillage propre.
+        authVersion: { increment: 1 },
+        loginFailures: 0,
+        loginFailuresSince: null,
+        lockedUntil: null,
+      },
+      // Ne jamais renvoyer le hash ni les données personnelles du membre.
+      select: {
+        id: true,
+        numeroCompte: true,
+        nomComplet: true,
+        email: true,
       },
     });
+
+    // Une panne du journal d'audit ne doit pas empêcher l'activation.
+    try {
+      await this.prisma.adminLog.create({
+        data: {
+          action: 'MEMBER_ACTIVATED',
+          details: `Le membre #${activated.id} a activé son compte.`,
+          success: true,
+          userId: activated.id,
+        },
+      });
+    } catch (error) {
+      this.logger.warn(
+        `Journal d'activation non écrit pour le membre #${activated.id} : ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+
+    return {
+      success: true,
+      message: 'Compte activé avec succès.',
+      membre: activated,
+    };
   }
 }

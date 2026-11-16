@@ -8,6 +8,7 @@ import { ADMIN_ROLES, Roles } from '../common/decorators/roles.decorator';
 import type { AuthenticatedRequest } from '../common/types/auth-request';
 import { ChangeMemberPasswordDto } from './dto/change-member-password.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
+import { UnlockAccountDto } from './dto/unlock-account.dto';
 import { LoginThrottleGuard } from './login-throttle.guard';
 import { CSRF_COOKIE_NAME, SESSION_COOKIE_NAME, readRequestCookie } from './auth-cookies';
 
@@ -88,6 +89,13 @@ export class AuthController {
     response.clearCookie(SESSION_COOKIE_NAME, { path: '/', httpOnly: true, secure, sameSite });
     response.clearCookie(CSRF_COOKIE_NAME, { path: '/', secure, sameSite });
     return { success: true };
+  }
+
+  @Private()
+  @Roles(...ADMIN_ROLES)
+  @Post('unlock')
+  async unlock(@Body() dto: UnlockAccountDto) {
+    return this.authService.unlockAccount(dto.role, dto.id);
   }
 
   @Private()
