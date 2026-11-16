@@ -5880,6 +5880,33 @@
   flex: 1;
 }
 
+@media (max-width: 768px) {
+  /* Let the member panels participate in the single-column mobile layout. */
+  .dashboard-middle {
+    display: contents;
+  }
+
+  .dashboard-middle .chart-region,
+  .dashboard-middle .accounts-region,
+  .dashboard-middle .chart-region > .portal-panel,
+  .dashboard-middle .accounts-region > .portal-panel {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .member-chart-plot,
+  .member-chart-svg {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .member-hub-profile,
+  .member-hub-credit-banner {
+    flex-wrap: wrap;
+  }
+}
+
 /* ── Empty States élégants et équilibrés ── */
 .dashboard-empty-state {
   display: flex;
