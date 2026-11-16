@@ -27,7 +27,7 @@ export class AuthController {
     @Res({ passthrough: true }) response: Response,
   ) {
     const result = await this.authService.loginUnified(loginDto);
-    await this.loginThrottleGuard.resetIdentifier(request);
+    await this.loginThrottleGuard.resetAfterSuccessfulLogin(request);
     return this.createSession(response, result, loginDto.rememberMe !== false);
   }
 
@@ -35,7 +35,7 @@ export class AuthController {
   @UseGuards(LoginThrottleGuard)
   async loginAdmin(@Body() loginDto: LoginDto, @Req() request: ExpressRequest, @Res({ passthrough: true }) response: Response) {
     const result = await this.authService.loginAdmin(loginDto);
-    await this.loginThrottleGuard.resetIdentifier(request);
+    await this.loginThrottleGuard.resetAfterSuccessfulLogin(request);
     return this.createSession(response, result, loginDto.rememberMe !== false);
   }
 
@@ -43,7 +43,7 @@ export class AuthController {
   @UseGuards(LoginThrottleGuard)
   async loginMember(@Body() loginDto: LoginDto, @Req() request: ExpressRequest, @Res({ passthrough: true }) response: Response) {
     const result = await this.authService.loginMember(loginDto);
-    await this.loginThrottleGuard.resetIdentifier(request);
+    await this.loginThrottleGuard.resetAfterSuccessfulLogin(request);
     return this.createSession(response, result, loginDto.rememberMe !== false);
   }
 
@@ -51,7 +51,7 @@ export class AuthController {
   @UseGuards(LoginThrottleGuard)
   async loginAgent(@Body() loginDto: LoginDto, @Req() request: ExpressRequest, @Res({ passthrough: true }) response: Response) {
     const result = await this.authService.loginAgent(loginDto);
-    await this.loginThrottleGuard.resetIdentifier(request);
+    await this.loginThrottleGuard.resetAfterSuccessfulLogin(request);
     return this.createSession(response, result, loginDto.rememberMe !== false);
   }
 
@@ -75,7 +75,14 @@ export class AuthController {
   }
 
   @Post('logout')
-  logout(@Res({ passthrough: true }) response: Response) {
+  async logout(
+    @Req() request: ExpressRequest,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const token =
+      readRequestCookie(request, SESSION_COOKIE_NAME) ??
+      request.get('authorization')?.replace(/^Bearer\s+/i, '');
+    await this.authService.revokeSession(token);
     const secure = process.env.NODE_ENV === 'production';
     const sameSite = secure ? 'none' : 'lax';
     response.clearCookie(SESSION_COOKIE_NAME, { path: '/', httpOnly: true, secure, sameSite });

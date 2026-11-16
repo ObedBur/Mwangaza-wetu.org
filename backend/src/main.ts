@@ -1,5 +1,6 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
 import { json, urlencoded } from 'express';
 import { join } from 'path';
@@ -8,7 +9,21 @@ import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { SecurityHeadersMiddleware } from './middleware/security-headers.middleware';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+
+  // L'API tourne derrière le proxy de Render (1 hop). Sans ce réglage,
+  // req.ip vaut l'IP du load-balancer pour tous les visiteurs : le limiteur
+  // de connexion partage alors un seul compteur et peut bloquer la
+  // plateforme entière. Ne jamais mettre `true` (X-Forwarded-For spoofable).
+  const trustProxy =
+    process.env.TRUST_PROXY ||
+    (process.env.NODE_ENV === 'production' ? '1' : '');
+  if (trustProxy) {
+    app.set(
+      'trust proxy',
+      /^\d+$/.test(trustProxy) ? Number(trustProxy) : trustProxy,
+    );
+  }
 
   // En-têtes de sécurité sur toutes les réponses
   const securityHeaders = new SecurityHeadersMiddleware();

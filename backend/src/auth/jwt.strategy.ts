@@ -6,6 +6,7 @@ import type { Request } from 'express';
 import { PrismaService } from '../prisma/prisma.service';
 import type { AuthUser } from '../common/types/auth-request';
 import { SESSION_COOKIE_NAME, readRequestCookie } from './auth-cookies';
+import { SessionRevocationService } from './session-revocation.service';
 
 /** Shape of the JWT signed by AuthService */
 export interface JwtPayload {
@@ -16,6 +17,9 @@ export interface JwtPayload {
   fullName?: string;
   guichet?: string;
   authVersion?: number;
+  /** Identifiant unique du jeton, utilisé pour la révocation (logout). */
+  jti?: string;
+  exp?: number;
 }
 
 const REVOKED_MESSAGE =
@@ -26,6 +30,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor(
     configService: ConfigService,
     private readonly prisma: PrismaService,
+    private readonly sessionRevocation: SessionRevocationService,
   ) {
     super({
       jwtFromRequest: ExtractJwt.fromExtractors([
@@ -46,6 +51,12 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   async validate(payload: JwtPayload): Promise<AuthUser> {
     if (typeof payload.id !== 'number' || !payload.role) {
       throw new UnauthorizedException('Session invalide');
+    }
+
+    // Jeton révoqué explicitement (déconnexion) : refus immédiat, même si
+    // sa signature et sa date d'expiration sont encore valides.
+    if (await this.sessionRevocation.isRevoked(payload.jti)) {
+      throw new UnauthorizedException(REVOKED_MESSAGE);
     }
 
     if (payload.role === 'member') {

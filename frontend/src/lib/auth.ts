@@ -2,10 +2,12 @@ import axios from 'axios';
 import { AuthUser, LoginResponse, AuthMeResponse, UserRole } from '@/types/auth';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
-const CSRF_COOKIE = 'mwangaza_csrf';
+const MUTATING_METHODS = new Set(['post', 'put', 'patch', 'delete']);
 
 // Jeton CSRF stocké en mémoire (plus lisible via document.cookie car cookie HttpOnly)
 let csrfToken: string | null = null;
+// Requête de récupération en cours : évite d'en lancer plusieurs en parallèle.
+let csrfTokenRequest: Promise<string> | null = null;
 
 export const apiClient = axios.create({
   baseURL: API_URL,
@@ -64,21 +66,43 @@ function extractAxiosError(err: unknown): string {
   return 'Erreur de connexion.';
 }
 
-// Récupère le jeton CSRF depuis l'endpoint dédié (le cookie est HttpOnly, illisible par JS)
+// Récupère le jeton CSRF depuis l'endpoint dédié (le cookie est HttpOnly, illisible par JS).
+// Après un rechargement de page, la mémoire est vide : on le récupère à la demande
+// dans l'intercepteur ci-dessous, sinon toute mutation partirait sans en-tête (403).
 export async function fetchCsrfToken(): Promise<string> {
   if (csrfToken) return csrfToken;
-  try {
-    const response = await apiClient.get<{ csrfToken: string }>('/auth/csrf-token');
-    csrfToken = response.data.csrfToken;
-    return csrfToken;
-  } catch (err) {
-    throw new Error(extractAxiosError(err));
+  if (!csrfTokenRequest) {
+    csrfTokenRequest = apiClient
+      .get<{ csrfToken: string }>('/auth/csrf-token')
+      .then((response) => {
+        csrfToken = response.data.csrfToken;
+        return csrfToken;
+      })
+      .catch((err: unknown) => {
+        throw new Error(extractAxiosError(err));
+      })
+      .finally(() => {
+        csrfTokenRequest = null;
+      });
   }
+  return csrfTokenRequest;
 }
 
 // Le JWT reste en cookie HttpOnly; le jeton CSRF est envoyé via l'en-tête X-CSRF-Token.
 apiClient.interceptors.request.use(async (config) => {
-  if (typeof window !== 'undefined' && csrfToken) {
+  if (typeof window === 'undefined') return config;
+
+  const method = (config.method ?? 'get').toLowerCase();
+  if (MUTATING_METHODS.has(method) && !csrfToken) {
+    try {
+      await fetchCsrfToken();
+    } catch {
+      // Sans jeton, le backend répondra 403 : on laisse la requête partir
+      // pour remonter l'erreur réelle à l'appelant.
+    }
+  }
+
+  if (csrfToken) {
     config.headers['X-CSRF-Token'] = csrfToken;
   }
   return config;
@@ -88,7 +112,29 @@ apiClient.interceptors.request.use(async (config) => {
 apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (typeof window !== 'undefined' && error.response?.status === 401) {
+    if (typeof window === 'undefined') {
+      return Promise.reject(error);
+    }
+
+    // Jeton CSRF expiré/invalide (ex. cookie renouvelé côté serveur) :
+    // on le récupère une fois puis on rejoue la requête.
+    const status = error.response?.status;
+    const message = String(error.response?.data?.message ?? '');
+    const retryable = error.config as
+      | (typeof error.config & { __csrfRetry?: boolean })
+      | undefined;
+    if (
+      status === 403 &&
+      message.toLowerCase().includes('csrf') &&
+      retryable &&
+      !retryable.__csrfRetry
+    ) {
+      csrfToken = null;
+      retryable.__csrfRetry = true;
+      return apiClient.request(retryable);
+    }
+
+    if (error.response?.status === 401) {
       // Nettoyage en cas de session expirée ou invalide
       clearAuthSession();
       if (!window.location.pathname.startsWith('/login')) {
@@ -124,8 +170,15 @@ export function getAuthUser(): AuthUser | null {
 export function clearAuthSession(): void {
   if (typeof window === 'undefined') return;
   document.cookie = `${ROLE_COOKIE}=; path=/; max-age=0`;
-  document.cookie = `${CSRF_COOKIE}=; path=/; max-age=0`;
-  void fetch(`${API_URL}/auth/logout`, { method: 'POST', credentials: 'include' }).catch(() => undefined);
+  // Le cookie CSRF est HttpOnly : seul le serveur peut le supprimer (via /auth/logout).
+  const token = csrfToken;
+  csrfToken = null;
+  csrfTokenRequest = null;
+  void fetch(`${API_URL}/auth/logout`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: token ? { 'X-CSRF-Token': token } : undefined,
+  }).catch(() => undefined);
 }
 
 /** Déconnexion : purge la session puis renvoie vers /login. */

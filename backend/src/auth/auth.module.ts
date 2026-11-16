@@ -7,6 +7,7 @@ import { PrismaModule } from '../prisma/prisma.module';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtStrategy } from './jwt.strategy';
 import { LoginThrottleGuard } from './login-throttle.guard';
+import { SessionRevocationService } from './session-revocation.service';
 import { RedisModule } from '../redis/redis.module';
 
 @Module({
@@ -23,9 +24,9 @@ import { RedisModule } from '../redis/redis.module';
       }),
     }),
   ],
-  providers: [AuthService, JwtStrategy, LoginThrottleGuard],
+  providers: [AuthService, JwtStrategy, LoginThrottleGuard, SessionRevocationService],
   controllers: [AuthController],
-  exports: [AuthService, JwtStrategy],
+  exports: [AuthService, JwtStrategy, SessionRevocationService],
 })
 export class AuthModule {}
 

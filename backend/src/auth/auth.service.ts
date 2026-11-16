@@ -7,18 +7,64 @@ import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
 import { LoginDto } from './dto/login.dto';
 import * as bcrypt from 'bcrypt';
+import { randomUUID } from 'node:crypto';
 import { Administrateur, Membre, Agent } from '@prisma/client';
 import type { AuthUser } from '../common/types/auth-request';
+import { SessionRevocationService } from './session-revocation.service';
 
 const DUMMY_PASSWORD_HASH = '$2b$12$It432ShYcsQ0kRyH7jJnk.Hq88W2iZA1/PjnL4JDTYjRJ3vNoU33e';
 const INVALID_LOGIN_MESSAGE = 'Identifiants incorrects';
+
+/** Nombre d'échecs avant verrouillage temporaire du compte. */
+const MAX_LOGIN_FAILURES = 10;
+/** Durée du verrouillage : 15 minutes. */
+const LOCK_DURATION_MS = 15 * 60 * 1000;
+
+type LoginRole = 'admin' | 'superadmin' | 'agent' | 'member';
+
+interface LoginCandidate {
+  role: LoginRole;
+  id: number;
+  passwordHash: string;
+  lockedUntil: Date | null;
+}
 
 @Injectable()
 export class AuthService {
   constructor(
     private prisma: PrismaService,
     private jwtService: JwtService,
+    private readonly sessionRevocation: SessionRevocationService,
   ) {}
+
+  /**
+   * Signe un JWT avec un identifiant unique (`jti`) qui permet de le
+   * révoquer explicitement lors de la déconnexion.
+   */
+  private signToken(payload: object): string {
+    return this.jwtService.sign(payload, { jwtid: randomUUID() });
+  }
+
+  /**
+   * Révoque la session portée par le jeton fourni (logout).
+   * Un jeton expiré ou invalide n'a rien à révoquer.
+   */
+  async revokeSession(token: string | null | undefined): Promise<void> {
+    if (!token) return;
+
+    try {
+      const payload = this.jwtService.verify<{ jti?: string; exp?: number }>(
+        token,
+      );
+      if (!payload.jti) return;
+
+      const expiresAt =
+        payload.exp ?? Math.floor(Date.now() / 1000) + 24 * 60 * 60;
+      await this.sessionRevocation.revoke(payload.jti, expiresAt);
+    } catch {
+      // Jeton absent, expiré ou invalide : rien à révoquer.
+    }
+  }
 
   private async resetLoginFailures(
     role: string,
@@ -39,6 +85,56 @@ export class AuthService {
         where: { id },
         data: { loginFailures: 0, lockedUntil: null },
       });
+    }
+  }
+
+  /** Le compte est-il temporairement verrouillé ? */
+  private isLocked(lockedUntil: Date | null): boolean {
+    return Boolean(lockedUntil && lockedUntil.getTime() > Date.now());
+  }
+
+  /**
+   * Enregistre un échec de connexion et verrouille le compte au seuil.
+   * Le compteur est porté par le compte (et non par l'IP) : il protège donc
+   * aussi contre le brute-force distribué sur plusieurs adresses IP.
+   */
+  private async registerLoginFailure(
+    role: LoginRole,
+    id: number,
+  ): Promise<void> {
+    const lockedUntil = new Date(Date.now() + LOCK_DURATION_MS);
+
+    if (role === 'member') {
+      const member = await this.prisma.membre.update({
+        where: { id },
+        data: { loginFailures: { increment: 1 } },
+        select: { loginFailures: true },
+      });
+      if (member.loginFailures >= MAX_LOGIN_FAILURES) {
+        await this.prisma.membre.update({ where: { id }, data: { lockedUntil } });
+      }
+      return;
+    }
+
+    if (role === 'agent') {
+      const agent = await this.prisma.agent.update({
+        where: { id },
+        data: { loginFailures: { increment: 1 } },
+        select: { loginFailures: true },
+      });
+      if (agent.loginFailures >= MAX_LOGIN_FAILURES) {
+        await this.prisma.agent.update({ where: { id }, data: { lockedUntil } });
+      }
+      return;
+    }
+
+    const admin = await this.prisma.administrateur.update({
+      where: { id },
+      data: { loginFailures: { increment: 1 } },
+      select: { loginFailures: true },
+    });
+    if (admin.loginFailures >= MAX_LOGIN_FAILURES) {
+      await this.prisma.administrateur.update({ where: { id }, data: { lockedUntil } });
     }
   }
 
@@ -68,35 +164,61 @@ export class AuthService {
       }),
     ]);
 
-    const candidate =
-      (admin?.actif && { role: 'admin' as const, passwordHash: admin.motDePasse, id: admin.id }) ||
-      (agent?.actif && agent.motDePasse && { role: 'agent' as const, passwordHash: agent.motDePasse, id: agent.id }) ||
-      (member?.isActivated && member.motDePasse && { role: 'member' as const, passwordHash: member.motDePasse, id: member.id }) ||
+    const candidate: LoginCandidate | null =
+      (admin?.actif && {
+        role: admin.role as LoginRole,
+        passwordHash: admin.motDePasse,
+        id: admin.id,
+        lockedUntil: admin.lockedUntil,
+      }) ||
+      (agent?.actif && agent.motDePasse && {
+        role: 'agent' as const,
+        passwordHash: agent.motDePasse,
+        id: agent.id,
+        lockedUntil: agent.lockedUntil,
+      }) ||
+      (member?.isActivated && member.motDePasse && {
+        role: 'member' as const,
+        passwordHash: member.motDePasse,
+        id: member.id,
+        lockedUntil: member.lockedUntil,
+      }) ||
       null;
+    // La comparaison bcrypt est faite même pour un compte verrouillé (avec le
+    // hash factice si besoin) afin de ne pas introduire d'oracle temporel.
     const passwordValid = await bcrypt.compare(password, candidate?.passwordHash ?? DUMMY_PASSWORD_HASH);
 
-    if (!candidate || !passwordValid) {
+    if (!candidate) {
+      throw new UnauthorizedException(INVALID_LOGIN_MESSAGE);
+    }
+
+    if (this.isLocked(candidate.lockedUntil)) {
+      throw new UnauthorizedException(INVALID_LOGIN_MESSAGE);
+    }
+
+    if (!passwordValid) {
+      await this.registerLoginFailure(candidate.role, candidate.id);
       throw new UnauthorizedException(INVALID_LOGIN_MESSAGE);
     }
 
     // Réinitialise les échecs en cas de succès
     await this.resetLoginFailures(candidate.role, candidate.id);
 
-    if (candidate.role === 'admin' && admin) {
+    if ((candidate.role === 'admin' || candidate.role === 'superadmin') && admin) {
       const user = {
         id: admin.id, email: admin.email, accountNumber: admin.numeroCompte,
         role: admin.role, authVersion: admin.authVersion, lastName: admin.nom,
         firstName: admin.prenom, fullName: `${admin.prenom} ${admin.nom}`,
         profilePhoto: admin.photoProfil,
       };
-      return { success: true, message: 'Connexion réussie', token: this.jwtService.sign(user), user };
+      return { success: true, message: 'Connexion réussie', token: this.signToken(user), user };
     }
     if (candidate.role === 'agent' && agent) {
       const user = {
         id: agent.id, email: agent.email, accountNumber: null, role: 'agent',
         fullName: agent.nom, guichet: agent.guichetAssigne, authVersion: agent.authVersion,
       };
-      return { success: true, message: 'Connexion réussie', token: this.jwtService.sign(user), user };
+      return { success: true, message: 'Connexion réussie', token: this.signToken(user), user };
     }
     if (candidate.role === 'member' && member) {
       const user = {
@@ -104,7 +226,7 @@ export class AuthService {
         role: 'member', authVersion: member.authVersion, fullName: member.nomComplet,
         section: member.typeCompte, profilePhoto: member.photoProfil,
       };
-      return { success: true, message: 'Connexion réussie', token: this.jwtService.sign(user), user };
+      return { success: true, message: 'Connexion réussie', token: this.signToken(user), user };
     }
     throw new UnauthorizedException(INVALID_LOGIN_MESSAGE);
   }
@@ -124,7 +246,14 @@ export class AuthService {
     }
 
     const isValid = await bcrypt.compare(password, admin?.motDePasse ?? DUMMY_PASSWORD_HASH);
-    if (!admin || !admin.actif || !isValid) {
+    if (!admin) {
+      throw new UnauthorizedException(INVALID_LOGIN_MESSAGE);
+    }
+    if (this.isLocked(admin.lockedUntil)) {
+      throw new UnauthorizedException(INVALID_LOGIN_MESSAGE);
+    }
+    if (!admin.actif || !isValid) {
+      await this.registerLoginFailure(admin.role, admin.id);
       throw new UnauthorizedException(INVALID_LOGIN_MESSAGE);
     }
 
@@ -146,7 +275,7 @@ export class AuthService {
     return {
       success: true,
       message: 'Connexion réussie',
-      token: this.jwtService.sign(payload),
+      token: this.signToken(payload),
       user: payload,
     };
   }
@@ -166,7 +295,14 @@ export class AuthService {
     }
 
     const isValid = await bcrypt.compare(password, member?.motDePasse ?? DUMMY_PASSWORD_HASH);
-    if (!member || !member.motDePasse || !member.isActivated || !isValid) {
+    if (!member) {
+      throw new UnauthorizedException(INVALID_LOGIN_MESSAGE);
+    }
+    if (this.isLocked(member.lockedUntil)) {
+      throw new UnauthorizedException(INVALID_LOGIN_MESSAGE);
+    }
+    if (!member.motDePasse || !member.isActivated || !isValid) {
+      await this.registerLoginFailure('member', member.id);
       throw new UnauthorizedException(INVALID_LOGIN_MESSAGE);
     }
 
@@ -184,7 +320,7 @@ export class AuthService {
     return {
       success: true,
       message: 'Connexion membre réussie',
-      token: this.jwtService.sign(payload),
+      token: this.signToken(payload),
       user: {
         ...payload,
         fullName: member.nomComplet,
@@ -294,7 +430,14 @@ export class AuthService {
     });
 
     const isValid = await bcrypt.compare(password, agent?.motDePasse ?? DUMMY_PASSWORD_HASH);
-    if (!agent || !agent.actif || !agent.motDePasse || !isValid) {
+    if (!agent) {
+      throw new UnauthorizedException(INVALID_LOGIN_MESSAGE);
+    }
+    if (this.isLocked(agent.lockedUntil)) {
+      throw new UnauthorizedException(INVALID_LOGIN_MESSAGE);
+    }
+    if (!agent.actif || !agent.motDePasse || !isValid) {
+      await this.registerLoginFailure('agent', agent.id);
       throw new UnauthorizedException(INVALID_LOGIN_MESSAGE);
     }
 
@@ -314,7 +457,7 @@ export class AuthService {
     return {
       success: true,
       message: 'Connexion agent réussie',
-      token: this.jwtService.sign(payload),
+      token: this.signToken(payload),
       user: payload,
     };
   }

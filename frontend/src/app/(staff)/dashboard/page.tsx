@@ -22,13 +22,38 @@ import {
   IconWallet,
 } from "@tabler/icons-react";
 import { useEffect, useMemo, useState } from "react";
+import { fakerFR as faker } from "@faker-js/faker";
 
 import { CooperativePagination } from "@/components/cooperative/CooperativePagination";
 import { DashboardSkeleton } from "@/components/cooperative/DashboardSkeleton";
-import { getAuthUser } from "@/lib/auth";
+import { fetchCurrentUser, getAuthUser } from "@/lib/auth";
 import { apiClient } from "@/lib/auth";
 
 const activityPalette = ["#286e4d", "#ebaF39", "#91a673", "#b4c4b3", "#65869a", "#e56a1e"];
+
+function makeDemoDashboard(): { dashboard: DashboardResponse; transactions: Transaction[]; reminders: Reminder[] } {
+  const now = new Date();
+  const dateDaysAgo = (days: number) => new Date(now.getTime() - days * 86400000).toISOString();
+  const history = Array.from({ length: 12 }, (_, index) => {
+    const date = new Date(now.getFullYear(), now.getMonth() - 11 + index, 1);
+    const depotsFC = faker.number.int({ min: 200000, max: 1800000 });
+    return { month: `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`, depotsUSD: faker.number.int({ min: 20, max: 700 }), retraitsUSD: faker.number.int({ min: 10, max: 300 }), creditsUSD: faker.number.int({ min: 20, max: 500 }), depotsFC, retraitsFC: Math.round(depotsFC * .35), creditsFC: Math.round(depotsFC * .45) };
+  });
+  const dailyHistory = Array.from({ length: 90 }, (_, index) => {
+    const date = new Date(now.getTime() - (89 - index) * 86400000);
+    return { date: date.toISOString().slice(0, 10), epargneUSD: faker.number.int({ min: 0, max: 180 }), retraitUSD: faker.number.int({ min: 0, max: 90 }), creditUSD: faker.number.int({ min: 0, max: 150 }), epargneFC: faker.number.int({ min: 0, max: 450000 }), retraitFC: faker.number.int({ min: 0, max: 180000 }), creditFC: faker.number.int({ min: 0, max: 350000 }) };
+  });
+  const types = ["PRINCIPAL", "KELASI", "NYUMBA", "HOPITAL", "MUTOTO", "BIASHARA"];
+  const dashboard: DashboardResponse = {
+    overview: { totalMembers: 248, activeMembersCount: 231, totalEpargne: { usd: 18450, fc: 28650000 }, totalCaisse: { usd: 4280, fc: 8150000 }, activeCreditBalance: { usd: 9280, fc: 14750000 }, activeCreditsCount: 34, pendingOperationsCount: 4, membershipsExpiringSoonCount: 7, datsDueSoonCount: 3, overdueCreditsCount: 5, overdueCreditBalance: { usd: 1180, fc: 1950000 }, repaymentRate: 78, activeProjectsCount: 3, datStats: { activeCount: 12, totalCapitalUSD: 4200, totalCapitalFC: 5800000 } },
+    savingsByType: types.map((typeCompte) => ({ typeCompte, totalUSD: faker.number.int({ min: 500, max: 6000 }), totalFC: faker.number.int({ min: 500000, max: 8000000 }), totalAccounts: faker.number.int({ min: 12, max: 70 }) })),
+    agentsCaisses: Array.from({ length: 4 }, (_, index) => ({ id: index + 1, nom: faker.person.fullName(), guichetAssigne: `Guichet ${index + 1}`, actif: true, soldes: { usd: faker.number.int({ min: 100, max: 1500 }), fc: faker.number.int({ min: 150000, max: 2500000 }) } })),
+    history, dailyHistory, activityDistribution: ["Commerce", "Agriculture", "Élevage", "Artisanat", "Autre"].map((activite) => ({ activite, total: faker.number.int({ min: 12, max: 80 }) })),
+  };
+  const transactions: Transaction[] = Array.from({ length: 18 }, (_, index) => { const name = faker.person.fullName(); return { id: `demo-${index}`, name, initials: name.split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase(), type: faker.helpers.arrayElement(["Dépôt", "Retrait", "Crédit", "Remboursement"]), amount: faker.number.int({ min: 15, max: 850 }), currency: faker.helpers.arrayElement(["USD", "FC"]), date: new Intl.DateTimeFormat("fr-FR", { dateStyle: "medium" }).format(new Date(dateDaysAgo(index))), status: faker.helpers.arrayElement(["valid", "valid", "pending", "rejected"]) }; });
+  const reminders: Reminder[] = Array.from({ length: 5 }, (_, index) => { const diffDays = index < 2 ? -faker.number.int({ min: 1, max: 12 }) : faker.number.int({ min: 1, max: 25 }); return { id: 9000 + index, name: faker.person.fullName(), telephone: faker.phone.number(), detail: diffDays < 0 ? `En retard (${Math.abs(diffDays)} j)` : `Dans ${diffDays} j`, dueDate: new Date(now.getTime() + diffDays * 86400000).toISOString(), amount: money(faker.number.int({ min: 100, max: 1200 }), "USD"), isOverdue: diffDays < 0, diffDays }; });
+  return { dashboard, transactions, reminders };
+}
 
 type Transaction = {
   id: string;
@@ -50,6 +75,9 @@ type DashboardResponse = {
     totalRetrait?: { usd: number; fc: number };
     activeCreditBalance: { usd: number; fc: number };
     activeCreditsCount: number;
+    pendingOperationsCount?: number;
+    membershipsExpiringSoonCount?: number;
+    datsDueSoonCount?: number;
     overdueCreditsCount?: number;
     overdueCreditBalance?: { usd: number; fc: number };
     repaymentRate: number;
@@ -435,6 +463,8 @@ export default function HomeRoute() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [loadError, setLoadError] = useState("");
+  const [activityError, setActivityError] = useState("");
+  const [remindersError, setRemindersError] = useState("");
   const [loading, setLoading] = useState(true);
 const [toast, setToast] = useState("");
   const [remindingId, setRemindingId] = useState<number | null>(null);
@@ -442,11 +472,22 @@ const [toast, setToast] = useState("");
 
   const t = copy[language];
 
-  const authUser = getAuthUser();
+  const [authUser, setAuthUser] = useState(getAuthUser);
+  useEffect(() => {
+    let active = true;
+    fetchCurrentUser().then((user) => {
+      if (active) setAuthUser(user);
+    }).catch(() => {
+      // Le contrôle de session global gère les sessions expirées.
+    });
+    return () => { active = false; };
+  }, []);
   const isAdmin = authUser?.role === "admin" || authUser?.role === "superadmin";
   const isAgent = authUser?.role === "agent";
-  const greetingName = authUser?.firstName || authUser?.fullName?.split(" ")[0] || "Aline";
-  const greeting = language === "FR" ? `Bonjour, ${greetingName}` : `Welcome back, ${greetingName}`;
+  const greetingName = authUser?.firstName || authUser?.fullName?.trim().split(/\s+/)[0] || "";
+  const greeting = greetingName
+    ? language === "FR" ? `Bonjour, ${greetingName}` : `Welcome back, ${greetingName}`
+    : language === "FR" ? "Bonjour" : "Welcome back";
 
   const myCaisse = useMemo(() => {
     if (!dashboard?.agentsCaisses || dashboard.agentsCaisses.length === 0) return null;
@@ -462,14 +503,33 @@ const [toast, setToast] = useState("");
 
 useEffect(() => {
     let active = true;
-    Promise.all([
+    const demoMode = process.env.NODE_ENV === "development" && new URLSearchParams(window.location.search).get("demo") === "1";
+    if (demoMode) {
+      const demo = makeDemoDashboard();
+      setDashboard(demo.dashboard);
+      setTransactions(demo.transactions);
+      setReminders(demo.reminders);
+      setLoadError("");
+      setActivityError("");
+      setRemindersError("");
+      setLoading(false);
+      return () => { active = false; };
+    }
+    Promise.allSettled([
       apiClient.get<DashboardResponse>("/solde/dashboard"),
       apiClient.get<{ data: { id: string; memberName: string; type: string; amount: number; currency: "USD" | "FC"; date: string; status: string }[] }>("/solde/dashboard/transactions?limit=25"),
       apiClient.get<{ data: { id: number; memberId?: number; memberName: string; dueDate: string; amountRemaining: number; currency: "USD" | "FC"; isOverdue?: boolean; diffDays?: number; telephone?: string }[] }>("/credits/echeances?limit=6&days=30"),
-    ]).then(([summary, transactionResponse, dueResponse]) => {
+    ]).then(([summaryResult, transactionResult, dueResult]) => {
       if (!active) return;
-      setDashboard(summary.data);
-      setTransactions(transactionResponse.data.data.map((item) => ({
+      if (summaryResult.status === "fulfilled") {
+        setDashboard(summaryResult.value.data);
+        setLoadError("");
+      } else {
+        setLoadError("Impossible de charger les indicateurs du tableau de bord. Vérifiez la connexion au backend et votre session.");
+      }
+
+      if (transactionResult.status === "fulfilled") {
+        setTransactions(transactionResult.value.data.data.map((item) => ({
         id: item.id,
         name: item.memberName,
         initials: item.memberName.split(/\s+/).slice(0, 2).map((part) => part[0] || "").join("").toUpperCase(),
@@ -478,8 +538,14 @@ useEffect(() => {
         currency: item.currency,
         date: new Intl.DateTimeFormat("fr-FR", { dateStyle: "medium" }).format(new Date(item.date)),
         status: item.status === "valid" ? "valid" : item.status === "pending" ? "pending" : "rejected",
-      })));
-      setReminders(dueResponse.data.data.map((item) => {
+        })));
+        setActivityError("");
+      } else {
+        setActivityError("Activité récente indisponible.");
+      }
+
+      if (dueResult.status === "fulfilled") {
+        setReminders(dueResult.value.data.data.map((item) => {
         const isLate = Boolean(item.isOverdue);
         const diff = item.diffDays ?? 0;
         const detail = isLate
@@ -499,10 +565,11 @@ useEffect(() => {
           isOverdue: isLate,
           diffDays: diff,
         };
-      }));
-      setLoadError("");
-    }).catch(() => {
-      if (active) setLoadError("Impossible de charger les données du tableau de bord. Vérifiez la connexion au backend et votre session.");
+        }));
+        setRemindersError("");
+      } else {
+        setRemindersError("Les échéances de crédit sont momentanément indisponibles.");
+      }
     }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, []);
@@ -524,6 +591,11 @@ useEffect(() => {
   };
 
   const memberCount = dashboard?.overview.totalMembers ?? 0;
+  const priorityAlerts = [
+    { label: "Opérations à vérifier", count: dashboard?.overview.pendingOperationsCount ?? 0, href: "/operations/depots-cotisations" },
+    { label: "Adhésions expirant sous 30 jours", count: dashboard?.overview.membershipsExpiringSoonCount ?? 0, href: "/membres" },
+    { label: "DAT à échéance sous 30 jours", count: dashboard?.overview.datsDueSoonCount ?? 0, href: "#mw-reminders-title" },
+  ];
   const chartData = useMemo(() => {
     if (!dashboard) return [];
     if (period === "Annuel") {
@@ -835,6 +907,28 @@ useEffect(() => {
         </section>
       )}
 
+      {isAdmin && (
+        <section className="mw-panel" aria-label="Alertes prioritaires" style={{ marginTop: 14 }}>
+          <div className="mw-panel-header">
+            <h2 style={{ margin: 0 }}>À traiter prochainement</h2>
+            <span className="mw-kpi-subtext">Période : 30 jours</span>
+          </div>
+          {loadError ? (
+            <p className="mw-empty" role="status">Les alertes seront disponibles avec les indicateurs du dashboard.</p>
+          ) : priorityAlerts.some((alert) => alert.count > 0) ? (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+              {priorityAlerts.filter((alert) => alert.count > 0).map((alert) => (
+                <a key={alert.label} href={alert.href} className="mw-dialog-cancel" style={{ display: "inline-flex", gap: 8, alignItems: "center", textDecoration: "none" }}>
+                  <strong>{alert.count}</strong><span>{alert.label}</span><IconChevronRight size={14} />
+                </a>
+              ))}
+            </div>
+          ) : (
+            <p className="mw-empty" style={{ margin: "8px 0" }}>Aucune action prioritaire dans les 30 prochains jours.</p>
+          )}
+        </section>
+      )}
+
       {/* ── Dashboard Grid ──────────────────────────────────────── */}
       <div className="mw-dashboard-grid">
         <div className="mw-main-column">
@@ -1139,7 +1233,11 @@ useEffect(() => {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredTransactions.length ? (
+                  {activityError ? (
+                    <tr>
+                      <td colSpan={5} className="mw-empty" role="alert">{activityError}</td>
+                    </tr>
+                  ) : filteredTransactions.length ? (
                     paginatedTransactions.map((transaction) => (
                       <tr key={transaction.id}>
                         <td>
@@ -1279,7 +1377,9 @@ useEffect(() => {
               </span>
             </div>
             <div className="mw-reminder-list">
-              {reminders.length > 0 ? (
+              {remindersError ? (
+                <p className="mw-empty" role="alert" style={{ margin: "10px 0" }}>{remindersError}</p>
+              ) : reminders.length > 0 ? (
                 reminders.map((reminder) => (
                   <div className="mw-reminder" key={reminder.id} style={{ alignItems: "center" }}>
                     <span className={`mw-reminder-mark ${reminder.isOverdue ? "red" : ""}`}>

@@ -600,6 +600,29 @@ export class BalancesService {
             statut: { in: [StatutCredit.actif, StatutCredit.en_retard] },
           },
         }),
+        pendingOperationsCount: await this.prisma.operation.count({
+          where: { statut: StatutOperation.BROUILLON },
+        }),
+        membershipsExpiringSoonCount: await this.prisma.membre.count({
+          where: {
+            statut: 'actif',
+            dateExpirationAdhesion: { gte: new Date(), lte: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) },
+            NOT: {
+              OR: [
+                { typeCompte: 'SYSTEME' },
+                { nomComplet: { contains: 'Compte Collectif' } },
+                { nomComplet: { contains: 'REVENUS' } },
+                { nomComplet: { contains: 'CRÉDITS' } },
+              ],
+            },
+          },
+        }),
+        datsDueSoonCount: await this.prisma.dat.count({
+          where: {
+            statut: 'OUVERT',
+            dateEcheance: { gte: new Date(), lte: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) },
+          },
+        }),
         activeCreditBalance,
         overdueCreditsCount,
         overdueCreditBalance,

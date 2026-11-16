@@ -11,20 +11,23 @@ import type { Request, Response } from 'express';
 import { PrismaService } from '../prisma/prisma.service';
 
 const WINDOW_MS = 15 * 60 * 1000; // 15 minutes
-const MAX_PER_IP = 30;
+const MAX_PER_IP = 50;
 const MAX_PER_IP_AND_IDENTIFIER = 6;
 
 @Injectable()
 export class LoginThrottleGuard implements CanActivate {
   constructor(private readonly prisma: PrismaService) {}
 
-  async resetIdentifier(request: Request) {
+  /**
+   * Réinitialise les compteurs après une connexion réussie.
+   * On purge TOUS les buckets de l'IP (limite globale et limites par
+   * identifiant) pour que les connexions légitimes ne consomment jamais
+   * le quota d'échecs — sinon un bureau en NAT se retrouve bloqué après
+   * quelques dizaines de connexions normales.
+   */
+  async resetAfterSuccessfulLogin(request: Request) {
     const ip = request.ip || request.socket.remoteAddress || 'unknown';
-    const identifier = this.getIdentifier(request);
-    if (!identifier) return;
-    await this.prisma.loginAttempt.deleteMany({
-      where: { ip, identifier },
-    });
+    await this.prisma.loginAttempt.deleteMany({ where: { ip } });
   }
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
