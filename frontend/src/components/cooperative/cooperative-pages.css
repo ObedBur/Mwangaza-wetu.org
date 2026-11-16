@@ -134,6 +134,12 @@
   font-size: 9px;
   font-weight: 700;
 }
+.coop-agent-section-title strong .coop-agent-optional-label {
+  margin-left: 6px;
+  color: var(--mw-muted);
+  font-size: 10px;
+  font-weight: 450;
+}
 .coop-agent-section-title > div {
   display: grid;
   gap: 2px;
@@ -155,6 +161,14 @@
   gap: 12px 16px;
 }
 .coop-agent-form-section label {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  color: var(--mw-ink);
+  font-size: 11px;
+  font-weight: 600;
+}
+.coop-agent-optional-details label {
   display: grid;
   align-content: start;
   gap: 6px;
@@ -230,6 +244,41 @@
 }
 .coop-agent-form-section .coop-agent-password-field {
   max-width: 420px;
+}
+.coop-agent-auto-password-note {
+  margin: -3px 0 0;
+  color: var(--mw-muted);
+  font-size: 10px;
+  line-height: 1.5;
+}
+.coop-agent-optional-details {
+  padding: 14px 0;
+  border-bottom: 1px solid var(--mw-line);
+}
+.coop-agent-optional-details summary {
+  display: flex;
+  width: fit-content;
+  align-items: center;
+  gap: 8px;
+  color: var(--mw-ink);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.coop-agent-optional-details summary::marker {
+  color: var(--mw-primary);
+}
+.coop-agent-optional-details summary span {
+  color: var(--mw-muted);
+  font-size: 10px;
+  font-weight: 400;
+}
+.coop-agent-optional-details > .coop-agent-field-grid {
+  padding-top: 14px;
+}
+.coop-agent-edit-status {
+  padding: 14px 0;
+  border-bottom: 1px solid var(--mw-line);
 }
 .coop-agent-fingerprint-field {
   display: grid;
