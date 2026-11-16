@@ -5,9 +5,10 @@ import { DeleguesController } from './delegues.controller';
 import { MemberMailService } from './member-mail.service';
 import { CloudinaryService } from './cloudinary.service';
 import { ComptabiliteModule } from '../comptabilite/comptabilite.module';
+import { DatModule } from '../dat/dat.module';
 
 @Module({
-  imports: [ComptabiliteModule],
+  imports: [ComptabiliteModule, DatModule],
   providers: [MembersService, MemberMailService, CloudinaryService],
   controllers: [MembersController, DeleguesController],
   exports: [CloudinaryService],

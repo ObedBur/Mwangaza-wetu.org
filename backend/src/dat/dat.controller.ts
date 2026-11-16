@@ -24,7 +24,7 @@ import type { AuthenticatedRequest } from '../common/types/auth-request';
  * DÉPÔT À TERME — dossier fonctionnel §3.2
  *
  * Règles arrêtées par la direction (16/10/2026) :
- *  - 1 seul DAT actif par membre
+ *  - 1 DAT actif par membre et par durée
  *  - retrait anticipé INTERDIT (E1)
  *  - à l'échéance, le membre se présente au guichet (option B)
  *  - taux de période : 15 % (1/3/6 mois), 30 % (12 mois) — lus en base
@@ -72,7 +72,8 @@ export class DatController {
     return this.datService.findOne(id);
   }
 
-  /** Ouverture d'un DAT : contrôle minimum, solde et unicité du DAT actif. */
+  /** Ouverture d'un DAT au guichet : encaissement dans la caisse de l'agent. */
+  @Roles('agent')
   @Post()
   ouvrir(@Body() dto: CreateDatDto, @Req() req: AuthenticatedRequest) {
     return this.datService.ouvrir(dto, req.user?.userId);

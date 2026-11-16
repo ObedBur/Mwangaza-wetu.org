@@ -570,9 +570,33 @@ export class BalancesService {
       description: null,
     }));
 
+    // Le solde de caisse provient du grand livre, pas uniquement des dépôts
+    // d'épargne : les frais d'adhésion et les autres opérations comptabilisées
+    // en caisse doivent également apparaître dans les disponibilités.
+    const ecrituresCaisse = await this.prisma.ecritureComptable.groupBy({
+      by: ['devise', 'sens'],
+      where: {
+        compte: { planCompte: { numero: { in: ['5711', '5712'] } } },
+        operation: { statut: StatutOperation.VALIDEE },
+      },
+      _sum: { montant: true },
+    });
+    const soldeCaisse = (devise: Devise) => {
+      const debit = Number(
+        ecrituresCaisse.find((row) => row.devise === devise && row.sens === SensEcriture.DEBIT)?._sum.montant ?? 0,
+      );
+      const credit = Number(
+        ecrituresCaisse.find((row) => row.devise === devise && row.sens === SensEcriture.CREDIT)?._sum.montant ?? 0,
+      );
+      return Math.round((debit - credit) * 100) / 100;
+    };
+
     return {
       overview: {
-        totalCaisse: { usd: total.usd.solde, fc: total.fc.solde },
+        totalCaisse: {
+          usd: soldeCaisse(Devise.USD),
+          fc: soldeCaisse(Devise.FC),
+        },
         totalEpargne: { usd: total.usd.epargne, fc: total.fc.epargne },
         totalRetrait: { usd: total.usd.retrait, fc: total.fc.retrait },
         totalFrais: { usd: total.usd.frais, fc: total.fc.frais },

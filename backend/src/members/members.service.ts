@@ -9,9 +9,11 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { ComptabiliteService } from '../comptabilite/comptabilite.service';
+import { DatService } from '../dat/dat.service';
 import { MemberMailService } from './member-mail.service';
 import { CloudinaryService } from './cloudinary.service';
 import { CreateMemberDto, Sexe } from './dto/create-member.dto';
+import type { AuthUser } from '../common/types/auth-request';
 import { UpdateOwnProfileDto } from './dto/update-own-profile.dto';
 import {
   normalizeSectionName,
@@ -37,6 +39,7 @@ export class MembersService {
   constructor(
     private prisma: PrismaService,
     private comptabiliteService: ComptabiliteService,
+    private datService: DatService,
     private memberMail: MemberMailService,
     private cloudinary: CloudinaryService,
   ) {}
@@ -330,10 +333,18 @@ export class MembersService {
     );
   }
 
-  async create(createMemberDto: CreateMemberDto) {
+  async create(createMemberDto: CreateMemberDto, actor: AuthUser) {
     const { numeroCompte, typeCompte, dateAdhesion, delegue } =
       createMemberDto;
     const userId = createMemberDto.userId?.trim() || undefined;
+    const datsInitiaux = createMemberDto.datsInitiaux ?? [];
+    const datAgentId = actor.role === 'agent' ? actor.userId : undefined;
+    if (datsInitiaux.length > 0 && datAgentId === undefined) {
+      throw new BadRequestException('Seul un agent avec une caisse ouverte peut encaisser les DAT à l’inscription.');
+    }
+    if (new Set(datsInitiaux.map((dat) => dat.dureeMois)).size !== datsInitiaux.length) {
+      throw new BadRequestException('Un seul DAT par durée peut être ouvert à l’inscription.');
+    }
 
     const email = createMemberDto.email?.trim().toLowerCase();
     if (!email) throw new BadRequestException("L'adresse e-mail est requise");
@@ -479,6 +490,16 @@ export class MembersService {
         motif: `Adhésion ${dureeAdhesionMois} mois - membre ${finalNumeroCompte}`,
       });
 
+      const datsCrees: Record<string, unknown>[] = [];
+      for (const dat of datsInitiaux) {
+        datsCrees.push(await this.datService.ouvrirAuGuichetDansTransaction(tx, {
+          numeroCompte: finalNumeroCompte,
+          dureeMois: dat.dureeMois,
+          devise: dat.devise as Devise,
+          montant: dat.montant,
+        }, datAgentId!));
+      }
+
       // 2. Gérer le délégué
       if (delegue) {
         await tx.delegue.create({
@@ -496,8 +517,8 @@ export class MembersService {
       }
 
       const { motDePasse: _passwordHash, activationToken: _token, ...safeMembre } = membre;
-      return safeMembre;
-      });
+      return { ...safeMembre, datsInitiaux: datsCrees };
+      }, { timeout: 30000 });
 
       // ── Envoi des identifiants : APRÈS le commit, jamais dedans ──────────
       // Avant, cet envoi était dans la transaction Prisma. Or une transaction

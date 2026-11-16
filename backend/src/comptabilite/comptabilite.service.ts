@@ -57,6 +57,10 @@ export class ComptabiliteService {
     return this.compteAuxiliaireMembre(tx, '4621', numeroCompte, devise);
   }
 
+  private compteDatMembre(tx: DbTx, numeroCompte: string, devise: Devise) {
+    return this.compteAuxiliaireMembre(tx, '4622', numeroCompte, devise);
+  }
+
   private async enregistrer(tx: DbTx, params: {
     type: TypeOperationComptable;
     montantTotal: number;
@@ -166,6 +170,29 @@ export class ComptabiliteService {
       ],
     });
     return saved;
+  }
+
+  async enregistrerDepotDat(tx: DbTx, params: {
+    montant: number; devise: Devise; numeroCompte: string; codeSection: string; executeParId?: number;
+    executeParRole?: string; dateOperation?: Date; idempotencyKey?: string;
+  }) {
+    const caisse = params.devise === Devise.USD ? 'GEN-5712-CAISSE-USD' : 'GEN-5711-CAISSE-FC';
+    const dat = await this.compteDatMembre(tx, params.numeroCompte, params.devise);
+    return this.enregistrer(tx, {
+      type: TypeOperationComptable.DEPOT_EPARGNE,
+      montantTotal: params.montant,
+      devise: params.devise,
+      codeAnalytique: params.codeSection,
+      executeParId: params.executeParId,
+      executeParRole: params.executeParRole,
+      dateOperation: params.dateOperation,
+      idempotencyKey: params.idempotencyKey,
+      motif: `Versement DAT ${params.numeroCompte}`,
+      lignes: [
+        { numeroCompte: caisse, sens: SensEcriture.DEBIT, montant: params.montant, libelle: 'Versement reçu en caisse pour DAT' },
+        { numeroCompte: dat.numeroCompte, sens: SensEcriture.CREDIT, montant: params.montant, libelle: `Capital DAT membre ${params.numeroCompte}` },
+      ],
+    });
   }
 
   async enregistrerRemboursementCredit(tx: DbTx, params: {

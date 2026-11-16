@@ -40,7 +40,7 @@ import {
   type AccountSlug,
 } from "@/lib/account-config";
 import { cooperativeCopy as t } from "@/lib/cooperative-copy";
-import { apiClient } from "@/lib/auth";
+import { apiClient, getAuthUser } from "@/lib/auth";
 type AccountHolder = {
   member: {
     id: string;
@@ -71,7 +71,7 @@ type PrincipalDashboard = {
 type DatBaremeResponse = {
   durees: { dureeMois: number; tauxPeriode: number; minFc: number; minUsd: number; messageSeuil?: string }[];
 };
-type DatListItem = { numeroCompte: string; statut: string };
+type DatListItem = { numeroCompte: string; dureeMois: number; statut: string };
 
 function formatDualCurrency(usd: number, fc: number) {
   return `${formatCurrency(usd, "USD")} · ${formatCurrency(fc, "CDF")}`;
@@ -138,7 +138,8 @@ export default function SavingsAccountRoute({
   const [datAmount, setDatAmount] = useState("");
   const [datLoading, setDatLoading] = useState(false);
   const [datError, setDatError] = useState("");
-  const [activeDatAccounts, setActiveDatAccounts] = useState<Set<string> | null>(null);
+  const [activeDatAccounts, setActiveDatAccounts] = useState<Map<string, Set<number>> | null>(null);
+  const canOpenDat = getAuthUser()?.role === "agent";
   const [datStatusLoading, setDatStatusLoading] = useState(false);
   const accountSlug = accountSlugs.find((item) => item === slug);
 
@@ -160,11 +161,13 @@ export default function SavingsAccountRoute({
     setDatStatusLoading(true);
     try {
       const response = await apiClient.get<DatListItem[]>("/dat");
-      setActiveDatAccounts(new Set(
-        response.data
-          .filter((dat) => ["OUVERT", "ECHEANCE"].includes(dat.statut.toUpperCase()))
-          .map((dat) => dat.numeroCompte),
-      ));
+      const active = new Map<string, Set<number>>();
+      for (const dat of response.data.filter((item) => ["OUVERT", "ECHEANCE"].includes(item.statut.toUpperCase()))) {
+        const durations = active.get(dat.numeroCompte) ?? new Set<number>();
+        durations.add(dat.dureeMois);
+        active.set(dat.numeroCompte, durations);
+      }
+      setActiveDatAccounts(active);
     } catch {
       setActiveDatAccounts(null);
     } finally {
@@ -291,11 +294,12 @@ export default function SavingsAccountRoute({
     try {
       const response = await apiClient.get<DatBaremeResponse>("/dat/bareme");
       setDatBareme(response.data);
-      const defaultCurrency = (holder.balanceUSD || 0) > 0 ? "USD" : "FC";
+      const activeDurations = activeDatAccounts?.get(holder.member.memberNumber) ?? new Set<number>();
+      const defaultCurrency = "FC";
       setDatCurrency(defaultCurrency);
-      setDatDuration(1);
-      const first = response.data.durees.find((item) => item.dureeMois === 1);
-      setDatAmount(String(defaultCurrency === "USD" ? first?.minUsd || 1 : first?.minFc || 2000));
+      setDatDuration([1, 3, 6, 12].find((duration) => !activeDurations.has(duration)) ?? 1);
+      const first = response.data.durees.find((item) => item.dureeMois === ([1, 3, 6, 12].find((duration) => !activeDurations.has(duration)) ?? 1));
+      setDatAmount(String(first?.minFc || 2000));
     } catch (error: any) {
       const message = error?.response?.data?.message;
       setDatError(Array.isArray(message) ? message.join(" ") : message || "Impossible de charger le barème DAT.");
@@ -554,13 +558,13 @@ export default function SavingsAccountRoute({
                       key={holder.member.id}
                       holder={holder}
                       accent={config.color}
-                      onOpenDat={isPrincipal ? () => void prepareDat(holder) : undefined}
-                      datStatus={isPrincipal
+                      onOpenDat={isPrincipal && canOpenDat ? () => void prepareDat(holder) : undefined}
+                      datStatus={isPrincipal && canOpenDat
                         ? datStatusLoading
                           ? "loading"
                           : activeDatAccounts === null
                             ? "error"
-                            : activeDatAccounts.has(holder.member.memberNumber)
+                            : [1, 3, 6, 12].every((duration) => activeDatAccounts.get(holder.member.memberNumber)?.has(duration))
                               ? "active"
                               : "available"
                         : undefined}
@@ -659,15 +663,15 @@ export default function SavingsAccountRoute({
         <DialogContent data-theme={dark ? "dark" : "light"} className="mw-dialog-content coop-action-dialog">
           <DialogHeader>
             <DialogTitle>Ouvrir un dépôt à terme</DialogTitle>
-            <DialogDescription>{datTarget?.member.name} · {datTarget?.member.memberNumber}. Le capital sera transféré du compte principal vers le DAT et bloqué jusqu’à l’échéance.</DialogDescription>
+            <DialogDescription>{datTarget?.member.name} · {datTarget?.member.memberNumber}. Le versement sera encaissé dans votre caisse et bloqué jusqu’à l’échéance.</DialogDescription>
           </DialogHeader>
           {datLoading && !datBareme ? <p role="status">Chargement du barème…</p> : datBareme && <form className="coop-rules-form" onSubmit={openDat}>
             <label className="coop-rule-field">Durée<select value={datDuration} onChange={(event) => { const duration = Number(event.target.value); setDatDuration(duration); const option = datBareme.durees.find((item) => item.dureeMois === duration); setDatAmount(String(datCurrency === "USD" ? option?.minUsd || 1 : option?.minFc || 2000)); }}>
-              {datBareme.durees.map((item) => <option key={item.dureeMois} value={item.dureeMois}>{item.dureeMois} mois · taux {item.tauxPeriode}%</option>)}
+              {datBareme.durees.map((item) => <option key={item.dureeMois} value={item.dureeMois} disabled={activeDatAccounts?.get(datTarget?.member.memberNumber || "")?.has(item.dureeMois)}>{item.dureeMois} mois · taux {item.tauxPeriode}%{activeDatAccounts?.get(datTarget?.member.memberNumber || "")?.has(item.dureeMois) ? " · déjà actif" : ""}</option>)}
             </select></label>
             <label className="coop-rule-field">Devise<select value={datCurrency} onChange={(event) => { const currency = event.target.value as "USD" | "FC"; setDatCurrency(currency); const option = datBareme.durees.find((item) => item.dureeMois === datDuration); setDatAmount(String(currency === "USD" ? option?.minUsd || 1 : option?.minFc || 2000)); }}><option value="USD">USD</option><option value="FC">FC</option></select></label>
             <label className="coop-rule-field">Capital à placer<input required type="number" min={datCurrency === "USD" ? datBareme.durees.find((item) => item.dureeMois === datDuration)?.minUsd : datBareme.durees.find((item) => item.dureeMois === datDuration)?.minFc} step="0.01" value={datAmount} onChange={(event) => setDatAmount(event.target.value)} /></label>
-            <p className="coop-agent-auto-password-note">Disponible sur le compte principal : {formatCurrency(datCurrency === "USD" ? datTarget?.balanceUSD || 0 : datTarget?.balanceFC || 0, datCurrency === "USD" ? "USD" : "CDF")}. Le backend vérifiera le minimum, le solde et l’absence d’un DAT déjà actif.</p>
+            <p className="coop-agent-auto-password-note">Le versement doit être reçu dans votre caisse. Un seul DAT actif est autorisé par membre et par durée.</p>
             {datBareme.durees.find((item) => item.dureeMois === datDuration)?.messageSeuil && <p>{datBareme.durees.find((item) => item.dureeMois === datDuration)?.messageSeuil}</p>}
             {datError && <p className="coop-page-error" role="alert">{datError}</p>}
             <div className="mw-dialog-actions"><button type="button" className="mw-dialog-cancel" onClick={() => setDatTarget(null)} disabled={datLoading}>Annuler</button><button type="submit" className="mw-primary" disabled={datLoading}>{datLoading ? "Ouverture…" : "Ouvrir le DAT"}</button></div>

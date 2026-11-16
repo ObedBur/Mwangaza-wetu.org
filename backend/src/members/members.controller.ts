@@ -200,8 +200,11 @@ export class MembersController {
 
   @Roles(...ADMIN_ROLES, 'agent')
   @Post()
-  async create(@Body() createMemberDto: CreateMemberDto) {
-    return this.membersService.create(createMemberDto);
+  async create(
+    @Body() createMemberDto: CreateMemberDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.membersService.create(createMemberDto, req.user!);
   }
 
   @Public()
