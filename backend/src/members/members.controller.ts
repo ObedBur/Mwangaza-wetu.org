@@ -213,6 +213,11 @@ export class MembersController {
     return this.membersService.activate(dto.token, dto.motDePasse);
   }
 
+  @Post(':id/reset-password')
+  async resetPassword(@Param('id', ParseIntPipe) id: number) {
+    return this.membersService.resetPassword(id);
+  }
+
   @Put(':id')
   async update(
     @Param('id', ParseIntPipe) id: number,

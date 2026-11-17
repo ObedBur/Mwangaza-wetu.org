@@ -949,6 +949,35 @@ export class MembersService {
     return safeMembre;
   }
 
+  async resetPassword(id: number) {
+    const membre = await this.prisma.membre.findUnique({
+      where: { id },
+      select: { id: true, numeroCompte: true, email: true },
+    });
+    if (!membre) throw new NotFoundException('Membre non trouvé');
+
+    const motDePasseTemporaire = crypto.randomBytes(12).toString('base64url');
+    const hashedPassword = await bcrypt.hash(motDePasseTemporaire, 10);
+    await this.prisma.membre.update({
+      where: { id },
+      data: {
+        motDePasse: hashedPassword,
+        authVersion: { increment: 1 },
+        loginFailures: 0,
+        loginFailuresSince: null,
+        lockedUntil: null,
+      },
+      select: { id: true },
+    });
+
+    // Retour unique, réservé au personnel authentifié : ne jamais journaliser le mot de passe.
+    return {
+      numeroCompte: membre.numeroCompte,
+      email: membre.email,
+      motDePasseTemporaire,
+    };
+  }
+
   async remove(id: number) {
     const membre = await this.prisma.membre.findUnique({
       where: { id },
