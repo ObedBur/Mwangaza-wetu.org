@@ -12,6 +12,7 @@ import type { AuthUser } from '../common/types/auth-request';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import { CloudinaryService } from '../members/cloudinary.service';
+import { BCRYPT_ROUNDS } from '../common/constants/password-policy';
 
 const AGENT_SELECT = {
   id: true,
@@ -75,7 +76,7 @@ export class AgentsService {
     }
 
     const temporaryPassword = crypto.randomBytes(12).toString('base64url');
-    const hashedPassword = await bcrypt.hash(temporaryPassword, 10);
+    const hashedPassword = await bcrypt.hash(temporaryPassword, BCRYPT_ROUNDS);
 
     const deviseInitiale = dto.devise ?? 'USD';
     const soldeInitial = dto.soldeInitial ?? 0;
@@ -216,7 +217,7 @@ export class AgentsService {
         await tx.administrateur.update({
           where: { id: userId },
           data: {
-            motDePasse: await bcrypt.hash(dto.newPassword, 12),
+            motDePasse: await bcrypt.hash(dto.newPassword, BCRYPT_ROUNDS),
             authVersion: { increment: 1 },
             loginFailures: 0,
             loginFailuresSince: null,
@@ -249,7 +250,7 @@ export class AgentsService {
       await tx.agent.update({
         where: { id: userId },
         data: {
-          motDePasse: await bcrypt.hash(dto.newPassword, 12),
+          motDePasse: await bcrypt.hash(dto.newPassword, BCRYPT_ROUNDS),
           authVersion: { increment: 1 },
           loginFailures: 0,
           loginFailuresSince: null,
@@ -334,7 +335,7 @@ export class AgentsService {
         ...(dto.actif !== undefined && { actif: dto.actif }),
         ...(dto.userId !== undefined && { userId: dto.userId }),
         ...(dto.motDePasse !== undefined && {
-          motDePasse: await bcrypt.hash(dto.motDePasse, 10),
+          motDePasse: await bcrypt.hash(dto.motDePasse, BCRYPT_ROUNDS),
           authVersion: { increment: 1 },
           loginFailures: 0,
           loginFailuresSince: null,

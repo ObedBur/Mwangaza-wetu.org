@@ -12,6 +12,8 @@ import { randomUUID } from 'node:crypto';
 import { Administrateur, Membre, Agent } from '@prisma/client';
 import type { AuthUser } from '../common/types/auth-request';
 import { SessionRevocationService } from './session-revocation.service';
+import { BCRYPT_ROUNDS } from '../common/constants/password-policy';
+import { AuthAuditService, LoginAuditContext } from './auth-audit.service';
 
 const DUMMY_PASSWORD_HASH = '$2b$12$It432ShYcsQ0kRyH7jJnk.Hq88W2iZA1/PjnL4JDTYjRJ3vNoU33e';
 const INVALID_LOGIN_MESSAGE = 'Identifiants incorrects';
@@ -49,6 +51,7 @@ export class AuthService {
     private prisma: PrismaService,
     private jwtService: JwtService,
     private readonly sessionRevocation: SessionRevocationService,
+    private readonly audit: AuthAuditService,
   ) {}
 
   /**
@@ -62,21 +65,30 @@ export class AuthService {
   /**
    * Révoque la session portée par le jeton fourni (logout).
    * Un jeton expiré ou invalide n'a rien à révoquer.
+   * Renvoie l'identité décodée pour que l'appelant puisse journaliser la
+   * déconnexion — le jeton lui-même n'est jamais journalisé.
    */
-  async revokeSession(token: string | null | undefined): Promise<void> {
-    if (!token) return;
+  async revokeSession(
+    token: string | null | undefined,
+  ): Promise<{ userId: number | null; role: string | null } | null> {
+    if (!token) return null;
 
     try {
-      const payload = this.jwtService.verify<{ jti?: string; exp?: number }>(
-        token,
-      );
-      if (!payload.jti) return;
+      const payload = this.jwtService.verify<{
+        id?: number;
+        role?: string;
+        jti?: string;
+        exp?: number;
+      }>(token);
+      if (!payload.jti) return null;
 
       const expiresAt =
         payload.exp ?? Math.floor(Date.now() / 1000) + 24 * 60 * 60;
       await this.sessionRevocation.revoke(payload.jti, expiresAt);
+      return { userId: payload.id ?? null, role: payload.role ?? null };
     } catch {
       // Jeton absent, expiré ou invalide : rien à révoquer.
+      return null;
     }
   }
 
@@ -120,7 +132,7 @@ export class AuthService {
   private async registerLoginFailure(
     role: LoginRole,
     id: number,
-  ): Promise<void> {
+  ): Promise<boolean> {
     const table = LOCK_TABLES[role];
     const now = new Date();
     const windowStart = new Date(now.getTime() - LOGIN_FAILURE_WINDOW_MS);
@@ -158,7 +170,7 @@ export class AuthService {
     );
 
     const failures = rows[0]?.login_failures ?? 0;
-    if (failures < MAX_LOGIN_FAILURES) return;
+    if (failures < MAX_LOGIN_FAILURES) return false;
 
     // 4. Seuil atteint : verrou temporaire. Le compteur est remis à zéro pour
     // qu'après expiration l'utilisateur retrouve une fenêtre complète.
@@ -169,6 +181,7 @@ export class AuthService {
       id,
       lockUntil,
     );
+    return true;
   }
 
   /**
@@ -201,9 +214,13 @@ export class AuthService {
     return { success: true, message: 'Compte déverrouillé.' };
   }
 
-  async loginUnified(loginDto: LoginDto) {
+  async loginUnified(loginDto: LoginDto, audit: LoginAuditContext = {}) {
     const { email, accountNumber, password } = loginDto;
     const identifier = (email ?? accountNumber)?.trim();
+    const auditContext: LoginAuditContext = {
+      ip: audit.ip,
+      identifier: audit.identifier ?? identifier,
+    };
 
     if (!identifier) {
       throw new BadRequestException('Identifiant requis (email, numéro de compte ou téléphone)');
@@ -252,20 +269,44 @@ export class AuthService {
     const passwordValid = await bcrypt.compare(password, candidate?.passwordHash ?? DUMMY_PASSWORD_HASH);
 
     if (!candidate) {
+      await this.audit.loginFailed(null, null, auditContext, 'compte_inconnu');
       throw new UnauthorizedException(INVALID_LOGIN_MESSAGE);
     }
 
     if (this.isLocked(candidate.lockedUntil)) {
+      await this.audit.loginFailed(
+        candidate.role,
+        candidate.id,
+        auditContext,
+        'compte_verrouille',
+      );
       throw new UnauthorizedException(INVALID_LOGIN_MESSAGE);
     }
 
     if (!passwordValid) {
-      await this.registerLoginFailure(candidate.role, candidate.id);
+      const locked = await this.registerLoginFailure(
+        candidate.role,
+        candidate.id,
+      );
+      await this.audit.loginFailed(
+        candidate.role,
+        candidate.id,
+        auditContext,
+        locked ? 'compte_verrouille' : 'mot_de_passe_invalide',
+      );
+      if (locked) {
+        await this.audit.accountLocked(candidate.role, candidate.id, auditContext);
+      }
       throw new UnauthorizedException(INVALID_LOGIN_MESSAGE);
     }
 
     // Réinitialise les échecs en cas de succès
     await this.resetLoginFailures(candidate.role, candidate.id);
+    await this.audit.loginSucceeded(
+      candidate.role,
+      candidate.id,
+      auditContext,
+    );
 
     if ((candidate.role === 'admin' || candidate.role === 'superadmin') && admin) {
       const user = {
@@ -294,8 +335,12 @@ export class AuthService {
     throw new UnauthorizedException(INVALID_LOGIN_MESSAGE);
   }
 
-  async loginAdmin(loginDto: LoginDto) {
+  async loginAdmin(loginDto: LoginDto, audit: LoginAuditContext = {}) {
     const { email, accountNumber, password } = loginDto;
+    const auditContext: LoginAuditContext = {
+      ip: audit.ip,
+      identifier: audit.identifier ?? email ?? accountNumber,
+    };
     let admin: Administrateur | null = null;
 
     if (email) {
@@ -310,18 +355,39 @@ export class AuthService {
 
     const isValid = await bcrypt.compare(password, admin?.motDePasse ?? DUMMY_PASSWORD_HASH);
     if (!admin) {
+      await this.audit.loginFailed(null, null, auditContext, 'compte_inconnu');
       throw new UnauthorizedException(INVALID_LOGIN_MESSAGE);
     }
     if (this.isLocked(admin.lockedUntil)) {
+      await this.audit.loginFailed(
+        admin.role,
+        admin.id,
+        auditContext,
+        'compte_verrouille',
+      );
       throw new UnauthorizedException(INVALID_LOGIN_MESSAGE);
     }
     if (!admin.actif || !isValid) {
-      await this.registerLoginFailure(admin.role, admin.id);
+      const locked = await this.registerLoginFailure(admin.role, admin.id);
+      await this.audit.loginFailed(
+        admin.role,
+        admin.id,
+        auditContext,
+        locked
+          ? 'compte_verrouille'
+          : !admin.actif
+            ? 'compte_inactif'
+            : 'mot_de_passe_invalide',
+      );
+      if (locked) {
+        await this.audit.accountLocked(admin.role, admin.id, auditContext);
+      }
       throw new UnauthorizedException(INVALID_LOGIN_MESSAGE);
     }
 
     // Réinitialise les échecs en cas de succès
     await this.resetLoginFailures(admin.role, admin.id);
+    await this.audit.loginSucceeded(admin.role, admin.id, auditContext);
 
     const payload = {
       id: admin.id,
@@ -343,8 +409,12 @@ export class AuthService {
     };
   }
 
-  async loginMember(loginDto: LoginDto) {
+  async loginMember(loginDto: LoginDto, audit: LoginAuditContext = {}) {
     const { email, accountNumber, password } = loginDto;
+    const auditContext: LoginAuditContext = {
+      ip: audit.ip,
+      identifier: audit.identifier ?? email ?? accountNumber,
+    };
     let member: Membre | null = null;
 
     if (email) {
@@ -359,18 +429,34 @@ export class AuthService {
 
     const isValid = await bcrypt.compare(password, member?.motDePasse ?? DUMMY_PASSWORD_HASH);
     if (!member) {
+      await this.audit.loginFailed(null, null, auditContext, 'compte_inconnu');
       throw new UnauthorizedException(INVALID_LOGIN_MESSAGE);
     }
     if (this.isLocked(member.lockedUntil)) {
+      await this.audit.loginFailed('member', member.id, auditContext, 'compte_verrouille');
       throw new UnauthorizedException(INVALID_LOGIN_MESSAGE);
     }
     if (!member.motDePasse || !member.isActivated || !isValid) {
-      await this.registerLoginFailure('member', member.id);
+      const locked = await this.registerLoginFailure('member', member.id);
+      await this.audit.loginFailed(
+        'member',
+        member.id,
+        auditContext,
+        locked
+          ? 'compte_verrouille'
+          : !member.isActivated
+            ? 'compte_non_active'
+            : 'mot_de_passe_invalide',
+      );
+      if (locked) {
+        await this.audit.accountLocked('member', member.id, auditContext);
+      }
       throw new UnauthorizedException(INVALID_LOGIN_MESSAGE);
     }
 
     // Réinitialise les échecs en cas de succès
     await this.resetLoginFailures('member', member.id);
+    await this.audit.loginSucceeded('member', member.id, auditContext);
 
     const payload = {
       id: member.id,
@@ -417,7 +503,7 @@ export class AuthService {
       );
     }
 
-    const passwordHash = await bcrypt.hash(newPassword, 12);
+    const passwordHash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
     await this.prisma.$transaction(async (tx) => {
       await tx.membre.update({
         where: { id: member.id },
@@ -465,7 +551,7 @@ export class AuthService {
       );
     }
 
-    const passwordHash = await bcrypt.hash(newPassword, 12);
+    const passwordHash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
     await this.prisma.$transaction(async (tx) => {
       await tx.administrateur.update({
         where: { id: admin.id },
@@ -492,9 +578,13 @@ export class AuthService {
     };
   }
 
-  async loginAgent(loginDto: LoginDto) {
+  async loginAgent(loginDto: LoginDto, audit: LoginAuditContext = {}) {
     const { email, accountNumber, password } = loginDto;
     const identifier = email ?? accountNumber;
+    const auditContext: LoginAuditContext = {
+      ip: audit.ip,
+      identifier: audit.identifier ?? identifier,
+    };
 
     if (!identifier) {
       throw new BadRequestException('Email ou téléphone requis');
@@ -506,18 +596,34 @@ export class AuthService {
 
     const isValid = await bcrypt.compare(password, agent?.motDePasse ?? DUMMY_PASSWORD_HASH);
     if (!agent) {
+      await this.audit.loginFailed(null, null, auditContext, 'compte_inconnu');
       throw new UnauthorizedException(INVALID_LOGIN_MESSAGE);
     }
     if (this.isLocked(agent.lockedUntil)) {
+      await this.audit.loginFailed('agent', agent.id, auditContext, 'compte_verrouille');
       throw new UnauthorizedException(INVALID_LOGIN_MESSAGE);
     }
     if (!agent.actif || !agent.motDePasse || !isValid) {
-      await this.registerLoginFailure('agent', agent.id);
+      const locked = await this.registerLoginFailure('agent', agent.id);
+      await this.audit.loginFailed(
+        'agent',
+        agent.id,
+        auditContext,
+        locked
+          ? 'compte_verrouille'
+          : !agent.actif
+            ? 'compte_inactif'
+            : 'mot_de_passe_invalide',
+      );
+      if (locked) {
+        await this.audit.accountLocked('agent', agent.id, auditContext);
+      }
       throw new UnauthorizedException(INVALID_LOGIN_MESSAGE);
     }
 
     // Réinitialise les échecs en cas de succès
     await this.resetLoginFailures('agent', agent.id);
+    await this.audit.loginSucceeded('agent', agent.id, auditContext);
 
     const payload = {
       id: agent.id,

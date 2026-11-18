@@ -6,10 +6,15 @@ import {
   IsOptional,
   IsString,
   IsIn,
+  MaxLength,
   MinLength,
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
+import {
+  PASSWORD_MAX_LENGTH,
+  PASSWORD_MIN_LENGTH,
+} from '../../common/constants/password-policy';
 
 export enum Sexe {
   M = 'M',
@@ -106,7 +111,8 @@ export class CreateMemberDto {
 
   @IsString()
   @IsOptional()
-  @MinLength(4)
+  @MinLength(PASSWORD_MIN_LENGTH)
+  @MaxLength(PASSWORD_MAX_LENGTH)
   motDePasse?: string;
 
   @IsString()

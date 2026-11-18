@@ -123,7 +123,11 @@ export class LoginThrottleGuard implements CanActivate {
 
   private getIdentifier(request: Request) {
     const body = request.body as { email?: unknown; accountNumber?: unknown } | undefined;
-    const raw = String(body?.email ?? body?.accountNumber ?? '').trim().toLowerCase().slice(0, 256);
+    const value = body?.email ?? body?.accountNumber;
+    const raw =
+      typeof value === 'string'
+        ? value.trim().toLowerCase().slice(0, 256)
+        : '';
     // On hache l'identifiant pour ne pas stocker de donnée personnelle en clair
     return raw ? createHash('sha256').update(raw).digest('hex') : '';
   }
@@ -134,7 +138,12 @@ export class LoginThrottleGuard implements CanActivate {
     const allowedOrigins = (process.env.FRONTEND_URL || 'http://localhost:5000')
       .split(',')
       .map((value) => value.trim().replace(/^['"]|['"]$/g, ''));
-    if (!allowedOrigins.includes('http://localhost:5000')) allowedOrigins.push('http://localhost:5000');
+    if (
+      process.env.NODE_ENV !== 'production' &&
+      !allowedOrigins.includes('http://localhost:5000')
+    ) {
+      allowedOrigins.push('http://localhost:5000');
+    }
     if (!allowedOrigins.includes(origin)) throw new ForbiddenException('Origine non autorisée');
   }
 }

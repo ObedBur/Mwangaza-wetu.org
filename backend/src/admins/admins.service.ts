@@ -8,6 +8,10 @@ import { CreateAdminDto, ConfirmAdminDto } from './dto/create-admin.dto';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import { Role, Prisma } from '@prisma/client';
+import {
+  BCRYPT_ROUNDS,
+  PASSWORD_MIN_LENGTH,
+} from '../common/constants/password-policy';
 
 @Injectable()
 export class AdminsService {
@@ -92,7 +96,7 @@ export class AdminsService {
       .randomBytes(3)
       .toString('hex')
       .toUpperCase();
-    const hashedPassword = await bcrypt.hash(motDePasse, 10);
+    const hashedPassword = await bcrypt.hash(motDePasse, BCRYPT_ROUNDS);
 
     return this.prisma.$transaction(async (tx) => {
       const admin = await tx.administrateur.create({
@@ -174,12 +178,12 @@ export class AdminsService {
 
     const data: Prisma.AdministrateurUpdateInput = { ...dto };
     if (dto.motDePasse) {
-      if (dto.motDePasse.length < 6) {
+      if (dto.motDePasse.length < PASSWORD_MIN_LENGTH) {
         throw new BadRequestException(
-          'Le mot de passe doit contenir au moins 6 caractères',
+          `Le mot de passe doit contenir au moins ${PASSWORD_MIN_LENGTH} caractères`,
         );
       }
-      data.motDePasse = await bcrypt.hash(dto.motDePasse, 10);
+      data.motDePasse = await bcrypt.hash(dto.motDePasse, BCRYPT_ROUNDS);
       // Un reset administratif doit invalider les sessions existantes et
       // lever un éventuel verrouillage lié aux échecs de connexion.
       data.authVersion = { increment: 1 };

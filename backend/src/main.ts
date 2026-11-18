@@ -1,81 +1,18 @@
 import { NestFactory } from '@nestjs/core';
-import { ValidationPipe } from '@nestjs/common';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
-import { json, urlencoded } from 'express';
 import { join } from 'path';
 import * as fs from 'fs';
-import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
-import { SecurityHeadersMiddleware } from './middleware/security-headers.middleware';
+import { configureApp } from './configure-app';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
-
-  // L'API tourne derrière le proxy de Render (1 hop). Sans ce réglage,
-  // req.ip vaut l'IP du load-balancer pour tous les visiteurs : le limiteur
-  // de connexion partage alors un seul compteur et peut bloquer la
-  // plateforme entière. Ne jamais mettre `true` (X-Forwarded-For spoofable).
-  const trustProxy =
-    process.env.TRUST_PROXY ||
-    (process.env.NODE_ENV === 'production' ? '1' : '');
-  if (trustProxy) {
-    app.set(
-      'trust proxy',
-      /^\d+$/.test(trustProxy) ? Number(trustProxy) : trustProxy,
-    );
-  }
-
-  // En-têtes de sécurité sur toutes les réponses
-  const securityHeaders = new SecurityHeadersMiddleware();
-  app.use((req, res, next) => securityHeaders.use(req, res, next));
-
-  // Les routes d'authentification n'acceptent que de petits formulaires JSON.
-  // Ce parseur est monté avant la limite élevée nécessaire aux photos.
-  app.use('/api/auth', json({ limit: '8kb' }));
-
-  // Augmenter la limite de taille pour les photos et empreintes (Base64)
-  app.use(json({ limit: '50mb' }));
-  app.use(urlencoded({ extended: true, limit: '50mb' }));
-
-  // Dossier uploads
-  const uploadsPath = join(process.cwd(), 'uploads');
-  if (!fs.existsSync(uploadsPath)) {
-    fs.mkdirSync(uploadsPath, { recursive: true });
-  }
-
-  // Pas de setGlobalPrefix car les contrôleurs utilisent déjà 'api/' dans leur décorateur
-  // Ex: @Controller('api/membres'), @Controller('api/auth'), etc.
-
-  const envOrigins = (process.env.FRONTEND_URL || 'http://localhost:5000')
-    .split(',')
-    .map((origin) => origin.trim().replace(/^["']|["']$/g, ''))
-    .filter(Boolean);
-
-  if (!envOrigins.includes('http://localhost:5000')) {
-    envOrigins.push('http://localhost:5000');
-  }
-
-  // Activer CORS pour permettre les requêtes depuis le frontend Next.js
-  app.enableCors({
-    origin: envOrigins,
-    credentials: true, // Nécessaire pour envoyer les cookies d'authentification
-  });
-
-  // Filtre d'exceptions global pour journaliser et formater les erreurs
-  app.useGlobalFilters(new AllExceptionsFilter());
-
-  // Validation automatique des DTOs
-  app.useGlobalPipes(
-    new ValidationPipe({
-      whitelist: true, // Supprime les propriétés non déclarées dans le DTO
-      forbidNonWhitelisted: true,
-      transform: true, // Convertit automatiquement les types (string → number, etc.)
-    }),
-  );
+  configureApp(app);
 
   const port = process.env.PORT ?? 4000;
   await app.listen(port, "0.0.0.0");
 
+  const uploadsPath = join(process.cwd(), 'uploads');
   const files = fs.readdirSync(uploadsPath);
   console.log(
     `\n🚀 Backend Mwangaza Wetu démarré sur le port ${port} (0.0.0.0)`,

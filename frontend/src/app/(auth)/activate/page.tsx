@@ -104,7 +104,8 @@ function ActivateForm() {
                   id="password"
                   type={showPassword ? 'text' : 'password'}
                   required
-                  minLength={6}
+                  minLength={8}
+                  maxLength={72}
                   autoComplete="new-password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}

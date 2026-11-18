@@ -9,7 +9,19 @@ class RedisLifecycle implements OnModuleInit, OnModuleDestroy {
   constructor(@Optional() @Inject(REDIS_CLIENT) private readonly redis: RedisClientType | null) {}
 
   async onModuleInit() {
-    if (this.redis && !this.redis.isOpen) await this.redis.connect();
+    if (!this.redis || this.redis.isOpen) return;
+    try {
+      await this.redis.connect();
+    } catch (error) {
+      // Redis est une défense en profondeur : son indisponibilité au démarrage
+      // ne doit pas empêcher l'application de servir les requêtes. La
+      // reconnexion automatique prendra le relais.
+      new Logger('Redis').error(
+        `Connexion initiale à Redis impossible : ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
   }
 
   async onModuleDestroy() {
@@ -35,8 +47,23 @@ class RedisLifecycle implements OnModuleInit, OnModuleDestroy {
           return null;
         }
 
-        const client = createClient({ url });
-        client.on('error', () => logger.error('Redis connection error.'));
+        const client = createClient({
+          url,
+          socket: {
+            // Backoff exponentiel plafonné : une coupure Redis ne provoque pas
+            // de tempête de reconnexions, et le client réessaie indéfiniment
+            // (l'application reste debout pendant l'indisponibilité).
+            reconnectStrategy: (retries) =>
+              Math.min(500 * 2 ** Math.min(retries, 6), 30_000),
+          },
+        });
+        client.on('error', (error) =>
+          logger.error(
+            `Redis connection error: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          ),
+        );
         return client;
       },
     },

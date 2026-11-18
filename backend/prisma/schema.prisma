@@ -288,6 +288,7 @@ model LoginAttempt {
   updatedAt  DateTime @updatedAt @map("updated_at")
 
   @@unique([ip, identifier], map: "login_attempts_ip_identifier_key")
+  @@index([updatedAt], map: "login_attempts_updated_at_idx")
   @@map("login_attempts")
 }
 

@@ -12,6 +12,7 @@ import { ComptabiliteService } from '../comptabilite/comptabilite.service';
 import { MemberMailService } from './member-mail.service';
 import { CloudinaryService } from './cloudinary.service';
 import { CreateMemberDto, Sexe } from './dto/create-member.dto';
+import { UpdateMemberDto } from './dto/update-member.dto';
 import { UpdateOwnProfileDto } from './dto/update-own-profile.dto';
 import {
   normalizeSectionName,
@@ -28,6 +29,7 @@ import {
   Devise,
   TypeOperationEpargne,
 } from '@prisma/client';
+import { BCRYPT_ROUNDS } from '../common/constants/password-policy';
 
 type CloudinaryPhoto = { url: string; publicId: string };
 
@@ -409,7 +411,7 @@ export class MembersService {
     }
 
     const temporaryPassword = crypto.randomBytes(12).toString('base64url');
-    const hashedPassword = await bcrypt.hash(temporaryPassword, 10);
+    const hashedPassword = await bcrypt.hash(temporaryPassword, BCRYPT_ROUNDS);
 
     const activationToken = crypto.randomBytes(32).toString('hex');
     const activationExpires = new Date();
@@ -725,7 +727,7 @@ export class MembersService {
     };
   }
 
-  async update(id: number, updateDto: Partial<CreateMemberDto>) {
+  async update(id: number, updateDto: UpdateMemberDto) {
     const membre = await this.prisma.membre.findUnique({
       where: { id },
       include: { delegues: true },
@@ -787,7 +789,7 @@ export class MembersService {
 
     if (updateDto.motDePasse) {
       if (!updateDto.motDePasse.startsWith('$2')) {
-        data.motDePasse = await bcrypt.hash(updateDto.motDePasse, 10);
+        data.motDePasse = await bcrypt.hash(updateDto.motDePasse, BCRYPT_ROUNDS);
       } else {
         data.motDePasse = updateDto.motDePasse;
       }
@@ -807,7 +809,7 @@ export class MembersService {
     if (updateDto.statut) data.statut = updateDto.statut;
     if (updateDto.typeCompte) data.typeCompte = updateDto.typeCompte;
     if (updateDto.activite !== undefined)
-      data.activite = updateDto.activite.trim() || null;
+      data.activite = updateDto.activite?.trim() || null;
     if (updateDto.dateAdhesion)
       data.dateAdhesion = new Date(updateDto.dateAdhesion);
     if (updateDto.dateNaissance !== undefined)
@@ -1313,7 +1315,7 @@ export class MembersService {
       throw new BadRequestException("Lien d'activation invalide ou expiré");
     }
 
-    const hashedPassword = await bcrypt.hash(password, 12);
+    const hashedPassword = await bcrypt.hash(password, BCRYPT_ROUNDS);
 
     const activated = await this.prisma.membre.update({
       where: { id: membre.id },

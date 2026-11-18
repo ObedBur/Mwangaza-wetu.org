@@ -10,6 +10,7 @@ import { ChangeMemberPasswordDto } from './dto/change-member-password.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { UnlockAccountDto } from './dto/unlock-account.dto';
 import { LoginThrottleGuard } from './login-throttle.guard';
+import { AuthAuditService } from './auth-audit.service';
 import { CSRF_COOKIE_NAME, SESSION_COOKIE_NAME, readRequestCookie } from './auth-cookies';
 
 @Public()
@@ -18,6 +19,7 @@ export class AuthController {
   constructor(
     private readonly authService: AuthService,
     private readonly loginThrottleGuard: LoginThrottleGuard,
+    private readonly audit: AuthAuditService,
   ) {}
 
   @Post('login')
@@ -27,7 +29,10 @@ export class AuthController {
     @Req() request: ExpressRequest,
     @Res({ passthrough: true }) response: Response,
   ) {
-    const result = await this.authService.loginUnified(loginDto);
+    const result = await this.authService.loginUnified(loginDto, {
+      ip: request.ip,
+      identifier: loginDto.email ?? loginDto.accountNumber,
+    });
     await this.loginThrottleGuard.resetAfterSuccessfulLogin(request);
     return this.createSession(response, result, loginDto.rememberMe !== false);
   }
@@ -35,7 +40,10 @@ export class AuthController {
   @Post('admin/login')
   @UseGuards(LoginThrottleGuard)
   async loginAdmin(@Body() loginDto: LoginDto, @Req() request: ExpressRequest, @Res({ passthrough: true }) response: Response) {
-    const result = await this.authService.loginAdmin(loginDto);
+    const result = await this.authService.loginAdmin(loginDto, {
+      ip: request.ip,
+      identifier: loginDto.email ?? loginDto.accountNumber,
+    });
     await this.loginThrottleGuard.resetAfterSuccessfulLogin(request);
     return this.createSession(response, result, loginDto.rememberMe !== false);
   }
@@ -43,7 +51,10 @@ export class AuthController {
   @Post('member/login')
   @UseGuards(LoginThrottleGuard)
   async loginMember(@Body() loginDto: LoginDto, @Req() request: ExpressRequest, @Res({ passthrough: true }) response: Response) {
-    const result = await this.authService.loginMember(loginDto);
+    const result = await this.authService.loginMember(loginDto, {
+      ip: request.ip,
+      identifier: loginDto.email ?? loginDto.accountNumber,
+    });
     await this.loginThrottleGuard.resetAfterSuccessfulLogin(request);
     return this.createSession(response, result, loginDto.rememberMe !== false);
   }
@@ -51,7 +62,10 @@ export class AuthController {
   @Post('agent/login')
   @UseGuards(LoginThrottleGuard)
   async loginAgent(@Body() loginDto: LoginDto, @Req() request: ExpressRequest, @Res({ passthrough: true }) response: Response) {
-    const result = await this.authService.loginAgent(loginDto);
+    const result = await this.authService.loginAgent(loginDto, {
+      ip: request.ip,
+      identifier: loginDto.email ?? loginDto.accountNumber,
+    });
     await this.loginThrottleGuard.resetAfterSuccessfulLogin(request);
     return this.createSession(response, result, loginDto.rememberMe !== false);
   }
@@ -83,7 +97,10 @@ export class AuthController {
     const token =
       readRequestCookie(request, SESSION_COOKIE_NAME) ??
       request.get('authorization')?.replace(/^Bearer\s+/i, '');
-    await this.authService.revokeSession(token);
+    const revoked = await this.authService.revokeSession(token);
+    if (revoked) {
+      await this.audit.logout(revoked.role, revoked.userId, { ip: request.ip });
+    }
     const secure = process.env.NODE_ENV === 'production';
     const sameSite = secure ? 'none' : 'lax';
     response.clearCookie(SESSION_COOKIE_NAME, { path: '/', httpOnly: true, secure, sameSite });
@@ -160,6 +177,8 @@ export class AuthController {
       ...persistentOptions,
     });
     const { token: _token, ...publicResult } = result;
+    // Le jeton CSRF est renvoyé dans le corps (et non le JWT de session).
+    void _token;
     // On retourne le token dans le corps de la réponse pour que le frontend puisse l'envoyer en header X-CSRF-Token
     return { ...publicResult, csrfToken };
   }

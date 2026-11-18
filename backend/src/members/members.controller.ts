@@ -14,6 +14,7 @@ import {
 } from '@nestjs/common';
 import { MembersService } from './members.service';
 import { CreateMemberDto } from './dto/create-member.dto';
+import { UpdateMemberDto } from './dto/update-member.dto';
 import { ActivateMemberDto } from './dto/activate-member.dto';
 import { UpdateOwnProfileDto } from './dto/update-own-profile.dto';
 import { Public } from '../auth/jwt-auth.guard';
@@ -213,7 +214,7 @@ export class MembersController {
   @Put(':id')
   async update(
     @Param('id', ParseIntPipe) id: number,
-    @Body() updateDto: Partial<CreateMemberDto>,
+    @Body() updateDto: UpdateMemberDto,
   ) {
     return this.membersService.update(id, updateDto);
   }

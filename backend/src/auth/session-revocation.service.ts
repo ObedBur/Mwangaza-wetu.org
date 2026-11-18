@@ -3,6 +3,8 @@ import type { RedisClientType } from 'redis';
 import { REDIS_CLIENT } from '../redis/redis.module';
 
 const KEY_PREFIX = 'auth:revoked:';
+/** Au-delà, on élague les entrées mémoire expirées. */
+const MEMORY_PRUNE_THRESHOLD = 10_000;
 
 /**
  * Liste de révocation des sessions JWT (déconnexion immédiate).
@@ -12,7 +14,10 @@ const KEY_PREFIX = 'auth:revoked:';
  * jusqu'à son `exp` ; l'entrée expire avec le jeton, la liste ne grossit
  * pas indéfiniment.
  *
- * Sans Redis (développement local), un cache mémoire assure le même rôle.
+ * La révocation est écrite dans Redis (partagée entre instances) ET en
+ * mémoire. La copie mémoire garantit qu'une déconnexion reste effective
+ * localement même si Redis tombe juste après l'écriture, et évite un
+ * aller-retour réseau sur le chemin chaud.
  */
 @Injectable()
 export class SessionRevocationService {
@@ -30,23 +35,32 @@ export class SessionRevocationService {
     // Jeton déjà expiré : il est refusé par la stratégie JWT, rien à stocker.
     if (ttlSeconds <= 0) return;
 
+    // Toujours alimenter la mémoire, même quand Redis répond : sans cela une
+    // panne Redis ultérieure ferait réapparaître une session déconnectée.
+    this.remember(jti, Date.now() + ttlSeconds * 1000);
+
     try {
       if (this.redis?.isOpen) {
         await this.redis.set(`${KEY_PREFIX}${jti}`, '1', { EX: ttlSeconds });
-        return;
       }
     } catch (error) {
       this.logger.error(
         `Impossible d'enregistrer la révocation dans Redis: ${String(error)}`,
       );
     }
-
-    this.memory.set(jti, Date.now() + ttlSeconds * 1000);
   }
 
   async isRevoked(jti: string | undefined): Promise<boolean> {
     if (!jti) return false;
 
+    // 1. Révocation locale : c'est le cas nominal du logout sur cette instance.
+    const expiresAt = this.memory.get(jti);
+    if (expiresAt !== undefined) {
+      if (expiresAt > Date.now()) return true;
+      this.memory.delete(jti);
+    }
+
+    // 2. Révocation faite sur une autre instance : Redis fait foi.
     try {
       if (this.redis?.isOpen) {
         return (await this.redis.exists(`${KEY_PREFIX}${jti}`)) === 1;
@@ -59,12 +73,16 @@ export class SessionRevocationService {
       );
     }
 
-    const expiresAt = this.memory.get(jti);
-    if (!expiresAt) return false;
-    if (expiresAt <= Date.now()) {
-      this.memory.delete(jti);
-      return false;
+    return false;
+  }
+
+  private remember(jti: string, expiresAt: number): void {
+    if (this.memory.size >= MEMORY_PRUNE_THRESHOLD) {
+      const now = Date.now();
+      for (const [key, expiry] of this.memory) {
+        if (expiry <= now) this.memory.delete(key);
+      }
     }
-    return true;
+    this.memory.set(jti, expiresAt);
   }
 }

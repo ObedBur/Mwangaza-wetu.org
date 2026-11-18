@@ -167,23 +167,42 @@ export function getAuthUser(): AuthUser | null {
   return { role: role as AuthUser['role'] } as AuthUser;
 }
 
+/**
+ * Purge locale uniquement (cookie de rôle + jeton CSRF en mémoire).
+ * Utilisée par l'intercepteur 401 : inutile d'appeler le serveur, la session
+ * est déjà invalide.
+ */
 export function clearAuthSession(): void {
   if (typeof window === 'undefined') return;
   document.cookie = `${ROLE_COOKIE}=; path=/; max-age=0`;
-  // Le cookie CSRF est HttpOnly : seul le serveur peut le supprimer (via /auth/logout).
-  const token = csrfToken;
   csrfToken = null;
   csrfTokenRequest = null;
-  void fetch(`${API_URL}/auth/logout`, {
-    method: 'POST',
-    credentials: 'include',
-    headers: token ? { 'X-CSRF-Token': token } : undefined,
-  }).catch(() => undefined);
 }
 
-/** Déconnexion : purge la session puis renvoie vers /login. */
-export function logout(): void {
+/**
+ * Révoque la session côté serveur (déconnexion réelle).
+ * Le cookie CSRF est HttpOnly : après un rechargement, le jeton en mémoire est
+ * vide. Il faut donc le récupérer avant l'appel, sinon le backend répond 403
+ * CSRF et le cookie de session n'est jamais effacé.
+ */
+async function revokeServerSession(): Promise<void> {
+  try {
+    const token = csrfToken ?? (await fetchCsrfToken());
+    await fetch(`${API_URL}/auth/logout`, {
+      method: 'POST',
+      credentials: 'include',
+      keepalive: true,
+      headers: { 'X-CSRF-Token': token },
+    });
+  } catch {
+    // Hors ligne ou session déjà expirée : le nettoyage local suffit.
+  }
+}
+
+/** Déconnexion : révoque la session serveur, purge le local puis redirige. */
+export async function logout(): Promise<void> {
   if (typeof window === 'undefined') return;
+  await revokeServerSession();
   clearAuthSession();
   // Intercepteur/hors React : window.location est le seul moyen de navigation
   // eslint-disable-next-line @next/next/no-location-assign-relative-destination

@@ -9,6 +9,8 @@ import { JwtStrategy } from './jwt.strategy';
 import { LoginThrottleGuard } from './login-throttle.guard';
 import { SessionRevocationService } from './session-revocation.service';
 import { RedisModule } from '../redis/redis.module';
+import { AuthAuditService } from './auth-audit.service';
+import { LoginAttemptsCleanupService } from './login-attempts-cleanup.service';
 
 @Module({
   imports: [
@@ -24,7 +26,14 @@ import { RedisModule } from '../redis/redis.module';
       }),
     }),
   ],
-  providers: [AuthService, JwtStrategy, LoginThrottleGuard, SessionRevocationService],
+  providers: [
+    AuthService,
+    JwtStrategy,
+    LoginThrottleGuard,
+    SessionRevocationService,
+    AuthAuditService,
+    LoginAttemptsCleanupService,
+  ],
   controllers: [AuthController],
   exports: [AuthService, JwtStrategy, SessionRevocationService],
 })

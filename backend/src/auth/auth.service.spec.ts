@@ -11,10 +11,17 @@ describe('AuthService — verrouillage de compte', () => {
   };
   let service: AuthService;
 
+  const audit = {
+    loginSucceeded: jest.fn(),
+    loginFailed: jest.fn(),
+    accountLocked: jest.fn(),
+    logout: jest.fn(),
+  };
+
   const registerFailure = (role: 'member' | 'agent' | 'admin', id = 7) =>
     (
       service as unknown as {
-        registerLoginFailure: (role: string, id: number) => Promise<void>;
+        registerLoginFailure: (role: string, id: number) => Promise<boolean>;
       }
     ).registerLoginFailure(role, id);
 
@@ -27,13 +34,21 @@ describe('AuthService — verrouillage de compte', () => {
       agent: { update: jest.fn() },
       administrateur: { update: jest.fn() },
     };
-    service = new AuthService(prisma as never, {} as never, {} as never);
+    jest.clearAllMocks();
+    service = new AuthService(
+      prisma as never,
+      {} as never,
+      {} as never,
+      audit as never,
+    );
   });
 
   it('remet le compteur à zéro hors fenêtre puis incrémente', async () => {
     prisma.$queryRawUnsafe.mockResolvedValue([{ login_failures: 1 }]);
 
-    await registerFailure('member');
+    const locked = await registerFailure('member');
+
+    expect(locked).toBe(false);
 
     // Deux remises à zéro conditionnelles (verrou expiré + hors fenêtre),
     // puis aucun verrouillage sous le seuil.
@@ -55,7 +70,9 @@ describe('AuthService — verrouillage de compte', () => {
   it('verrouille le compte au dixième échec et remet le compteur à zéro', async () => {
     prisma.$queryRawUnsafe.mockResolvedValue([{ login_failures: 10 }]);
 
-    await registerFailure('admin');
+    const locked = await registerFailure('admin');
+
+    expect(locked).toBe(true);
 
     expect(prisma.$executeRawUnsafe).toHaveBeenCalledTimes(3);
     expect(prisma.$executeRawUnsafe).toHaveBeenNthCalledWith(
