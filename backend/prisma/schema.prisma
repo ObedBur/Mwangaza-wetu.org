@@ -151,10 +151,12 @@ model Epargne {
   description     String?
   createdAt       DateTime             @default(now()) @map("created_at")
   remboursementId Int?                 @map("remboursement_id")
+  datId           Int?                 @map("dat_id")
   executeParId    Int?                 @map("execute_par_id")
   executeParRole  String?              @map("execute_par_role")
   membre          Membre               @relation(fields: [compte], references: [numeroCompte])
   remboursement   Remboursement?       @relation("remboursement_epargnes", fields: [remboursementId], references: [id])
+  dat             Dat?                 @relation(fields: [datId], references: [id], onDelete: Restrict)
 
   @@index([remboursementId])
   @@index([dateOperation])
@@ -164,7 +166,7 @@ model Epargne {
 
 // ─────────────────────────────────────────────────────────────────────
 // DÉPÔT À TERME (DAT) — dossier fonctionnel §3.2
-// 1 seul DAT actif par membre ; retrait anticipé INTERDIT (décision E1)
+// Un DAT actif par membre et par durée ; retrait anticipé INTERDIT (décision E1)
 // ─────────────────────────────────────────────────────────────────────
 model Dat {
   id            Int       @id @default(autoincrement())
@@ -189,6 +191,7 @@ model Dat {
   createdAt     DateTime  @default(now()) @map("created_at")
   updatedAt     DateTime  @updatedAt @map("updated_at")
   membre        Membre    @relation(fields: [numeroCompte], references: [numeroCompte])
+  epargnes      Epargne[]
 
   @@index([numeroCompte, statut])
   @@index([dateEcheance])

@@ -79,7 +79,7 @@ const navigationGroups: NavigationGroup[] = [
     title: "Opérations",
     items: [
       {
-        label: "Dépôts & Epargnes",
+        label: "Dépôts et épargne",
         href: "/operations/depots-cotisations",
         icon: IconArrowDown,
       },
@@ -129,6 +129,28 @@ export function CooperativeSidebar({
   const [isLogoHovered, setIsLogoHovered] = useState(false);
   const pathname = usePathname();
   const authUser = getAuthUser();
+  const isAgent = authUser?.role === "agent";
+  const agentVisibleHrefs = new Set([
+    "/dashboard",
+    "/membres",
+    "/operations/depots-cotisations",
+    "/operations/retraits",
+    "/operations/remboursements",
+    "/compte-agent",
+  ]);
+  const visibleNavigationGroups = navigationGroups
+    .filter((group) => {
+      if (group.title === "Administration") return authUser?.role === "admin" || authUser?.role === "superadmin";
+      if (group.title === "Mon compte") return authUser?.role === "agent" || authUser?.role === "admin" || authUser?.role === "superadmin";
+      return true;
+    })
+    .map((group) => ({
+      ...group,
+      items: group.items.filter(({ href }) =>
+        !isAgent || agentVisibleHrefs.has(href) || href.startsWith("/comptes-epargne/"),
+      ),
+    }))
+    .filter((group) => group.items.length > 0);
   const initials = authUser?.fullName
     ? authUser.fullName
       .split(" ")
@@ -211,13 +233,7 @@ export function CooperativeSidebar({
         )}
       </div>
       <nav className="mw-nav" aria-label={t.adminTools}>
-        {navigationGroups
-          .filter((group) => {
-            if (group.title === "Administration") return authUser?.role === "admin" || authUser?.role === "superadmin";
-            if (group.title === "Mon compte") return authUser?.role === "agent" || authUser?.role === "admin" || authUser?.role === "superadmin";
-            return true;
-          })
-          .map((group) => (
+        {visibleNavigationGroups.map((group) => (
             <section className="mw-nav-group" key={group.title}>
               {group.collapsible ? (
                 <button

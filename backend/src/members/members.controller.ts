@@ -201,14 +201,22 @@ export class MembersController {
 
   @Roles(...ADMIN_ROLES, 'agent')
   @Post()
-  async create(@Body() createMemberDto: CreateMemberDto) {
-    return this.membersService.create(createMemberDto);
+  async create(
+    @Body() createMemberDto: CreateMemberDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.membersService.create(createMemberDto, req.user!);
   }
 
   @Public()
   @Post('activate')
   async activate(@Body() dto: ActivateMemberDto) {
     return this.membersService.activate(dto.token, dto.motDePasse);
+  }
+
+  @Post(':id/reset-password')
+  async resetPassword(@Param('id', ParseIntPipe) id: number) {
+    return this.membersService.resetPassword(id);
   }
 
   @Put(':id')

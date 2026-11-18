@@ -410,7 +410,7 @@ function LoginForm() {
             </h1>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-5 xl:space-y-6" autoComplete="on" noValidate>
+          <form method="post" onSubmit={handleSubmit} className="space-y-5 xl:space-y-6" autoComplete="on" noValidate>
             {formError && (
               <p className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm leading-relaxed text-red-800" role="alert">
                 <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
@@ -428,7 +428,6 @@ function LoginForm() {
               <div className="relative">
                 <input
                   id="identifier"
-                  name="username"
                   type="text"
                   autoComplete="username"
                   autoCapitalize="none"
@@ -474,7 +473,6 @@ function LoginForm() {
               <div className="relative">
                 <input
                   id="password"
-                  name="password"
                   type={showPassword ? 'text' : 'password'}
                   autoComplete="current-password"
                   value={password}

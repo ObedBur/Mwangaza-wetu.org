@@ -1362,7 +1362,18 @@ button.mw-nav-group-toggle,
   font-weight: 600;
 }
 .mw-chart {
+  position: relative;
   padding: 0 13px 12px;
+}
+.mw-chart-empty-state {
+  position: absolute;
+  inset: 12px 16px 42px;
+  display: grid;
+  place-items: center;
+  color: var(--mw-muted);
+  font-size: 12px;
+  text-align: center;
+  pointer-events: none;
 }
 .mw-chart svg {
   display: block;
@@ -1673,21 +1684,27 @@ button.mw-nav-group-toggle,
   flex: 1;
   min-width: 0;
 }
-.mw-reminder-info strong,
-.mw-reminder-info span {
+.mw-reminder-info > strong,
+.mw-reminder-info > span {
   display: block;
 }
-.mw-reminder-info strong {
+.mw-reminder-info > strong {
   overflow: hidden;
   font-size: 10px;
   font-weight: 620;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.mw-reminder-info span {
+.mw-reminder-info > span {
   margin-top: 2px;
   color: var(--mw-muted);
   font-size: 9px;
+}
+.mw-reminder-info > span strong {
+  display: inline;
+  color: var(--mw-ink);
+  font-size: inherit;
+  font-weight: 650;
 }
 .mw-reminder-action {
   flex: none;
@@ -3160,7 +3177,7 @@ button.mw-nav-group-toggle,
 }
 .mw-guichet-card {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(160px, 0.45fr) minmax(250px, 0.8fr);
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 0.55fr);
   align-items: center;
   gap: 16px;
   width: 100%;
@@ -3212,9 +3229,11 @@ button.mw-nav-group-toggle,
   color: var(--mw-muted);
 }
 .mw-guichet-balances {
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  justify-content: stretch;
   align-items: center;
+  min-width: 0;
   gap: 12px;
   border-radius: 8px;
   background: var(--mw-paper);
@@ -3232,6 +3251,7 @@ button.mw-nav-group-toggle,
   letter-spacing: 0.2px;
 }
 .mw-guichet-currency-value {
+  white-space: nowrap;
   font-size: 13px;
   font-weight: 700;
   color: var(--mw-ink);
@@ -3403,6 +3423,20 @@ button.mw-nav-group-toggle,
     max-width: 100%;
   }
 
+  .mw-dashboard-page .mw-overview-panel[aria-labelledby="mw-chart-title"] .mw-panel-header > div:last-child {
+    width: 100%;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+
+  .mw-dashboard-page .mw-overview-panel[aria-labelledby="mw-chart-title"] .mw-periods {
+    flex-wrap: nowrap;
+  }
+
+  .mw-dashboard-page .mw-overview-panel[aria-labelledby="mw-chart-title"] .mw-period {
+    white-space: nowrap;
+  }
+
   .mw-dashboard-page .mw-account-row {
     gap: 8px;
     width: calc(100% - 32px);
@@ -3413,5 +3447,46 @@ button.mw-nav-group-toggle,
 @media (max-width: 360px) {
   .mw-kpis-5 {
     grid-template-columns: minmax(0, 1fr) !important;
+  }
+}
+
+/* Dashboard: hierarchy aligned with the main dashboard reference. */
+.mw-dashboard-page .mw-dashboard-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas:
+    "primary"
+    "support"
+    "transactions";
+  align-items: start;
+  gap: 16px;
+}
+
+.mw-dashboard-page .mw-main-column {
+  display: contents;
+}
+
+.mw-dashboard-page .mw-main-column > section[aria-labelledby="mw-chart-title"],
+.mw-dashboard-page .mw-main-column > section[aria-labelledby="mw-agent-ops-title"] {
+  grid-area: primary;
+}
+
+.mw-dashboard-page .mw-right-column {
+  grid-area: support;
+  grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.8fr);
+  align-items: start;
+}
+
+.mw-dashboard-page .mw-main-column > section[aria-labelledby="mw-transactions-title"] {
+  grid-area: transactions;
+}
+
+.mw-dashboard-page .mw-overview-panel[aria-labelledby="mw-chart-title"] {
+  min-height: 280px;
+}
+
+@media (max-width: 900px) {
+  .mw-dashboard-page .mw-right-column {
+    grid-template-columns: minmax(0, 1fr);
   }
 }

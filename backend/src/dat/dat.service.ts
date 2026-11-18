@@ -12,8 +12,11 @@ import { CreateDatDto } from './dto/create-dat.dto';
 import type { DatDuree } from '../parametres/parametres.service';
 import { Devise, StatutDat } from '@prisma/client';
 import { NotificationsService } from '../notifications/notifications.service';
+import { ComptabiliteService } from '../comptabilite/comptabilite.service';
+import { Prisma } from '@prisma/client';
+import { getSectionTrigram } from '../common/constants/sections';
 
-/** Statuts pour lesquels le membre ne peut PAS ouvrir un second DAT. */
+/** Statuts occupant encore une durée pour un membre. */
 const STATUTS_ACTIFS: StatutDat[] = [StatutDat.OUVERT, StatutDat.ECHEANCE];
 
 /** Barème par durée (base de jours du dossier §3.2). */
@@ -26,6 +29,7 @@ export class DatService implements OnModuleInit, OnModuleDestroy {
     private prisma: PrismaService,
     private parametres: ParametresService,
     private notifications: NotificationsService,
+    private comptabilite: ComptabiliteService,
   ) {}
 
   onModuleInit() {
@@ -182,157 +186,130 @@ export class DatService implements OnModuleInit, OnModuleDestroy {
   }
 
   // ── Ouverture ─────────────────────────────────────────────────────
-  async ouvrir(dto: CreateDatDto, userId?: number) {
-    // 1. Le membre existe-t-il ?
-    const membre = await this.prisma.membre.findUnique({
-      where: { numeroCompte: dto.numeroCompte },
-    });
-    if (!membre) {
-      throw new NotFoundException(
-        `Membre ${dto.numeroCompte} introuvable`,
-      );
-    }
+  async ouvrirAuGuichetDansTransaction(
+    tx: Prisma.TransactionClient,
+    dto: CreateDatDto,
+    agentId: number,
+  ) {
+    const membre = await tx.membre.findUnique({ where: { numeroCompte: dto.numeroCompte } });
+    if (!membre) throw new NotFoundException(`Membre ${dto.numeroCompte} introuvable`);
 
-    // 2. Règle « 1 seul DAT actif par membre »
-    const actif = await this.prisma.dat.findFirst({
-      where: {
-        numeroCompte: dto.numeroCompte,
-        statut: { in: STATUTS_ACTIFS },
-      },
+    await tx.$queryRaw<Array<{ id: number }>>`
+      SELECT "id" FROM "membres" WHERE "id" = ${membre.id} FOR UPDATE
+    `;
+
+    const actif = await tx.dat.findFirst({
+      where: { numeroCompte: dto.numeroCompte, dureeMois: dto.dureeMois, statut: { in: STATUTS_ACTIFS } },
     });
     if (actif) {
-      throw new ConflictException(
-        `Un DAT est déjà en cours (n°${actif.id}, échéance le ` +
-          `${actif.dateEcheance.toLocaleDateString('fr-FR')}). ` +
-          `Un seul DAT à la fois : veuillez attendre son échéance.`,
-      );
+      throw new ConflictException(`Un DAT de ${dto.dureeMois} mois est déjà actif pour ce membre.`);
     }
 
-    // 3. Durée autorisée par le barème
-    const historiqueDat = await this.prisma.dat.count({ where: { numeroCompte: dto.numeroCompte } });
-    const dureeMois = historiqueDat === 0 ? membre.dureeEpargneMois : dto.dureeMois;
-    const bareme = await this.parametres.getDatDuree(dureeMois);
-    if (!bareme) {
-      throw new BadRequestException(
-        `Durée non autorisée : ${dureeMois} mois. Durées possibles : 1, 3, 6, 12 mois.`,
-      );
-    }
-
-    // 4. Minimum d'ouverture selon la devise
+    const bareme = await this.parametres.getDatDuree(dto.dureeMois);
+    if (!bareme) throw new BadRequestException('Durée DAT invalide. Durées possibles : 1, 3, 6 ou 12 mois.');
     const minimum = dto.devise === Devise.FC ? bareme.minFc : bareme.minUsd;
     if (dto.montant < minimum) {
-      throw new BadRequestException(
-        `Montant minimum pour un DAT de ${dureeMois} mois : ` +
-          `${minimum} ${dto.devise}.`,
-      );
+      throw new BadRequestException(`Montant minimum pour un DAT de ${dto.dureeMois} mois : ${minimum} ${dto.devise}.`);
     }
 
-    // 5. Le membre a-t-il assez sur son Compte Principal ?
-    const soldePrincipal = await this.getSoldeDevise(
-      dto.numeroCompte,
-      'PRINCIPAL',
-      dto.devise,
-    );
-    if (soldePrincipal < dto.montant) {
-      throw new BadRequestException(
-        `Solde insuffisant sur le Compte Principal : ` +
-          `${soldePrincipal} ${dto.devise} disponibles, ` +
-          `${dto.montant} ${dto.devise} requis.`,
-      );
-    }
+    const caisseInitiale = await tx.caisseAgent.findUnique({
+      where: { agentId_devise: { agentId, devise: dto.devise } },
+    });
+    if (!caisseInitiale) throw new BadRequestException(`Votre caisse n'est pas initialisée en ${dto.devise}.`);
+    await tx.$queryRaw<Array<{ id: number }>>`SELECT "id" FROM "caisses_agents" WHERE "id" = ${caisseInitiale.id} FOR UPDATE`;
+    const caisse = await tx.caisseAgent.findUnique({ where: { id: caisseInitiale.id } });
+    if (!caisse) throw new BadRequestException('Caisse introuvable.');
 
-    // 6. Dates et gain — taux FIGÉ au moment de l'ouverture
-    const dateOuverture = dto.dateOuverture
-      ? new Date(`${dto.dateOuverture}T00:00:00.000Z`)
-      : new Date();
-    if (Number.isNaN(dateOuverture.getTime())) {
-      throw new BadRequestException('Date d\'ouverture invalide');
-    }
-
+    const dateOuverture = dto.dateOuverture ? new Date(`${dto.dateOuverture}T00:00:00.000Z`) : new Date();
+    if (Number.isNaN(dateOuverture.getTime())) throw new BadRequestException("Date d'ouverture invalide");
     const dateEcheance = new Date(dateOuverture);
-    dateEcheance.setUTCMonth(dateEcheance.getUTCMonth() + dureeMois);
-
+    dateEcheance.setUTCMonth(dateEcheance.getUTCMonth() + dto.dureeMois);
     const capital = dto.montant;
-    // Gain conditionné au seuil : sous le seuil, ou durée sans intérêt, gain = 0
-    const { gain, seuilGain, seuilAtteint } = this.calculerGain(
-      capital,
-      bareme,
-      dto.devise,
-    );
+    const { gain, seuilGain, seuilAtteint } = this.calculerGain(capital, bareme, dto.devise);
 
-    // 7. Écriture atomique : DAT + sortie du Principal + entrée sur le DAT
-    const resultat = await this.prisma.$transaction(async (tx) => {
-      const dat = await tx.dat.create({
-        data: {
-          numeroCompte: dto.numeroCompte,
-          devise: dto.devise,
-          capital,
-          tauxPeriode: bareme.tauxPeriode,
-          dureeMois,
-          baseJours: bareme.baseJours,
-          gain,
-          dateOuverture,
-          dateEcheance,
-          statut: StatutDat.OUVERT,
-        },
-      });
-      await tx.membre.update({ where: { numeroCompte: dto.numeroCompte }, data: { dureeEpargneMois: dureeMois } });
-
-      // Sortie du Compte Principal (solde libre)
-      await tx.epargne.create({
-        data: {
-          compte: dto.numeroCompte,
-          typeOperation: 'retrait',
-          typeCompte: 'PRINCIPAL',
-          devise: dto.devise,
-          montant: capital,
-          dateOperation: dateOuverture,
-          description: `Blocage DAT ${dureeMois} mois (n°${dat.id})`,
-        },
-      });
-
-      // Entrée sur le sous-compte DAT (solde bloqué)
-      await tx.epargne.create({
-        data: {
-          compte: dto.numeroCompte,
-          typeOperation: 'depot',
-          typeCompte: 'DAT',
-          devise: dto.devise,
-          montant: capital,
-          dateOperation: dateOuverture,
-          description: `Ouverture DAT ${dureeMois} mois (n°${dat.id})`,
-        },
-      });
-
-      return this.format(dat, {
-        soldePrincipal: soldePrincipal - capital,
-        soldeDat: capital,
-        seuilGain,
-        seuilAtteint,
-        // Explique un gain à 0 : soit durée sans intérêt, soit seuil non atteint
-        motifGainNul: gain > 0
-          ? undefined
-          : bareme.tauxPeriode === 0
-            ? `Le DAT de ${dureeMois} mois n'applique aucun intérêt.`
-            : `Capital inférieur au seuil de ${seuilGain.toLocaleString('fr-FR')} ` +
-              `${dto.devise} : pas d'intérêt.`,
-      });
+    const dat = await tx.dat.create({
+      data: {
+        numeroCompte: dto.numeroCompte,
+        devise: dto.devise,
+        capital,
+        tauxPeriode: bareme.tauxPeriode,
+        dureeMois: dto.dureeMois,
+        baseJours: bareme.baseJours,
+        gain,
+        dateOuverture,
+        dateEcheance,
+        statut: StatutDat.OUVERT,
+      },
+    });
+    const epargne = await tx.epargne.create({
+      data: {
+        compte: dto.numeroCompte,
+        typeOperation: 'depot',
+        typeCompte: 'DAT',
+        datId: dat.id,
+        devise: dto.devise,
+        montant: capital,
+        dateOperation: dateOuverture,
+        description: `Versement guichet — DAT ${dto.dureeMois} mois (n°${dat.id})`,
+        executeParId: agentId,
+        executeParRole: 'agent',
+      },
+    });
+    await this.comptabilite.enregistrerDepotDat(tx, {
+      montant: capital,
+      devise: dto.devise,
+      numeroCompte: dto.numeroCompte,
+      codeSection: `MW-${getSectionTrigram(membre.typeCompte)}`,
+      executeParId: agentId,
+      executeParRole: 'agent',
+      dateOperation: dateOuverture,
+      idempotencyKey: `dat-open-${dat.id}`,
+    });
+    const soldeAvant = Number(caisse.solde);
+    const soldeApres = soldeAvant + capital;
+    await tx.caisseAgent.update({ where: { id: caisse.id }, data: { solde: { increment: capital } } });
+    await tx.mouvementCaisseAgent.create({
+      data: {
+        caisseId: caisse.id,
+        epargneId: epargne.id,
+        type: 'DEPOT',
+        devise: dto.devise,
+        montant: capital,
+        soldeAvant,
+        soldeApres,
+        motif: `Versement pour DAT ${dto.dureeMois} mois du membre ${dto.numeroCompte}`,
+        acteurId: agentId,
+        acteurRole: 'agent',
+        idempotencyKey: `dat-open-${dat.id}`,
+      },
     });
 
+    return this.format(dat, {
+      soldeDat: capital,
+      seuilGain,
+      seuilAtteint,
+      soldeCaisseAvant: soldeAvant,
+      soldeCaisseApres: soldeApres,
+      motifGainNul: gain > 0
+        ? undefined
+        : bareme.tauxPeriode === 0
+          ? `Le DAT de ${dto.dureeMois} mois n'applique aucun intérêt.`
+          : `Capital inférieur au seuil de ${seuilGain.toLocaleString('fr-FR')} ${dto.devise} : pas d'intérêt.`,
+    });
+  }
+
+  async ouvrir(dto: CreateDatDto, userId?: number) {
+    if (!userId) throw new BadRequestException('Agent de caisse invalide.');
+    const resultat = await this.prisma.$transaction(
+      (tx) => this.ouvrirAuGuichetDansTransaction(tx, dto, userId),
+      { timeout: 20000 },
+    );
     await this.journal(
       `DAT_OUVERTURE_${resultat.id}`,
-      `DAT n°${resultat.id} — ${dto.numeroCompte} : ${capital} ${dto.devise} ` +
-        `bloqués ${dureeMois} mois au taux de période ${bareme.tauxPeriode} % ` +
-        (seuilAtteint
-          ? `(gain attendu ${gain} ${dto.devise}, échéance ` +
-            `${resultat.dateEcheance.toLocaleDateString('fr-FR')})`
-          : `— seuil de ${seuilGain.toLocaleString('fr-FR')} ${dto.devise} ` +
-            `non atteint, aucun gain, échéance ` +
-            `${resultat.dateEcheance.toLocaleDateString('fr-FR')})`),
+      `DAT n°${resultat.id} — ${dto.numeroCompte} : ${dto.montant} ${dto.devise} encaissés en caisse pour ${dto.dureeMois} mois.`,
       userId,
       true,
     );
-
     return resultat;
   }
 
@@ -377,6 +354,7 @@ export class DatService implements OnModuleInit, OnModuleDestroy {
           compte: dat.numeroCompte,
           typeOperation: 'retrait',
           typeCompte: 'DAT',
+          datId: dat.id,
           devise: dat.devise,
           montant: capital,
           dateOperation: echeance,
@@ -389,6 +367,7 @@ export class DatService implements OnModuleInit, OnModuleDestroy {
           compte: dat.numeroCompte,
           typeOperation: 'depot',
           typeCompte: 'PRINCIPAL',
+          datId: dat.id,
           devise: dat.devise,
           montant: total,
           dateOperation: echeance,
@@ -457,6 +436,7 @@ export class DatService implements OnModuleInit, OnModuleDestroy {
           compte: dat.numeroCompte,
           typeOperation: 'retrait',
           typeCompte: 'DAT',
+          datId: dat.id,
           devise: dat.devise,
           montant: capital,
           dateOperation: now,
@@ -471,6 +451,7 @@ export class DatService implements OnModuleInit, OnModuleDestroy {
           compte: dat.numeroCompte,
           typeOperation: 'depot',
           typeCompte: 'PRINCIPAL',
+          datId: dat.id,
           devise: dat.devise,
           montant: capital,
           dateOperation: now,

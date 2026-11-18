@@ -2,6 +2,7 @@ import {
   IsBoolean,
   IsDateString,
   IsEnum,
+  IsInt,
   IsNotEmpty,
   IsNumber,
   IsOptional,
@@ -13,6 +14,12 @@ import {
 import { Devise } from '@prisma/client';
 
 export class CreateWithdrawalDto {
+  /** Caisse source choisie par un administrateur; les agents utilisent leur propre caisse. */
+  @IsInt()
+  @Min(1)
+  @IsOptional()
+  agentId?: number;
+
   @IsString()
   @IsNotEmpty()
   compte: string;

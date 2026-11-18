@@ -130,8 +130,8 @@ export class WithdrawalsController {
     return this.withdrawalsService.fundCashbox(agentId, dto, req.user!);
   }
 
-  // Décaissement au guichet
-  @Roles('agent')
+  // Un agent utilise sa caisse; un admin choisit une caisse active et reste identifié dans l’audit.
+  @Roles(...ADMIN_ROLES, 'agent')
   @Post()
   async create(
     @Body() dto: CreateWithdrawalDto,

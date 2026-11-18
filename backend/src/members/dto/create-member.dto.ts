@@ -6,7 +6,9 @@ import {
   IsOptional,
   IsString,
   IsIn,
-  MaxLength,
+  IsArray,
+  ArrayMaxSize,
+  Min,
   MinLength,
   ValidateNested,
 } from 'class-validator';
@@ -53,6 +55,18 @@ export class CreateDelegueDto {
   photoProfil?: string;
 }
 
+export class InitialDatDto {
+  @IsIn([1, 3, 6, 12])
+  dureeMois: number;
+
+  @IsIn(['FC', 'USD'])
+  devise: 'FC' | 'USD';
+
+  @IsNumber()
+  @Min(1)
+  montant: number;
+}
+
 export class CreateMemberDto {
   @IsString()
   @IsOptional()
@@ -73,6 +87,13 @@ export class CreateMemberDto {
   @IsOptional()
   @IsIn([1, 3, 6, 12])
   dureeEpargneMois?: number;
+
+  @IsArray()
+  @ArrayMaxSize(4)
+  @ValidateNested({ each: true })
+  @Type(() => InitialDatDto)
+  @IsOptional()
+  datsInitiaux?: InitialDatDto[];
 
   @IsOptional()
   @IsIn(['FC', 'USD'])

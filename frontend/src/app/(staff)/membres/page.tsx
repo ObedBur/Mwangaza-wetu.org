@@ -5,7 +5,6 @@ import { useSearchParams } from "next/navigation";
 import {
   IconArrowDown,
   IconArrowsDownUp,
-  IconDownload,
   IconSearch,
   IconUserPlus,
   IconUsers,
@@ -13,9 +12,11 @@ import {
   IconCircleCheck,
   IconFingerprint,
   IconRefresh,
+  IconKey,
 } from "@tabler/icons-react";
 
 import { CooperativeDataState } from "@/components/cooperative/CooperativeDataState";
+import { ExcelFileIcon, PdfFileIcon } from "@/components/cooperative/ExportFormatIcons";
 import { CooperativePagination } from "@/components/cooperative/CooperativePagination";
 import {
   AccountPills,
@@ -27,6 +28,7 @@ import {
 } from "@/components/cooperative/CooperativePrimitives";
 import { useCooperativeDarkTheme } from "@/components/cooperative/CooperativeThemeContext";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   accountConfigs,
   accountSlugs,
@@ -89,6 +91,12 @@ type MemberStats = {
   nouveauxCeMois: number;
 };
 
+type ResetPasswordCredentials = {
+  numeroCompte: string;
+  email: string | null;
+  motDePasseTemporaire: string;
+};
+
 function mapMember(record: ApiMember): MemberRecord {
   const accountTypes = (record.comptesEpargne ?? []).map((account) => account.typeCompte);
   if (accountTypes.length === 0 && record.typeCompte) accountTypes.push(record.typeCompte);
@@ -136,6 +144,8 @@ function MembersContent() {
   const [reloadToken, setReloadToken] = useState(0);
   const [enrollmentOpen, setEnrollmentOpen] = useState(false);
   const [createdCredentials, setCreatedCredentials] = useState<CreatedMemberCredentials | null>(null);
+  const [resetPasswordCredentials, setResetPasswordCredentials] = useState<ResetPasswordCredentials | null>(null);
+  const [copiedResetPassword, setCopiedResetPassword] = useState(false);
   const searchParams = useSearchParams();
   const requestedMemberId = searchParams ? searchParams.get("membre") : null;
   const queryKey = JSON.stringify([page, pageSize, debouncedQuery, status, account, sort, reloadToken]);
@@ -283,21 +293,23 @@ function MembersContent() {
             Actualiser
           </button>
           <button
-            className="mw-secondary"
+            className="mw-secondary mw-export-pdf"
             type="button"
             onClick={exportMembersPdf}
             disabled={loading || loadError || totalMembers === 0 || exporting}
+            title="Exporter la liste des membres en PDF"
           >
-            <IconDownload aria-hidden="true" />
+            <PdfFileIcon />
             {exporting ? "Préparation…" : "Exporter PDF"}
           </button>
           <button
-            className="mw-secondary"
+            className="mw-secondary mw-export-excel"
             type="button"
             onClick={exportMembersCsv}
             disabled={loading || loadError || totalMembers === 0 || exporting}
+            title="Exporter la liste des membres en CSV / Excel"
           >
-            <IconDownload aria-hidden="true" />
+            <ExcelFileIcon />
             {exporting ? "Préparation…" : "Exporter CSV"}
           </button>
           <button
@@ -323,6 +335,7 @@ function MembersContent() {
             detail=""
             trend=""
             icon={IconUsers}
+            accent="var(--mw-primary)"
           />
           <CooperativeStatCard
             label={t.activeMembers}
@@ -330,6 +343,7 @@ function MembersContent() {
             detail=""
             trend=""
             icon={IconCircleCheck}
+            accent="var(--mw-green)"
           />
           <CooperativeStatCard
             label="Membres inactifs"
@@ -337,13 +351,15 @@ function MembersContent() {
             detail=""
             trend=""
             icon={IconAlertTriangle}
+            accent="var(--mw-amber)"
           />
           <CooperativeStatCard
-            label={t.newThisMonth}
+            label="Nouveaux ce mois-ci"
             value={memberStats.nouveauxCeMois}
             detail=""
             trend=""
             icon={IconArrowDown}
+            accent="var(--mw-primary)"
           />
         </section>
       </CooperativeDataState>
@@ -429,7 +445,6 @@ function MembersContent() {
                   <th>{t.accounts}</th>
                   <th>{t.savings}</th>
                   <th>{t.status}</th>
-                  <th>Empreinte</th>
                 </tr>
               </thead>
               <tbody>
@@ -455,7 +470,13 @@ function MembersContent() {
                             .slice(0, 2)
                             .join("")}
                         </span>
-                        <strong>{member.name}</strong>
+                        <span className="coop-member-primary">
+                          <strong>{member.name}</strong>
+                          <span className={`coop-biometric-status${member.empreinteEnregistree ? " is-registered" : " is-pending"}`}>
+                            <IconFingerprint aria-hidden="true" />
+                            {member.empreinteEnregistree ? "Empreinte enregistrée" : "Empreinte à enregistrer"}
+                          </span>
+                        </span>
                       </span>
                     </td>
                     <td>{member.memberNumber}</td>
@@ -475,12 +496,6 @@ function MembersContent() {
                     <td>
                       <CooperativeStatus status={member.status} />
                     </td>
-                    <td>
-                      <span className={`coop-biometric-status${member.empreinteEnregistree ? " is-registered" : " is-pending"}`}>
-                        <IconFingerprint aria-hidden="true" />
-                        {member.empreinteEnregistree ? "Enregistrée" : "À capturer"}
-                      </span>
-                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -494,6 +509,7 @@ function MembersContent() {
           onPageChange={setPage}
           onPageSizeChange={(value) => { setPageSize(value); setPage(1); }}
           itemLabel={t.records}
+          itemLabelSingular="membre"
           previousLabel={t.previous}
           nextLabel={t.next}
         />
@@ -519,6 +535,11 @@ function MembersContent() {
                 setMembers((current) => current.map((item) =>
                   item.id === selectedMember.id ? { ...item, empreinteEnregistree: true } : item,
                 ));
+              }}
+              onPasswordReset={(credentials) => {
+                setSelectedMember(null);
+                setResetPasswordCredentials(credentials);
+                setCopiedResetPassword(false);
               }}
             />
           )}
@@ -547,6 +568,35 @@ function MembersContent() {
         onClose={() => setCreatedCredentials(null)}
       />
 
+      <Dialog open={Boolean(resetPasswordCredentials)} onOpenChange={(open) => { if (!open) setResetPasswordCredentials(null); }}>
+        <DialogContent className="coop-agent-credentials-dialog">
+          <DialogHeader>
+            <span className="coop-agent-credentials-icon"><IconKey size={22} /></span>
+            <DialogTitle>Mot de passe réinitialisé</DialogTitle>
+            <DialogDescription>
+              Remettez le nouveau mot de passe au membre {resetPasswordCredentials?.numeroCompte} par un moyen sûr. Il ne sera plus affiché après la fermeture.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="coop-agent-credentials-box">
+            <span>Adresse e-mail</span><strong>{resetPasswordCredentials?.email || "Non renseignée"}</strong>
+            <span>Mot de passe temporaire</span><code>{resetPasswordCredentials?.motDePasseTemporaire}</code>
+          </div>
+          <p className="coop-agent-credentials-warning">L’ancien mot de passe est maintenant invalide et les sessions ouvertes ont été révoquées. Conseillez au membre de modifier ce mot de passe après sa connexion.</p>
+          <div className="coop-agent-dialog-actions">
+            <button type="button" className="mw-dialog-cancel" onClick={() => setResetPasswordCredentials(null)}>Fermer</button>
+            <button type="button" className="mw-primary" onClick={async () => {
+              if (!resetPasswordCredentials) return;
+              try {
+                await navigator.clipboard.writeText(`Compte : ${resetPasswordCredentials.numeroCompte}\nE-mail : ${resetPasswordCredentials.email || "Non renseignée"}\nMot de passe temporaire : ${resetPasswordCredentials.motDePasseTemporaire}`);
+                setCopiedResetPassword(true);
+              } catch {
+                setCopiedResetPassword(false);
+              }
+            }}>{copiedResetPassword ? "Mot de passe copié" : "Copier les identifiants"}</button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
     </>
   );
 }
@@ -562,12 +612,16 @@ export default function MembersRoute() {
 function MemberDetails({
   member,
   onBiometricUpdated,
+  onPasswordReset,
 }: {
   member: MemberRecord;
   onBiometricUpdated: () => void;
+  onPasswordReset: (credentials: ResetPasswordCredentials) => void;
 }) {
   const [capturingFingerprint, setCapturingFingerprint] = useState(false);
   const [fingerprintError, setFingerprintError] = useState("");
+  const [resettingPassword, setResettingPassword] = useState(false);
+  const [passwordResetError, setPasswordResetError] = useState("");
 
   async function captureFingerprint() {
     setCapturingFingerprint(true);
@@ -595,6 +649,21 @@ function MemberDetails({
       );
     } finally {
       setCapturingFingerprint(false);
+    }
+  }
+
+  async function resetPassword() {
+    if (!window.confirm(`Réinitialiser le mot de passe de ${member.name} ? Son mot de passe actuel et ses sessions seront invalidés.`)) return;
+    setResettingPassword(true);
+    setPasswordResetError("");
+    try {
+      const response = await apiClient.post<ResetPasswordCredentials>(`/membres/${member.id}/reset-password`);
+      onPasswordReset(response.data);
+    } catch (error: unknown) {
+      const responseMessage = (error as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message;
+      setPasswordResetError(Array.isArray(responseMessage) ? responseMessage.join(" ") : responseMessage || "La réinitialisation du mot de passe a échoué. Réessayez.");
+    } finally {
+      setResettingPassword(false);
     }
   }
 
@@ -668,6 +737,15 @@ function MemberDetails({
             {fingerprintError && <p className="coop-biometric-error" role="alert">{fingerprintError}</p>}
           </>
         )}
+      </section>
+      <section className="coop-drawer-section" aria-labelledby="coop-member-password-title">
+        <h3 id="coop-member-password-title">Accès au compte</h3>
+        <p className="coop-biometric-pending-note">Générez un mot de passe temporaire si le membre a perdu l’accès à son compte.</p>
+        <button type="button" className="mw-secondary" onClick={() => void resetPassword()} disabled={resettingPassword}>
+          <IconKey aria-hidden="true" />
+          {resettingPassword ? "Réinitialisation…" : "Réinitialiser le mot de passe"}
+        </button>
+        {passwordResetError && <p className="coop-biometric-error" role="alert">{passwordResetError}</p>}
       </section>
       <section className="coop-drawer-section">
         <h3>{t.accountBalances}</h3>

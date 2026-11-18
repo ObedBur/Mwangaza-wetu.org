@@ -159,10 +159,6 @@ function AgentsManagementPage() {
 
   async function saveAgent(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!editing && !fingerprintId) {
-      setFormError('Capturez l’empreinte digitale avant de créer l’agent.');
-      return;
-    }
     setSaving(true);
     setFormError('');
     const payload: Record<string, unknown> = {
@@ -170,12 +166,14 @@ function AgentsManagementPage() {
       email: draft.email.trim().toLowerCase(),
       telephone: draft.telephone.trim(),
       guichetAssigne: draft.guichetAssigne.trim(),
-      soldeInitial: Number(draft.soldeInitial),
-      devise: draft.devise,
       actif: draft.actif,
       userId: fingerprintId || null,
       dateNaissance: draft.dateNaissance || null,
       numeroCarteElecteur: draft.numeroCarteElecteur.trim() || null,
+      ...(!editing && {
+        soldeInitial: Number(draft.soldeInitial || 0),
+        devise: draft.devise,
+      }),
       ...(cardImage.startsWith('data:image/')
         ? { imageCarteElecteur: cardImage }
         : editing?.imageCarteElecteur && !cardImage
@@ -295,49 +293,52 @@ function AgentsManagementPage() {
           <DialogHeader className="coop-agent-dialog-header">
             <span className="coop-agent-dialog-icon"><IconUsers size={21} /></span>
             <div className="coop-agent-dialog-title-wrap">
-              <span className="coop-agent-eyebrow">ADMINISTRATION · ÉQUIPE</span>
               <DialogTitle>{editing ? 'Modifier l’agent' : 'Nouvel agent'}</DialogTitle>
-              <DialogDescription>{editing ? 'Mettez à jour ses coordonnées et ses droits d’accès.' : 'Créez un accès sécurisé pour un agent de guichet.'}</DialogDescription>
+              <DialogDescription>{editing ? 'Modifiez ses coordonnées, sa caisse et ses accès.' : 'Renseignez les informations nécessaires. Les autres détails peuvent être ajoutés plus tard.'}</DialogDescription>
             </div>
           </DialogHeader>
           <form className="coop-agent-form" onSubmit={saveAgent}>
             <section className="coop-agent-form-section">
-              <div className="coop-agent-section-title"><span>01</span><div><strong>Informations personnelles</strong><small>Identité et coordonnées professionnelles</small></div></div>
+              <div className="coop-agent-section-title"><div><strong>Informations de l’agent</strong><small>Les champs marqués d’une astérisque sont nécessaires pour créer son accès.</small></div></div>
               <div className="coop-agent-field-grid">
                 <label>Nom complet <b>*</b><input required minLength={2} autoComplete="name" placeholder="Ex. Aline Mukendi" value={draft.nom} onChange={(e) => setDraft({ ...draft, nom: e.target.value })} /></label>
                 <label>E-mail professionnel <b>*</b><input required type="email" autoComplete="email" placeholder="nom@exemple.com" value={draft.email} onChange={(e) => setDraft({ ...draft, email: e.target.value })} /></label>
                 <label>Téléphone <b>*</b><input required type="tel" autoComplete="tel" placeholder="+243 …" value={draft.telephone} onChange={(e) => setDraft({ ...draft, telephone: e.target.value })} /></label>
                 <label>Guichet assigné <b>*</b><input required placeholder="Ex. Guichet 1" value={draft.guichetAssigne} onChange={(e) => setDraft({ ...draft, guichetAssigne: e.target.value })} /></label>
+              </div>
+            </section>
+
+            {!editing && <section className="coop-agent-form-section coop-agent-funds-section">
+              <div className="coop-agent-section-title"><div><strong>Solde de départ <span className="coop-agent-optional-label">Facultatif</span></strong><small>Laissez 0 si l’agent ne reçoit pas de fonds à l’ouverture.</small></div></div>
+              <div className="coop-agent-field-grid coop-agent-field-grid--funds">
+                <label>Montant<input type="number" min="0" step="0.01" value={draft.soldeInitial} onChange={(e) => setDraft({ ...draft, soldeInitial: e.target.value })} /></label>
+                <label>Devise<select value={draft.devise} onChange={(e) => setDraft({ ...draft, devise: e.target.value as 'USD' | 'FC' })}><option value="USD">USD — Dollar américain</option><option value="FC">FC — Franc congolais</option></select></label>
+              </div>
+            </section>}
+
+            <section className="coop-agent-form-section coop-agent-access-section">
+              <div className="coop-agent-section-title"><div><strong>Empreinte digitale <span className="coop-agent-optional-label">Facultative</span></strong><small>Vous pourrez l’associer plus tard depuis la modification de l’agent.</small></div></div>
+              {!editing && <p className="coop-agent-auto-password-note">Le mot de passe sera affiché une seule fois après la création. L’agent pourra ensuite le modifier depuis son espace.</p>}
+              <div className="coop-agent-fingerprint-field">
+                <button type="button" className={`coop-agent-capture-button${fingerprintId ? ' is-captured' : ''}`} onClick={() => void captureAgentFingerprint()} disabled={capturingFingerprint}>
+                  <IconFingerprint size={17} />{capturingFingerprint ? 'Placez le doigt sur le lecteur…' : fingerprintId ? 'Capturer à nouveau' : 'Capturer l’empreinte'}
+                </button>
+                {fingerprintId ? <p className="coop-agent-fingerprint-success" role="status">✓ Empreinte capturée · ID {fingerprintId}</p> : fingerprintError ? <p className="coop-agent-fingerprint-error" role="alert">✕ {fingerprintError}</p> : <p>Sans empreinte, l’agent pourra tout de même se connecter avec son e-mail et son mot de passe.</p>}
+              </div>
+            </section>
+            <details className="coop-agent-optional-details">
+              <summary>Autres renseignements <span>Facultatifs</span></summary>
+              <div className="coop-agent-field-grid">
                 <label>Date de naissance<input type="date" max={new Date().toISOString().slice(0, 10)} value={draft.dateNaissance} onChange={(e) => setDraft({ ...draft, dateNaissance: e.target.value })} />{draft.dateNaissance && <small>Âge : {Math.max(0, Math.floor((Date.now() - new Date(`${draft.dateNaissance}T00:00:00`).getTime()) / 31_557_600_000))} ans</small>}</label>
                 <label>Numéro de carte d’électeur<input autoComplete="off" placeholder="Numéro inscrit sur la carte" value={draft.numeroCarteElecteur} onChange={(e) => setDraft({ ...draft, numeroCarteElecteur: e.target.value })} /></label>
                 <label className="coop-agent-card-upload">Image de la carte d’électeur
                   <input type="file" accept="image/jpeg,image/png,image/webp" onChange={(e) => readVoterCardImage(e.target.files?.[0])} />
-                  <small>JPG, PNG ou WebP · 5 Mo maximum. L’image est facultative.</small>
+                  <small>JPG, PNG ou WebP · 5 Mo maximum.</small>
                   {cardImage && <span className="coop-agent-card-preview"><img src={cardImage} alt="Aperçu de la carte d’électeur" /><button type="button" onClick={() => setCardImage('')}>Retirer l’image</button></span>}
                 </label>
               </div>
-            </section>
-
-            <section className="coop-agent-form-section coop-agent-funds-section">
-              <div className="coop-agent-section-title"><span>02</span><div><strong>Paramètres de caisse</strong><small>Solde de départ et devise du guichet</small></div></div>
-              <div className="coop-agent-field-grid coop-agent-field-grid--funds">
-                <label>Solde initial<input required type="number" min="0" step="0.01" value={draft.soldeInitial} onChange={(e) => setDraft({ ...draft, soldeInitial: e.target.value })} /></label>
-                <label>Devise<select value={draft.devise} onChange={(e) => setDraft({ ...draft, devise: e.target.value as 'USD' | 'FC' })}><option value="USD">USD — Dollar américain</option><option value="FC">FC — Franc congolais</option></select></label>
-              </div>
-            </section>
-
-            <section className="coop-agent-form-section coop-agent-access-section">
-              <div className="coop-agent-section-title"><span>03</span><div><strong>Accès au compte</strong><small>{editing ? 'Vérifiez l’identifiant biométrique et l’état du compte.' : 'Un mot de passe temporaire sera généré automatiquement et affiché après la création.'}</small></div></div>
-              {!editing && <p className="coop-agent-auto-password-note">Le mot de passe sera affiché une seule fois après la création. L’agent pourra ensuite le modifier depuis son espace.</p>}
-              <div className="coop-agent-fingerprint-field">
-                <span>Empreinte digitale <small>{editing ? '(requise à la création)' : '(obligatoire)'}</small></span>
-                <button type="button" className={`coop-agent-capture-button${fingerprintId ? ' is-captured' : ''}`} onClick={() => void captureAgentFingerprint()} disabled={capturingFingerprint}>
-                  <IconFingerprint size={17} />{capturingFingerprint ? 'Placez le doigt sur le lecteur…' : fingerprintId ? 'Capturer à nouveau' : 'Capturer l’empreinte'}
-                </button>
-                {fingerprintId ? <p className="coop-agent-fingerprint-success" role="status">✓ Empreinte capturée · ID {fingerprintId}</p> : fingerprintError ? <p className="coop-agent-fingerprint-error" role="alert">✕ {fingerprintError}</p> : <p>{editing ? 'L’identifiant biométrique sera associé à cet agent.' : 'La capture est nécessaire pour créer le compte agent.'}</p>}
-              </div>
-            </section>
-            {editing && <section className="coop-agent-form-section coop-agent-access-section"><div className="coop-agent-section-title"><span>03</span><div><strong>Accès au compte</strong><small>L’agent pourra changer son mot de passe depuis son compte.</small></div></div><label className="coop-agent-checkbox"><input type="checkbox" checked={draft.actif} onChange={(e) => setDraft({ ...draft, actif: e.target.checked })} /> <span><strong>Compte actif</strong><small>L’agent peut se connecter et utiliser son guichet.</small></span></label></section>}
+            </details>
+            {editing && <label className="coop-agent-checkbox coop-agent-edit-status"><input type="checkbox" checked={draft.actif} onChange={(e) => setDraft({ ...draft, actif: e.target.checked })} /> <span><strong>Compte actif</strong><small>L’agent peut se connecter et utiliser son guichet.</small></span></label>}
             {formError && <p className="coop-agents-form-error" role="alert">{formError}</p>}
             <div className="coop-agent-dialog-actions"><span className="coop-agent-required-note"><b>*</b> Champs obligatoires</span><button type="button" className="mw-dialog-cancel" onClick={() => setDialogOpen(false)} disabled={saving}>Annuler</button><button type="submit" className="mw-primary" disabled={saving}>{saving ? 'Enregistrement…' : editing ? 'Enregistrer les changements' : 'Créer l’agent'}</button></div>
           </form>

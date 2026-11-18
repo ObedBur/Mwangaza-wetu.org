@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { IconCamera, IconFingerprint, IconPlus, IconUserCircle, IconUsers } from '@tabler/icons-react';
 
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { apiClient } from '@/lib/auth';
+import { apiClient, getAuthUser } from '@/lib/auth';
 import { parseApiError } from '@/lib/api-error';
 
 type DelegateDraft = {
@@ -106,8 +106,10 @@ export function MemberEnrollmentDialog({
 }) {
   const [accountType, setAccountType] = useState("PRINCIPAL");
   const [adhesionMonths, setAdhesionMonths] = useState(1);
-  const [savingsMonths, setSavingsMonths] = useState(1);
   const [adhesionCurrency, setAdhesionCurrency] = useState<'FC' | 'USD'>('FC');
+  const [datBareme, setDatBareme] = useState<{ durees: { dureeMois: number; minFc: number; minUsd: number; tauxPeriode: number }[] } | null>(null);
+  const [selectedDats, setSelectedDats] = useState<Record<number, { montant: string; devise: 'FC' | 'USD' }>>({});
+  const canOpenDatsAtEnrollment = getAuthUser()?.role === 'agent';
   const [generatedAccountNumber, setGeneratedAccountNumber] = useState("");
   const [generatingAccountNumber, setGeneratingAccountNumber] = useState(false);
   const [accountNumberError, setAccountNumberError] = useState("");
@@ -139,6 +141,9 @@ export function MemberEnrollmentDialog({
     setWasOpen(open);
     if (!open) {
       setAccountType("PRINCIPAL");
+      setAdhesionMonths(1);
+      setAdhesionCurrency('FC');
+      setSelectedDats({});
       setGeneratedAccountNumber("");
       setGeneratingAccountNumber(false);
       setAccountNumberError("");
@@ -308,8 +313,14 @@ export function MemberEnrollmentDialog({
       sexe: String(data.get("memberSex") || ""),
       dateAdhesion: String(data.get("joinDate") || ""),
       dureeAdhesionMois: adhesionMonths,
-      dureeEpargneMois: savingsMonths,
       deviseAdhesion: adhesionCurrency,
+      ...(Object.keys(selectedDats).length > 0
+        ? { datsInitiaux: Object.entries(selectedDats).map(([dureeMois, dat]) => ({
+            dureeMois: Number(dureeMois),
+            montant: Number(dat.montant),
+            devise: dat.devise,
+          })) }
+        : {}),
       typeCompte: accountType,
       statut: "actif",
       adresse: String(data.get("address") || "").trim() || undefined,
@@ -349,6 +360,17 @@ export function MemberEnrollmentDialog({
       setCreatingMember(false);
     }
   }
+
+  useEffect(() => {
+    if (!open || !canOpenDatsAtEnrollment || datBareme) return;
+    let cancelled = false;
+    apiClient.get('/dat/bareme').then(({ data }) => {
+      if (!cancelled) setDatBareme(data);
+    }).catch(() => {
+      if (!cancelled) setDatBareme(null);
+    });
+    return () => { cancelled = true; };
+  }, [open, canOpenDatsAtEnrollment, datBareme]);
 
   return (
     <>
@@ -643,17 +665,68 @@ export function MemberEnrollmentDialog({
                   </div>
                 </div>
                 <div className="mw-fee-card">
-                  <span className="mw-form-label">Durée du placement d’épargne</span>
-                  <div className="mw-dat-duration-options" role="group" aria-label="Durée du placement d’épargne">
-                    {[1, 3, 6, 12].map((months) => <button
-                      key={`savings-${months}`}
-                      type="button"
-                      className={savingsMonths === months ? 'is-selected' : undefined}
-                      aria-pressed={savingsMonths === months}
-                      onClick={() => setSavingsMonths(months)}
-                    >{months} mois</button>)}
-                  </div>
-                  <p>Durée prévue à l’inscription. Chaque placement et renouvellement reste confirmé au guichet avec un nouveau versement.</p>
+                  {canOpenDatsAtEnrollment && <>
+                    <span className="mw-form-label">Placements DAT (facultatif)</span>
+                    <p>Chaque DAT est encaissé dans votre caisse et possède son propre capital, sa devise et son échéance.</p>
+                    {[1, 3, 6, 12].map((months) => {
+                      const selected = selectedDats[months];
+                      const terms = datBareme?.durees.find((item) => item.dureeMois === months);
+                      return <div key={`initial-dat-${months}`} className="mt-3 rounded-lg border border-slate-200 p-3">
+                        <label className="flex items-center gap-2 font-semibold">
+                          <input
+                            type="checkbox"
+                            checked={Boolean(selected)}
+                            onChange={(event) => setSelectedDats((current) => {
+                              if (!event.target.checked) {
+                                const next = { ...current };
+                                delete next[months];
+                                return next;
+                              }
+                              return {
+                                ...current,
+                                [months]: { montant: String(terms?.minFc ?? 1), devise: 'FC' },
+                              };
+                            })}
+                          />
+                          DAT de {months} mois
+                        </label>
+                        {selected && <div className="mt-3 grid grid-cols-2 gap-3">
+                          <label className="text-sm">Montant
+                            <input
+                              className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2"
+                              type="number"
+                              min={selected.devise === 'FC' ? terms?.minFc : terms?.minUsd}
+                              step="0.01"
+                              value={selected.montant}
+                              onChange={(event) => setSelectedDats((current) => ({
+                                ...current,
+                                [months]: { ...current[months], montant: event.target.value },
+                              }))}
+                              required
+                            />
+                          </label>
+                          <label className="text-sm">Devise
+                            <select
+                              className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2"
+                              value={selected.devise}
+                              onChange={(event) => {
+                                const devise = event.target.value as 'FC' | 'USD';
+                                const minimum = devise === 'FC' ? terms?.minFc : terms?.minUsd;
+                                setSelectedDats((current) => ({
+                                  ...current,
+                                  [months]: { ...current[months], devise, montant: String(minimum ?? 1) },
+                                }));
+                              }}
+                            >
+                              <option value="FC">FC</option>
+                              <option value="USD">USD</option>
+                            </select>
+                          </label>
+                          <p className="col-span-2 text-xs text-slate-600">Minimum : {selected.devise === 'FC' ? terms?.minFc : terms?.minUsd} {selected.devise} · Taux : {terms?.tauxPeriode}%</p>
+                        </div>}
+                      </div>;
+                    })}
+                  </>}
                   <span className="mw-form-label">{t.membershipFee}</span>
                   <span className="mw-form-label">{t.adhesionDuration}</span>
                   <div className="mw-dat-duration-options" role="group" aria-label={t.adhesionDuration}>

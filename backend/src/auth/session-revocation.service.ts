@@ -43,10 +43,8 @@ export class SessionRevocationService {
       if (this.redis?.isOpen) {
         await this.redis.set(`${KEY_PREFIX}${jti}`, '1', { EX: ttlSeconds });
       }
-    } catch (error) {
-      this.logger.error(
-        `Impossible d'enregistrer la révocation dans Redis: ${String(error)}`,
-      );
+    } catch {
+      this.logger.warn('Redis indisponible; révocation conservée en mémoire.');
     }
   }
 
@@ -65,12 +63,10 @@ export class SessionRevocationService {
       if (this.redis?.isOpen) {
         return (await this.redis.exists(`${KEY_PREFIX}${jti}`)) === 1;
       }
-    } catch (error) {
+    } catch {
       // Redis indisponible : on ne déconnecte pas toutes les sessions pour
       // autant, la révocation est un mécanisme de défense en profondeur.
-      this.logger.error(
-        `Impossible de lire la révocation dans Redis: ${String(error)}`,
-      );
+      this.logger.warn('Redis indisponible; vérification mémoire utilisée.');
     }
 
     return false;

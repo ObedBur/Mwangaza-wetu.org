@@ -56,6 +56,7 @@ import {
   HelpCircle,
   Home,
   Info,
+  KeyRound,
   Sparkles,
   LogOut,
   Menu,
@@ -144,6 +145,7 @@ export const IconHeartPlus = createIcon(HeartHandshake);
 export const IconHelpCircle = createIcon(HelpCircle);
 export const IconHome = createIcon(Home);
 export const IconInfoCircle = createIcon(Info);
+export const IconKey = createIcon(KeyRound);
 export const IconLeaf = createIcon(Sparkles);
 export const IconLogout = createIcon(LogOut);
 export const IconMenu2 = createIcon(Menu);
