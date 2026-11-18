@@ -7,8 +7,6 @@ import { PrismaService } from '../prisma/prisma.service';
 import { ComptabiliteService } from '../comptabilite/comptabilite.service';
 import { CreateAgentDto } from './dto/create-agent.dto';
 import { UpdateAgentDto } from './dto/update-agent.dto';
-import { ChangeAgentPasswordDto } from './dto/change-agent-password.dto';
-import type { AuthUser } from '../common/types/auth-request';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import { CloudinaryService } from '../members/cloudinary.service';
@@ -193,80 +191,6 @@ export class AgentsService {
     if (member) return { exists: true, where: 'membre' };
     if (delegate) return { exists: true, where: 'délégué' };
     return { exists: false, where: null };
-  }
-
-  async changeOwnPassword(user: AuthUser, dto: ChangeAgentPasswordDto) {
-    const userId = user.userId;
-    if (!userId) {
-      throw new BadRequestException('Utilisateur non identifié');
-    }
-
-    // Gestion pour les administrateurs et superadministrateurs
-    if (user.role === 'admin' || user.role === 'superadmin') {
-      const admin = await this.prisma.administrateur.findUnique({ where: { id: userId } });
-      if (!admin?.actif || !admin.motDePasse) {
-        throw new NotFoundException('Compte administrateur non disponible');
-      }
-      const matches = await bcrypt.compare(dto.currentPassword, admin.motDePasse);
-      if (!matches) throw new BadRequestException('Mot de passe actuel incorrect');
-      if (dto.currentPassword === dto.newPassword) {
-        throw new BadRequestException('Le nouveau mot de passe doit être différent');
-      }
-
-      await this.prisma.$transaction(async (tx) => {
-        await tx.administrateur.update({
-          where: { id: userId },
-          data: {
-            motDePasse: await bcrypt.hash(dto.newPassword, BCRYPT_ROUNDS),
-            authVersion: { increment: 1 },
-            loginFailures: 0,
-            loginFailuresSince: null,
-            lockedUntil: null,
-          },
-        });
-        await tx.adminLog.create({
-          data: {
-            action: 'ADMIN_PASSWORD_CHANGED',
-            details: `L’administrateur #${userId} (${admin.email}) a modifié son mot de passe. Ses sessions existantes ont été révoquées.`,
-            success: true,
-            userId: userId,
-          },
-        });
-      });
-      return { success: true, message: 'Mot de passe administrateur modifié avec succès. Reconnectez-vous.' };
-    }
-
-    // Gestion pour les agents
-    const agent = await this.prisma.agent.findUnique({ where: { id: userId } });
-    if (!agent?.actif || !agent.motDePasse) {
-      throw new NotFoundException('Compte agent non disponible');
-    }
-    const matches = await bcrypt.compare(dto.currentPassword, agent.motDePasse);
-    if (!matches) throw new BadRequestException('Mot de passe actuel incorrect');
-    if (dto.currentPassword === dto.newPassword) {
-      throw new BadRequestException('Le nouveau mot de passe doit être différent');
-    }
-    await this.prisma.$transaction(async (tx) => {
-      await tx.agent.update({
-        where: { id: userId },
-        data: {
-          motDePasse: await bcrypt.hash(dto.newPassword, BCRYPT_ROUNDS),
-          authVersion: { increment: 1 },
-          loginFailures: 0,
-          loginFailuresSince: null,
-          lockedUntil: null,
-        },
-      });
-      await tx.adminLog.create({
-        data: {
-          action: 'AGENT_PASSWORD_CHANGED',
-          details: `L’agent #${userId} a modifié son mot de passe. Ses sessions existantes ont été révoquées.`,
-          success: true,
-          userId: userId,
-        },
-      });
-    });
-    return { success: true, message: 'Mot de passe modifié avec succès. Reconnectez-vous.' };
   }
 
   async update(id: number, dto: UpdateAgentDto) {

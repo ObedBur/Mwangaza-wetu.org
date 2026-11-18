@@ -13,8 +13,6 @@ import {
   CheckCircle2,
   HelpCircle,
   X,
-  Pause,
-  Play
 } from 'lucide-react';
 
 const LOGIN_SLIDES = [
@@ -80,12 +78,12 @@ function Toast({ title, message, type, onClose }: ToastProps) {
     <div
       role="alert"
       className={`
-        flex items-start gap-3 w-full max-w-sm p-4 rounded-xl shadow-xl border backdrop-blur-sm
-        transition-all duration-300 ease-out
+        flex items-start gap-3 w-full max-w-sm p-4 rounded-xl shadow-lg shadow-slate-900/10 border
+        transition-[transform,opacity] duration-200 ease-out
         ${isVisible && !isLeaving ? 'translate-x-0 opacity-100 scale-100' : 'translate-x-full opacity-0 scale-95'}
         ${isSuccess
-          ? 'bg-emerald-50/95 border-emerald-300 text-emerald-950 shadow-emerald-900/10'
-          : 'bg-red-50/95 border-red-300 text-red-950 shadow-red-900/10'
+          ? 'bg-emerald-50 border-emerald-300 text-emerald-950'
+          : 'bg-red-50 border-red-300 text-red-950'
         }
       `}
     >
@@ -132,7 +130,6 @@ function LoginForm() {
   const [isLoading, setIsLoading] = useState(false);
   const [isRedirecting, setIsRedirecting] = useState(false);
   const [currentSlide, setCurrentSlide] = useState(0);
-  const [isCarouselPaused, setIsCarouselPaused] = useState(false);
 
   // Toast notifications (fixed position, top-right)
   const [toasts, setToasts] = useState<Array<{ id: number; title?: string; message: string; type: ToastType }>>(() => {
@@ -160,16 +157,6 @@ function LoginForm() {
   const removeToast = useCallback((id: number) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
-
-  useEffect(() => {
-    const motionPreference = window.matchMedia('(prefers-reduced-motion: reduce)');
-    if (motionPreference.matches || isCarouselPaused) return;
-
-    const timer = window.setInterval(() => {
-      setCurrentSlide((current) => (current + 1) % LOGIN_SLIDES.length);
-    }, 8000);
-    return () => window.clearInterval(timer);
-  }, [isCarouselPaused]);
 
   // Session déjà active : on redirige directement vers l'espace du rôle
   useEffect(() => {
@@ -239,15 +226,15 @@ function LoginForm() {
     value: string,
   ): string => {
     const base =
-      'w-full min-w-0 min-h-14 rounded-xl border bg-white px-4 py-3.5 text-base text-slate-900 placeholder:text-slate-400 shadow-md shadow-slate-900/5 transition-[border-color,box-shadow,background-color] duration-200 focus:outline-none focus:ring-4 sm:text-base';
+      'w-full min-w-0 min-h-14 rounded-lg border bg-white px-4 py-3.5 text-base text-slate-900 placeholder:text-slate-400 shadow-sm shadow-slate-900/5 transition-[border-color,box-shadow,background-color] duration-150 focus:outline-none focus:ring-2 sm:text-base';
 
     if (fieldError && (touched || formSubmitted)) {
-      return `${base} border-red-300 bg-red-50/40 hover:border-red-400 focus:border-red-500 focus:ring-red-100 focus:shadow-[0_8px_24px_rgba(239,68,68,0.14)]`;
+      return `${base} border-red-300 bg-red-50/40 hover:border-red-400 focus:border-red-500 focus:ring-red-200`;
     }
     if (!fieldError && (touched || formSubmitted) && value.trim()) {
-      return `${base} border-emerald-300 hover:border-emerald-400 focus:border-emerald-500 focus:ring-emerald-100 focus:shadow-[0_8px_24px_rgba(16,185,129,0.12)]`;
+      return `${base} border-emerald-300 hover:border-emerald-400 focus:border-emerald-500 focus:ring-emerald-200`;
     }
-    return `${base} border-slate-300 hover:border-slate-400 focus:border-[#0B5EA8] focus:ring-blue-100 focus:shadow-[0_8px_24px_rgba(11,94,168,0.14)]`;
+    return `${base} border-slate-300 hover:border-slate-400 focus:border-[#0B5EA8] focus:ring-blue-200`;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -336,7 +323,7 @@ function LoginForm() {
   };
 
   return (
-    <main className="login-page min-h-dvh w-full bg-white">
+    <main className="login-page min-h-dvh w-full bg-[#F8F7F5]">
       {/* ═══ Toast Notifications — fixed top-right ═══ */}
       {toasts.length > 0 && (
         <div
@@ -374,11 +361,11 @@ function LoginForm() {
             <div className="flex h-11 w-11 items-center justify-center rounded-full bg-white p-0.5 shadow-sm">
               <Image src="/images/logo.png" alt="" width={40} height={40} className="object-contain" style={{ width: 'auto', height: 'auto' }} priority />
             </div>
-            <span className="text-sm font-bold tracking-wide text-white uppercase">{MWANGAZA_BRAND.name}</span>
+            <span className="text-sm font-medium text-white">{MWANGAZA_BRAND.name}</span>
           </header>
           <div className="relative z-10 max-w-xl pb-2">
-            <h2 className="text-4xl font-black tracking-tight 2xl:text-5xl">{LOGIN_SLIDES[currentSlide].title}</h2>
-            <p className="mt-3 text-lg font-semibold text-white/90">{LOGIN_SLIDES[currentSlide].subtitle}</p>
+            <h2 className="text-4xl font-semibold 2xl:text-5xl">{LOGIN_SLIDES[currentSlide].title}</h2>
+            <p className="mt-3 text-lg font-medium text-white/90">{LOGIN_SLIDES[currentSlide].subtitle}</p>
             <p className="mt-3 max-w-lg text-sm leading-relaxed text-white/80">{LOGIN_SLIDES[currentSlide].description}</p>
             <div className="mt-7 flex items-center gap-1" role="group" aria-label="Commandes du carrousel">
               {LOGIN_SLIDES.map((slide, index) => (
@@ -390,18 +377,9 @@ function LoginForm() {
                   aria-current={index === currentSlide ? 'true' : undefined}
                   className="flex h-11 w-11 items-center justify-center rounded-full focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
                 >
-                  <span className={`h-2.5 rounded-full transition-all motion-reduce:transition-none ${index === currentSlide ? 'w-8 bg-white' : 'w-2.5 bg-white/50 hover:bg-white/80'}`} />
+                  <span className={`h-2.5 rounded-full transition-[width,background-color] duration-150 ${index === currentSlide ? 'w-8 bg-white' : 'w-2.5 bg-white/50 hover:bg-white/80'}`} />
                 </button>
               ))}
-              <button
-                type="button"
-                onClick={() => setIsCarouselPaused((paused) => !paused)}
-                aria-label={isCarouselPaused ? 'Reprendre le carrousel' : 'Mettre le carrousel en pause'}
-                aria-pressed={isCarouselPaused}
-                className="ml-1 flex h-11 w-11 items-center justify-center rounded-full text-white/85 transition-colors hover:bg-white/15 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
-              >
-                {isCarouselPaused ? <Play className="h-4 w-4" aria-hidden="true" /> : <Pause className="h-4 w-4" aria-hidden="true" />}
-              </button>
             </div>
           </div>
         </aside>
@@ -419,15 +397,15 @@ function LoginForm() {
             />
           </div>
           <div className="min-w-0">
-            <p className="text-sm font-bold tracking-tight text-slate-900">{MWANGAZA_BRAND.name}</p>
+            <p className="text-sm font-medium text-slate-900">{MWANGAZA_BRAND.name}</p>
             <p className="mt-0.5 text-xs text-slate-500">Épargne · Crédit · Développement</p>
           </div>
         </header>
 
         <div className="flex flex-1 items-center justify-center py-4 sm:py-8 xl:py-12">
-          <section className="w-full max-w-lg p-0 md:rounded-2xl md:border md:border-slate-200/70 md:bg-slate-50/70 md:p-8 md:shadow-sm xl:border-white/70 xl:bg-white/90 xl:shadow-lg xl:shadow-slate-900/5">
-          <div className="mb-6 xl:mb-8">
-            <h1 className="text-3xl sm:text-4xl font-bold text-slate-900 tracking-tight leading-tight">
+          <section className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+          <div className="mb-6">
+            <h1 className="text-3xl font-semibold leading-tight text-slate-900 sm:text-4xl">
               Connexion
             </h1>
           </div>
@@ -443,7 +421,7 @@ function LoginForm() {
             <div>
               <label
                 htmlFor="identifier"
-                className="block text-base font-semibold text-slate-700 mb-2"
+                className="mb-2 block text-base font-medium text-slate-700"
               >
                 Votre identifiant
               </label>
@@ -458,7 +436,6 @@ function LoginForm() {
                   value={identifier}
                   onChange={(e) => handleIdentifierChange(e.target.value)}
                   onBlur={handleIdentifierBlur}
-                  placeholder="Votre identifiant"
                   aria-invalid={!!(identifierError && (identifierTouched || formSubmitted))}
                   aria-describedby={identifierError ? 'identifier-help identifier-error' : 'identifier-help'}
                   className={`${getInputClasses(identifierError, identifierTouched, identifier)} pr-10`}
@@ -474,13 +451,13 @@ function LoginForm() {
                   </div>
                 )}
               </div>
-              <p id="identifier-help" className="mt-2 text-xs leading-relaxed text-slate-500">
+              <p id="identifier-help" className="mt-2 text-sm leading-relaxed text-slate-600">
                 Saisissez votre e-mail, téléphone ou numéro de compte.
               </p>
               {/* Inline error message below the field */}
               {identifierError && (identifierTouched || formSubmitted) && (
-                <p id="identifier-error" className="mt-1.5 flex items-start gap-1.5 text-xs leading-relaxed text-red-600" role="alert">
-                  <AlertCircle className="mt-0.5 h-3 w-3 shrink-0" />
+                <p id="identifier-error" className="mt-2 flex items-start gap-2 text-sm leading-relaxed text-red-700" role="alert">
+                  <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
                   {identifierError}
                 </p>
               )}
@@ -490,7 +467,7 @@ function LoginForm() {
             <div>
               <label
                 htmlFor="password"
-                className="block text-base font-semibold text-slate-700 mb-2"
+                className="mb-2 block text-base font-medium text-slate-700"
               >
                 Mot de passe
               </label>
@@ -503,7 +480,6 @@ function LoginForm() {
                   value={password}
                   onChange={(e) => handlePasswordChange(e.target.value)}
                   onBlur={handlePasswordBlur}
-                  placeholder="••••••••"
                   aria-invalid={!!(passwordError && (passwordTouched || formSubmitted))}
                   aria-describedby={passwordError ? 'password-error' : undefined}
                   className={`${getInputClasses(passwordError, passwordTouched, password)} pr-20`}
@@ -532,30 +508,30 @@ function LoginForm() {
               </div>
               {/* Inline error message below the field */}
               {passwordError && (passwordTouched || formSubmitted) && (
-                <p id="password-error" className="mt-1.5 flex items-start gap-1.5 text-xs leading-relaxed text-red-600" role="alert">
-                  <AlertCircle className="mt-0.5 h-3 w-3 shrink-0" />
+                <p id="password-error" className="mt-2 flex items-start gap-2 text-sm leading-relaxed text-red-700" role="alert">
+                  <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
                   {passwordError}
                 </p>
               )}
             </div>
 
             {/* Ligne Se souvenir de moi / Aide */}
-            <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 pt-0.5 text-xs sm:flex-row sm:gap-4 sm:text-sm">
-              <label className="flex min-h-11 items-center gap-2 cursor-pointer select-none text-slate-600 font-medium">
+            <div className="grid grid-cols-1 gap-1 pt-1">
+              <label className="flex min-h-11 min-w-0 cursor-pointer select-none items-center gap-2 text-sm font-medium text-slate-700">
                 <input
                   type="checkbox"
                   checked={rememberMe}
                   onChange={(e) => setRememberMe(e.target.checked)}
-                  className="h-4 w-4 rounded border-slate-300 accent-slate-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
+                  className="h-4 w-4 shrink-0 rounded border-slate-300 accent-[#0B5EA8] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0B5EA8]"
                 />
                 <span>Garder ma session sur cet appareil pendant 24 h</span>
               </label>
 
               <Link
                 href="/aide-connexion"
-                className="flex min-h-11 items-center gap-1 whitespace-nowrap text-[#0B5EA8] font-semibold underline underline-offset-4 transition-colors hover:text-slate-900 focus-visible:rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0B5EA8]"
+                className="flex min-h-11 items-center gap-2 justify-self-end whitespace-nowrap text-sm font-medium text-[#0B5EA8] underline underline-offset-4 transition-colors duration-150 hover:text-slate-900 focus-visible:rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0B5EA8]"
               >
-                <HelpCircle className="w-3.5 h-3.5" aria-hidden="true" />
+                <HelpCircle className="h-4 w-4" aria-hidden="true" />
                 <span>Besoin d&apos;aide ?</span>
               </Link>
             </div>
@@ -564,7 +540,7 @@ function LoginForm() {
             <button
               type="submit"
               disabled={isLoading || isRedirecting}
-              className="mt-2 flex min-h-14 w-full items-center justify-center gap-2 rounded-xl bg-[#c65313] px-4 py-4 text-sm font-bold text-white shadow-md shadow-orange-900/10 transition-all hover:bg-[#ad450d] hover:shadow-lg hover:shadow-orange-900/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#c65313] active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-70"
+              className="flex min-h-12 w-full items-center justify-center gap-2 rounded-lg bg-[#c65313] px-5 py-3 text-sm font-semibold text-white shadow-sm transition-[background-color,transform] duration-150 hover:bg-[#ad450d] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0B5EA8] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-70"
             >
               {isLoading || isRedirecting ? (
                 <div className="flex items-center gap-2">

@@ -25,6 +25,7 @@ import { join } from 'path';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 import { ComptabiliteModule } from './comptabilite/comptabilite.module';
+import { RedisModule } from './redis/redis.module';
 
 @Module({
   imports: [
@@ -39,6 +40,7 @@ import { ComptabiliteModule } from './comptabilite/comptabilite.module';
       ],
     }),
     PrismaModule,
+    RedisModule,
     ComptabiliteModule,
     MembersModule,
     SavingsModule,

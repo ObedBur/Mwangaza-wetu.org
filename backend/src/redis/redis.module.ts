@@ -2,8 +2,11 @@ import { Global, Inject, Logger, Module, OnModuleDestroy, OnModuleInit, Optional
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { createClient } from 'redis';
 import type { RedisClientType } from 'redis';
+import { RateLimitService } from './rate-limit.service';
+import { RedisHealthService } from './redis-health.service';
+import { REDIS_CLIENT } from './redis.constants';
 
-export const REDIS_CLIENT = Symbol('REDIS_CLIENT');
+export { REDIS_CLIENT };
 
 class RedisLifecycle implements OnModuleInit, OnModuleDestroy {
   constructor(@Optional() @Inject(REDIS_CLIENT) private readonly redis: RedisClientType | null) {}
@@ -68,7 +71,9 @@ class RedisLifecycle implements OnModuleInit, OnModuleDestroy {
       },
     },
     RedisLifecycle,
+    RateLimitService,
+    RedisHealthService,
   ],
-  exports: [REDIS_CLIENT],
+  exports: [REDIS_CLIENT, RateLimitService, RedisHealthService],
 })
 export class RedisModule {}

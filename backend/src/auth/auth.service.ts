@@ -578,6 +578,81 @@ export class AuthService {
     };
   }
 
+  /**
+   * Point d'entrée unique du changement de mot de passe en autonomie.
+   *
+   * Les contrôleurs (auth et agents) délèguent ici : une seule implémentation
+   * par rôle, un seul jeu de règles, un seul audit.
+   */
+  async changeOwnPassword(
+    user: AuthUser,
+    currentPassword: string,
+    newPassword: string,
+  ) {
+    switch (user.role) {
+      case 'member':
+        return this.changeMemberPassword(user, currentPassword, newPassword);
+      case 'agent':
+        return this.changeAgentPassword(user, currentPassword, newPassword);
+      case 'admin':
+      case 'superadmin':
+        return this.changeAdminPassword(user, currentPassword, newPassword);
+      default:
+        throw new UnauthorizedException('Rôle non autorisé');
+    }
+  }
+
+  async changeAgentPassword(
+    user: AuthUser,
+    currentPassword: string,
+    newPassword: string,
+  ) {
+    if (user.role !== 'agent' || !user.userId) {
+      throw new UnauthorizedException('Session agent invalide');
+    }
+    const agent = await this.prisma.agent.findUnique({
+      where: { id: user.userId },
+      select: { id: true, motDePasse: true, actif: true },
+    });
+    if (!agent?.actif || !agent.motDePasse) {
+      throw new UnauthorizedException('Compte agent non disponible');
+    }
+    if (!(await bcrypt.compare(currentPassword, agent.motDePasse))) {
+      throw new UnauthorizedException('Le mot de passe actuel est incorrect');
+    }
+    if (await bcrypt.compare(newPassword, agent.motDePasse)) {
+      throw new BadRequestException(
+        'Le nouveau mot de passe doit être différent de l’actuel',
+      );
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
+    await this.prisma.$transaction(async (tx) => {
+      await tx.agent.update({
+        where: { id: agent.id },
+        data: {
+          motDePasse: passwordHash,
+          authVersion: { increment: 1 },
+          loginFailures: 0,
+          loginFailuresSince: null,
+          lockedUntil: null,
+        },
+      });
+      await tx.adminLog.create({
+        data: {
+          action: 'AGENT_PASSWORD_CHANGED',
+          details: `L’agent #${agent.id} a modifié son mot de passe. Ses sessions existantes ont été révoquées.`,
+          success: true,
+          userId: agent.id,
+        },
+      });
+    });
+    return {
+      success: true,
+      message: 'Mot de passe modifié. Reconnectez-vous.',
+    };
+  }
+
   async loginAgent(loginDto: LoginDto, audit: LoginAuditContext = {}) {
     const { email, accountNumber, password } = loginDto;
     const identifier = email ?? accountNumber;

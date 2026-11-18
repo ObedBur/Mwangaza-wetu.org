@@ -11,6 +11,7 @@ import { SessionRevocationService } from './session-revocation.service';
 import { RedisModule } from '../redis/redis.module';
 import { AuthAuditService } from './auth-audit.service';
 import { LoginAttemptsCleanupService } from './login-attempts-cleanup.service';
+import { PasswordChangeThrottleGuard } from './password-change-throttle.guard';
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { LoginAttemptsCleanupService } from './login-attempts-cleanup.service';
     AuthService,
     JwtStrategy,
     LoginThrottleGuard,
+    PasswordChangeThrottleGuard,
     SessionRevocationService,
     AuthAuditService,
     LoginAttemptsCleanupService,

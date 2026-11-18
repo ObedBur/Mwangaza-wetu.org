@@ -6,6 +6,7 @@ import { join } from 'path';
 import * as fs from 'fs';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { SecurityHeadersMiddleware } from './middleware/security-headers.middleware';
+import { getAllowedOrigins } from './common/config/allowed-origins';
 
 /**
  * Configuration HTTP commune au démarrage réel et aux tests e2e.
@@ -59,17 +60,9 @@ export function configureApp(app: NestExpressApplication): void {
   // Pas de setGlobalPrefix car les contrôleurs utilisent déjà 'api/' dans leur décorateur
   // Ex: @Controller('api/membres'), @Controller('api/auth'), etc.
 
-  const envOrigins = (process.env.FRONTEND_URL || 'http://localhost:5000')
-    .split(',')
-    .map((origin) => origin.trim().replace(/^["']|["']$/g, ''))
-    .filter(Boolean);
-
-  if (
-    process.env.NODE_ENV !== 'production' &&
-    !envOrigins.includes('http://localhost:5000')
-  ) {
-    envOrigins.push('http://localhost:5000');
-  }
+  // Origines autorisées : `http://localhost:5000` n'est ajouté qu'hors
+  // production (voir `getAllowedOrigins`).
+  const envOrigins = getAllowedOrigins();
 
   // Activer CORS pour permettre les requêtes depuis le frontend Next.js
   app.enableCors({

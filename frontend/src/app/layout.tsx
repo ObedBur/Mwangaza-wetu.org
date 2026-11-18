@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { connection } from 'next/server';
 import './globals.css';
 import './home.css';
 
@@ -14,11 +15,15 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  // La CSP à nonce est calculée par requête (`src/proxy.ts`) : chaque page
+  // doit donc être rendue dynamiquement pour recevoir le nonce du rendu.
+  await connection();
+
   return (
     <html lang="fr" suppressHydrationWarning>
       <body

@@ -10,6 +10,7 @@ import { ChangeMemberPasswordDto } from './dto/change-member-password.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { UnlockAccountDto } from './dto/unlock-account.dto';
 import { LoginThrottleGuard } from './login-throttle.guard';
+import { PasswordChangeThrottleGuard } from './password-change-throttle.guard';
 import { AuthAuditService } from './auth-audit.service';
 import { CSRF_COOKIE_NAME, SESSION_COOKIE_NAME, readRequestCookie } from './auth-cookies';
 
@@ -127,6 +128,7 @@ export class AuthController {
 
   @Private()
   @Roles('member')
+  @UseGuards(PasswordChangeThrottleGuard)
   @Post('me/mot-de-passe')
   async changeMemberPassword(
     @Req() req: AuthenticatedRequest,
@@ -139,14 +141,22 @@ export class AuthController {
     );
   }
 
+  /**
+   * Changement de mot de passe en autonomie, tous rôles confondus.
+   *
+   * Anciennement réservé aux administrateurs : c'est désormais le point
+   * d'entrée commun (member, agent, admin, superadmin), avec un compteur de
+   * limitation par utilisateur.
+   */
   @Private()
-  @Roles(...ADMIN_ROLES)
+  @Roles('member', 'agent', 'admin', 'superadmin')
+  @UseGuards(PasswordChangeThrottleGuard)
   @Post('me/change-password')
-  async changeAdminPassword(
+  async changeOwnPassword(
     @Req() req: AuthenticatedRequest,
     @Body() dto: ChangePasswordDto,
   ) {
-    return this.authService.changeAdminPassword(
+    return this.authService.changeOwnPassword(
       req.user!,
       dto.currentPassword,
       dto.newPassword,

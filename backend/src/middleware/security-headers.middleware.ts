@@ -28,13 +28,15 @@ export class SecurityHeadersMiddleware implements NestMiddleware {
       'strict-origin-when-cross-origin',
     );
 
-    // Content Security Policy restrictive
-    // Ajustez 'connect-src' si vous appelez d'autres API externes.
+    // Content Security Policy restrictive.
+    // `img-src https:` autorisait n'importe quel hôte : une balise image
+    // injectée pouvait exfiltrer des données dans l'URL. Le backend ne sert
+    // que ses propres fichiers (`/uploads`) et des images en data URI.
     const csp =
       "default-src 'self'; " +
       "script-src 'self' 'unsafe-inline'; " +
       "style-src 'self' 'unsafe-inline'; " +
-      "img-src 'self' data: https:; " +
+      "img-src 'self' data:; " +
       "font-src 'self'; " +
       "connect-src 'self'; " +
       "frame-ancestors 'none'; " +

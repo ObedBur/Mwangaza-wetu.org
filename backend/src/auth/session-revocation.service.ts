@@ -1,6 +1,6 @@
 import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import type { RedisClientType } from 'redis';
-import { REDIS_CLIENT } from '../redis/redis.module';
+import { REDIS_CLIENT } from '../redis/redis.constants';
 
 const KEY_PREFIX = 'auth:revoked:';
 /** Au-delà, on élague les entrées mémoire expirées. */

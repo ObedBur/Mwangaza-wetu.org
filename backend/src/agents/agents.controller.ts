@@ -9,6 +9,7 @@ import {
   Post,
   Query,
   Req,
+  UseGuards,
 } from '@nestjs/common';
 import {
   ADMIN_ROLES,
@@ -20,11 +21,16 @@ import { CreateAgentDto } from './dto/create-agent.dto';
 import { UpdateAgentDto } from './dto/update-agent.dto';
 import { ChangeAgentPasswordDto } from './dto/change-agent-password.dto';
 import type { AuthenticatedRequest } from '../common/types/auth-request';
+import { AuthService } from '../auth/auth.service';
+import { PasswordChangeThrottleGuard } from '../auth/password-change-throttle.guard';
 
 @Roles(...ADMIN_ROLES)
 @Controller('api/agents')
 export class AgentsController {
-  constructor(private readonly agentsService: AgentsService) {}
+  constructor(
+    private readonly agentsService: AgentsService,
+    private readonly authService: AuthService,
+  ) {}
 
   @Get()
   findAll(
@@ -42,13 +48,25 @@ export class AgentsController {
     return this.agentsService.checkUserId(userId);
   }
 
-  @Roles('agent', 'admin', 'superadmin')
+  /**
+   * Alias historique du changement de mot de passe agent.
+   *
+   * La logique vit dans `AuthService.changeOwnPassword` : cet endpoint ne
+   * sert plus que les agents et ne duplique aucune règle. Il est conservé
+   * pour ne pas casser les clients déjà déployés qui l'appellent.
+   */
+  @Roles('agent')
+  @UseGuards(PasswordChangeThrottleGuard)
   @Post('me/change-password')
   changeOwnPassword(
     @Req() req: AuthenticatedRequest,
     @Body() dto: ChangeAgentPasswordDto,
   ) {
-    return this.agentsService.changeOwnPassword(req.user!, dto);
+    return this.authService.changeOwnPassword(
+      req.user!,
+      dto.currentPassword,
+      dto.newPassword,
+    );
   }
 
   @Get(':id')

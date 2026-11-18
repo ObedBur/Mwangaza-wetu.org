@@ -76,4 +76,34 @@ describeE2E('Sécurité HTTP (e2e)', () => {
       .send({ motDePasse: 'motdepasse-solide' })
       .expect(401);
   });
+
+  it('restreint img-src et n’autorise pas n’importe quel hôte HTTPS', async () => {
+    const response = await request(app.getHttpServer())
+      .get('/api/auth/csrf-token')
+      .expect(200);
+
+    const csp = response.headers['content-security-policy'] as string;
+    expect(csp).toContain("img-src 'self' data:");
+    expect(csp).not.toContain('img-src https:');
+  });
+
+  it('expose une sonde de santé sans authentification', async () => {
+    const response = await request(app.getHttpServer()).get('/api/health');
+    expect([200, 503]).toContain(response.status);
+    expect(response.body).toMatchObject({
+      checks: { database: expect.stringMatching(/^(up|down)$/) },
+    });
+  });
+
+  it('protège le changement de mot de passe par utilisateur', async () => {
+    await request(app.getHttpServer())
+      .post('/api/auth/me/change-password')
+      .send({ currentPassword: 'ancien-mot-de-passe', newPassword: 'nouveau-mot-de-passe' })
+      .expect(401);
+
+    await request(app.getHttpServer())
+      .post('/api/agents/me/change-password')
+      .send({ currentPassword: 'ancien-mot-de-passe', newPassword: 'nouveau-mot-de-passe' })
+      .expect(401);
+  });
 });

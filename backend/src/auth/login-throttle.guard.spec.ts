@@ -1,20 +1,22 @@
 import { createHash } from 'node:crypto';
 import { LoginThrottleGuard } from './login-throttle.guard';
+import type { RateLimitService } from '../redis/rate-limit.service';
 
-describe('LoginThrottleGuard — reset après succès', () => {
+describe('LoginThrottleGuard', () => {
   function makeGuard() {
-    const prisma = {
-      loginAttempt: { deleteMany: jest.fn().mockResolvedValue({ count: 1 }) },
-      $executeRaw: jest.fn().mockResolvedValue(1),
-      $transaction: jest.fn((operations: Promise<unknown>[]) =>
-        Promise.all(operations),
-      ),
+    const rateLimit = {
+      consume: jest.fn().mockResolvedValue(undefined),
+      reset: jest.fn().mockResolvedValue(undefined),
+      decrement: jest.fn().mockResolvedValue(undefined),
     };
-    return { prisma, guard: new LoginThrottleGuard(prisma as never) };
+    return {
+      rateLimit,
+      guard: new LoginThrottleGuard(rateLimit as unknown as RateLimitService),
+    };
   }
 
   it('ne supprime que le bucket de l’identifiant connecté', async () => {
-    const { prisma, guard } = makeGuard();
+    const { rateLimit, guard } = makeGuard();
     const request = {
       ip: '203.0.113.9',
       socket: {},
@@ -28,12 +30,41 @@ describe('LoginThrottleGuard — reset après succès', () => {
 
     // Seul le couple (IP, identifiant) de la connexion réussie est supprimé :
     // les échecs visant d'autres comptes depuis la même IP restent comptés.
-    expect(prisma.loginAttempt.deleteMany).toHaveBeenCalledWith({
-      where: {
-        ip: '203.0.113.9',
-        identifier: expectedIdentifier,
-      },
-    });
-    expect(prisma.$executeRaw).toHaveBeenCalledTimes(1);
+    expect(rateLimit.reset).toHaveBeenCalledWith(
+      `login:id:203.0.113.9:${expectedIdentifier}`,
+    );
+    // Le quota global de l'IP ne perd que la tentative courante.
+    expect(rateLimit.decrement).toHaveBeenCalledWith('login:ip:203.0.113.9');
+  });
+
+  it('applique les deux limites dans l’ordre IP puis IP+identifiant', async () => {
+    const { rateLimit, guard } = makeGuard();
+    const request = {
+      ip: '198.51.100.4',
+      gets: () => [],
+      get: () => undefined,
+      socket: {},
+      body: { accountNumber: 'MW-001' },
+    };
+    const context = {
+      switchToHttp: () => ({
+        getRequest: () => request,
+        getResponse: () => ({ setHeader: jest.fn() }),
+      }),
+    };
+
+    await expect(guard.canActivate(context as never)).resolves.toBe(true);
+    expect(rateLimit.consume).toHaveBeenNthCalledWith(
+      1,
+      'login:ip:198.51.100.4',
+      50,
+      15 * 60 * 1000,
+    );
+    expect(rateLimit.consume).toHaveBeenNthCalledWith(
+      2,
+      expect.stringMatching(/^login:id:198\.51\.100\.4:/),
+      6,
+      15 * 60 * 1000,
+    );
   });
 });

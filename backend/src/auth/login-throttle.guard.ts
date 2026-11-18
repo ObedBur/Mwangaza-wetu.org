@@ -8,15 +8,23 @@ import {
 } from '@nestjs/common';
 import { createHash } from 'node:crypto';
 import type { Request, Response } from 'express';
-import { PrismaService } from '../prisma/prisma.service';
+import { RateLimitService } from '../redis/rate-limit.service';
+import { getAllowedOrigins } from '../common/config/allowed-origins';
 
 const WINDOW_MS = 15 * 60 * 1000; // 15 minutes
 const MAX_PER_IP = 50;
 const MAX_PER_IP_AND_IDENTIFIER = 6;
 
+/**
+ * Limitation des tentatives de connexion.
+ *
+ * Les compteurs vivent dans Redis (partagés entre instances) avec un repli
+ * mémoire, et non plus dans PostgreSQL : plus aucune écriture base de données
+ * n'est déclenchée par une tentative non authentifiée.
+ */
 @Injectable()
 export class LoginThrottleGuard implements CanActivate {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly rateLimit: RateLimitService) {}
 
   /**
    * Réinitialise les compteurs après une connexion réussie.
@@ -28,22 +36,17 @@ export class LoginThrottleGuard implements CanActivate {
    * zéro à volonté (et donc de contourner la limitation par identifiant).
    */
   async resetAfterSuccessfulLogin(request: Request) {
-    const ip = request.ip || request.socket.remoteAddress || 'unknown';
+    const ip = this.getIp(request);
     const identifier = this.getIdentifier(request);
 
-    await this.prisma.$transaction([
-      // Le succès efface les échecs du compte concerné pour cette IP.
-      ...(identifier
-        ? [this.prisma.loginAttempt.deleteMany({ where: { ip, identifier } })]
-        : []),
+    await Promise.all([
+      identifier
+        ? this.rateLimit.reset(this.identifierKey(ip, identifier))
+        : Promise.resolve(),
       // Le bucket global compte aussi les succès : on retire uniquement la
       // tentative courante pour que les connexions légitimes en NAT ne
       // consomment pas le quota d'échecs.
-      this.prisma.$executeRaw`
-        UPDATE "login_attempts"
-        SET "count" = GREATEST("count" - 1, 0), "updated_at" = now()
-        WHERE "ip" = ${ip} AND "identifier" = ''
-      `,
+      this.rateLimit.decrement(this.ipKey(ip)),
     ]);
   }
 
@@ -52,69 +55,60 @@ export class LoginThrottleGuard implements CanActivate {
     const response = context.switchToHttp().getResponse<Response>();
     this.assertAllowedOrigin(request);
 
-    const ip = request.ip || request.socket.remoteAddress || 'unknown';
+    const ip = this.getIp(request);
     const identifier = this.getIdentifier(request);
 
     try {
       // 1. Limite par IP seule
-      const ipRetryAfter = await this.consume(ip, null, MAX_PER_IP);
+      const ipRetryAfter = await this.rateLimit.consume(
+        this.ipKey(ip),
+        MAX_PER_IP,
+        WINDOW_MS,
+      );
       if (ipRetryAfter) {
         this.setRetryAfter(response, ipRetryAfter);
-        throw new HttpException('Trop de tentatives. Réessayez plus tard.', HttpStatus.TOO_MANY_REQUESTS);
+        throw new HttpException(
+          'Trop de tentatives. Réessayez plus tard.',
+          HttpStatus.TOO_MANY_REQUESTS,
+        );
       }
 
       // 2. Limite par IP + identifiant (si identifiant fourni)
       if (identifier) {
-        const idRetryAfter = await this.consume(ip, identifier, MAX_PER_IP_AND_IDENTIFIER);
+        const idRetryAfter = await this.rateLimit.consume(
+          this.identifierKey(ip, identifier),
+          MAX_PER_IP_AND_IDENTIFIER,
+          WINDOW_MS,
+        );
         if (idRetryAfter) {
           this.setRetryAfter(response, idRetryAfter);
-          throw new HttpException('Trop de tentatives pour ce compte. Réessayez plus tard.', HttpStatus.TOO_MANY_REQUESTS);
+          throw new HttpException(
+            'Trop de tentatives pour ce compte. Réessayez plus tard.',
+            HttpStatus.TOO_MANY_REQUESTS,
+          );
         }
       }
 
       return true;
     } catch (error) {
       if (error instanceof HttpException) throw error;
-      throw new HttpException('Service de connexion temporairement indisponible.', HttpStatus.SERVICE_UNAVAILABLE);
+      throw new HttpException(
+        'Service de connexion temporairement indisponible.',
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
     }
   }
 
-  private async consume(
-    ip: string,
-    identifier: string | null,
-    limit: number,
-  ): Promise<number | undefined> {
-    const now = new Date();
-    const windowStart = new Date(now.getTime() - WINDOW_MS);
-    const bucketIdentifier = identifier ?? '';
+  private ipKey(ip: string) {
+    return `login:ip:${ip}`;
+  }
 
-    // L'upsert PostgreSQL est atomique : des requêtes simultanées ne peuvent
-    // ni créer des compteurs concurrents ni perdre des incréments.
-    const [attempt] = await this.prisma.$queryRaw<
-      Array<{ count: number; first_attempt: Date }>
-    >`
-      INSERT INTO "login_attempts" ("ip", "identifier", "count", "first_attempt", "updated_at")
-      VALUES (${ip}, ${bucketIdentifier}, 1, ${now}, ${now})
-      ON CONFLICT ("ip", "identifier")
-      DO UPDATE SET
-        "count" = CASE
-          WHEN "login_attempts"."first_attempt" < ${windowStart} THEN 1
-          ELSE "login_attempts"."count" + 1
-        END,
-        "first_attempt" = CASE
-          WHEN "login_attempts"."first_attempt" < ${windowStart} THEN ${now}
-          ELSE "login_attempts"."first_attempt"
-        END,
-        "updated_at" = ${now}
-      RETURNING "count", "first_attempt"
-    `;
+  private identifierKey(ip: string, identifier: string) {
+    return `login:id:${ip}:${identifier}`;
+  }
 
-    if (attempt.count > limit) {
-      const retryAfterMs = attempt.first_attempt.getTime() + WINDOW_MS - now.getTime();
-      return Math.max(1, Math.ceil(retryAfterMs / 1000));
-    }
-
-    return undefined;
+  private getIp(request: Request) {
+    return request.ip || request.socket.remoteAddress || 'unknown';
   }
 
   private setRetryAfter(response: Response, seconds: number) {
@@ -122,7 +116,9 @@ export class LoginThrottleGuard implements CanActivate {
   }
 
   private getIdentifier(request: Request) {
-    const body = request.body as { email?: unknown; accountNumber?: unknown } | undefined;
+    const body = request.body as
+      | { email?: unknown; accountNumber?: unknown }
+      | undefined;
     const value = body?.email ?? body?.accountNumber;
     const raw =
       typeof value === 'string'
@@ -135,15 +131,8 @@ export class LoginThrottleGuard implements CanActivate {
   private assertAllowedOrigin(request: Request) {
     const origin = request.get('origin');
     if (!origin) return;
-    const allowedOrigins = (process.env.FRONTEND_URL || 'http://localhost:5000')
-      .split(',')
-      .map((value) => value.trim().replace(/^['"]|['"]$/g, ''));
-    if (
-      process.env.NODE_ENV !== 'production' &&
-      !allowedOrigins.includes('http://localhost:5000')
-    ) {
-      allowedOrigins.push('http://localhost:5000');
+    if (!getAllowedOrigins().includes(origin)) {
+      throw new ForbiddenException('Origine non autorisée');
     }
-    if (!allowedOrigins.includes(origin)) throw new ForbiddenException('Origine non autorisée');
   }
 }

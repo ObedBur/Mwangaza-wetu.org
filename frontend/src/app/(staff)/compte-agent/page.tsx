@@ -27,7 +27,15 @@ export default function AgentAccountPage() {
     }
     setSaving(true);
     try {
-      const response = await apiClient.post<{ message: string }>('/agents/me/change-password', {
+      // Les administrateurs passent par l'endpoint unifié d'authentification ;
+      // les agents conservent leur endpoint historique (alias sans logique
+      // dupliquée côté backend).
+      const role = getAuthUser()?.role;
+      const endpoint =
+        role === 'admin' || role === 'superadmin'
+          ? '/auth/me/change-password'
+          : '/agents/me/change-password';
+      const response = await apiClient.post<{ message: string }>(endpoint, {
         currentPassword,
         newPassword,
       });
