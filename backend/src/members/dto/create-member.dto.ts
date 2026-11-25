@@ -8,6 +8,7 @@ import {
   IsIn,
   IsArray,
   ArrayMaxSize,
+  MaxLength,
   Min,
   MinLength,
   ValidateNested,
@@ -32,15 +33,15 @@ export enum StatutMembre {
 export class CreateDelegueDto {
   @IsString()
   @IsNotEmpty()
-  nom: string;
+  nom!: string;
 
   @IsString()
   @IsNotEmpty()
-  telephone: string;
+  telephone!: string;
 
   @IsString()
   @IsNotEmpty()
-  relation: string;
+  relation!: string;
 
   @IsString()
   @IsOptional()
@@ -57,14 +58,14 @@ export class CreateDelegueDto {
 
 export class InitialDatDto {
   @IsIn([1, 3, 6, 12])
-  dureeMois: number;
+  dureeMois!: number;
 
   @IsIn(['FC', 'USD'])
-  devise: 'FC' | 'USD';
+  devise!: 'FC' | 'USD';
 
   @IsNumber()
   @Min(1)
-  montant: number;
+  montant!: number;
 }
 
 export class CreateMemberDto {
@@ -74,11 +75,11 @@ export class CreateMemberDto {
 
   @IsString()
   @IsNotEmpty()
-  nomComplet: string;
+  nomComplet!: string;
 
   @IsString()
   @IsNotEmpty()
-  dateAdhesion: string;
+  dateAdhesion!: string;
 
   @IsOptional()
   @IsIn([1, 3, 6, 12])
@@ -101,22 +102,22 @@ export class CreateMemberDto {
 
   @IsString()
   @IsNotEmpty()
-  telephone: string;
+  telephone!: string;
 
   @IsEmail()
   @IsNotEmpty()
-  email: string;
+  email!: string;
 
   @IsString()
   @IsOptional()
   adresse?: string;
 
   @IsEnum(Sexe)
-  sexe: Sexe;
+  sexe!: Sexe;
 
   @IsString()
   @IsNotEmpty()
-  typeCompte: string;
+  typeCompte!: string;
 
   @IsString()
   @IsOptional()
@@ -124,7 +125,7 @@ export class CreateMemberDto {
 
   @IsEnum(StatutMembre)
   @IsNotEmpty()
-  statut: StatutMembre;
+  statut!: StatutMembre;
 
   @IsString()
   @IsOptional()

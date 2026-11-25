@@ -197,6 +197,8 @@ export function CooperativePageLayout({
                   ? "Dashboard"
                   : pathname === "/agents"
                     ? "Agents"
+                    : pathname === "/rapports"
+                      ? "Rapports"
                     : pathname === "/compte-agent"
                       ? "Sécurité du compte"
                       : activeOverride;

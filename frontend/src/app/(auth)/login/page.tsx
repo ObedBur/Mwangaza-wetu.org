@@ -514,7 +514,7 @@ function LoginForm() {
             </div>
 
             {/* Ligne Se souvenir de moi / Aide */}
-            <div className="grid grid-cols-1 gap-1 pt-1">
+            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 pt-1">
               <label className="flex min-h-11 min-w-0 cursor-pointer select-none items-center gap-2 text-sm font-medium text-slate-700">
                 <input
                   type="checkbox"
@@ -527,7 +527,7 @@ function LoginForm() {
 
               <Link
                 href="/aide-connexion"
-                className="flex min-h-11 items-center gap-2 justify-self-end whitespace-nowrap text-sm font-medium text-[#0B5EA8] underline underline-offset-4 transition-colors duration-150 hover:text-slate-900 focus-visible:rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0B5EA8]"
+                className="flex min-h-11 items-center gap-2 whitespace-nowrap text-sm font-medium text-[#0B5EA8] underline underline-offset-4 transition-colors duration-150 hover:text-slate-900 focus-visible:rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0B5EA8]"
               >
                 <HelpCircle className="h-4 w-4" aria-hidden="true" />
                 <span>Besoin d&apos;aide ?</span>

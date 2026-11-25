@@ -63,7 +63,7 @@ export class UpdateMemberDto {
 
   @IsEnum(Sexe)
   @IsOptional()
-  sexe?: Sexe;
+  sexe?: Sexe | null;
 
   @IsString()
   @IsOptional()

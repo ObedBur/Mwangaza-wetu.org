@@ -28,6 +28,7 @@ describe('WithdrawalsModule production rules', () => {
   function createService(overrides: Record<string, unknown> = {}) {
     const prisma = {
       retrait: { aggregate: jest.fn().mockResolvedValue({ _sum: { montant: 0 } }) },
+      mouvementCaisseAgent: { findFirst: jest.fn().mockResolvedValue(null) },
       ...overrides,
     } as any;
     const parameterService = {
@@ -79,7 +80,7 @@ describe('WithdrawalsModule production rules', () => {
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
-  it('does not let an administrator execute a teller withdrawal', async () => {
+  it('requires an administrator to select the teller cashbox before replay lookup', async () => {
     const { service, prisma, zktecoService } = createService({
       retrait: { findUnique: jest.fn() },
     });
@@ -94,7 +95,7 @@ describe('WithdrawalsModule production rules', () => {
         } as any,
         { userId: 2, role: 'admin' },
       ),
-    ).rejects.toBeInstanceOf(ForbiddenException);
+    ).rejects.toBeInstanceOf(BadRequestException);
     expect(prisma.retrait.findUnique).not.toHaveBeenCalled();
     expect(zktecoService.captureFingerprint).not.toHaveBeenCalled();
   });
@@ -103,6 +104,7 @@ describe('WithdrawalsModule production rules', () => {
     const existing = {
       id: 7,
       executeParId: 12,
+      executeParRole: 'agent',
       compte: 'MW-P-100',
       devise: 'USD',
       montant: 10,
@@ -131,6 +133,7 @@ describe('WithdrawalsModule production rules', () => {
     const existing = {
       id: 7,
       executeParId: 12,
+      executeParRole: 'agent',
       compte: 'MW-P-100',
       devise: 'USD',
       montant: 20,
@@ -232,7 +235,7 @@ describe('WithdrawalsModule production rules', () => {
       executeParRole: 'agent',
     };
     const tx = {
-      $queryRaw: jest.fn().mockResolvedValue([]),
+      $queryRaw: jest.fn().mockResolvedValue([{ id: 12 }]),
       membre: {
         findUnique: jest.fn().mockResolvedValue({
           typeCompte: 'PRINCIPAL',
@@ -290,7 +293,7 @@ describe('WithdrawalsModule production rules', () => {
     ).resolves.toBe(record);
 
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
-    expect(tx.$queryRaw).toHaveBeenCalledTimes(3);
+    expect(tx.$queryRaw).toHaveBeenCalledTimes(4);
     expect(tx.caisseAgent.update).toHaveBeenCalledWith({
       where: { id: 3 },
       data: { solde: { decrement: 10 } },
@@ -328,10 +331,10 @@ describe('WithdrawalsModule production rules', () => {
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
-  it('restricts creation to agents and cancellation to administrators', () => {
+  it('allows agents and administrators to create withdrawals, and administrators to cancel', () => {
     expect(
       Reflect.getMetadata(ROLES_KEY, WithdrawalsController.prototype.create),
-    ).toEqual(['agent']);
+    ).toEqual([...ADMIN_ROLES, 'agent']);
     expect(
       Reflect.getMetadata(ROLES_KEY, WithdrawalsController.prototype.cancel),
     ).toEqual([...ADMIN_ROLES]);

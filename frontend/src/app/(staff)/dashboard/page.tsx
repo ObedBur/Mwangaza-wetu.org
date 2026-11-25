@@ -473,6 +473,10 @@ const [toast, setToast] = useState("");
   const t = copy[language];
 
   const [authUser, setAuthUser] = useState(getAuthUser);
+  const greetingName = authUser?.firstName || authUser?.fullName?.trim().split(/\s+/)[0] || "";
+  const greeting = greetingName
+    ? language === "FR" ? `Bonjour, ${greetingName}` : `Welcome back, ${greetingName}`
+    : language === "FR" ? "Bonjour" : "Welcome back";
   useEffect(() => {
     let active = true;
     fetchCurrentUser().then((user) => {
@@ -484,10 +488,6 @@ const [toast, setToast] = useState("");
   }, []);
   const isAdmin = authUser?.role === "admin" || authUser?.role === "superadmin";
   const isAgent = authUser?.role === "agent";
-  const greetingName = authUser?.firstName || authUser?.fullName?.trim().split(/\s+/)[0] || "";
-  const greeting = greetingName
-    ? language === "FR" ? `Bonjour, ${greetingName}` : `Welcome back, ${greetingName}`
-    : language === "FR" ? "Bonjour" : "Welcome back";
 
   const myCaisse = useMemo(() => {
     if (!dashboard?.agentsCaisses || dashboard.agentsCaisses.length === 0) return null;
@@ -591,6 +591,11 @@ useEffect(() => {
   };
 
   const memberCount = dashboard?.overview.totalMembers ?? 0;
+  const uniqueGuichetCount = new Set(
+    (dashboard?.agentsCaisses ?? [])
+      .map((agent) => agent.guichetAssigne.trim().toLocaleLowerCase())
+      .filter(Boolean),
+  ).size;
   const priorityAlerts = [
     { label: "Opérations à vérifier", count: dashboard?.overview.pendingOperationsCount ?? 0, href: "/operations/depots-cotisations" },
     { label: "Adhésions expirant sous 30 jours", count: dashboard?.overview.membershipsExpiringSoonCount ?? 0, href: "/membres" },
@@ -635,6 +640,13 @@ useEffect(() => {
 
   const chartTotal = chartData.reduce((sum, point) => sum + point.savings, 0);
   const hasChartData = chartData.some((point) => point.savings !== 0 || point.loans !== 0);
+  const chartMaximum = Math.max(0, ...chartData.flatMap((point) => [point.savings, point.loans]));
+  const chartTickStep = Math.max(50, Math.ceil(chartMaximum / 250) * 50);
+  const chartScaleMaximum = Math.max(chartTickStep, Math.ceil(chartMaximum / chartTickStep) * chartTickStep);
+  const chartTicks = Array.from(
+    { length: Math.ceil(chartScaleMaximum / chartTickStep) + 1 },
+    (_, index) => index * chartTickStep,
+  );
 
   // Distribution
   const activityTotal = dashboard?.activityDistribution.reduce((sum, item) => sum + item.total, 0) || 0;
@@ -705,7 +717,7 @@ useEffect(() => {
           {isAdmin ? (
             <a href="#mw-guichets-section" className="mw-dialog-cancel" style={{ display: "inline-flex", alignItems: "center", gap: "6px", textDecoration: "none" }}>
               <IconBuildingBank size={15} />
-              <span>Guichets ({dashboard?.agentsCaisses?.length || 0})</span>
+              <span>Guichets ({uniqueGuichetCount})</span>
             </a>
           ) : (
             <div className="mw-dialog-cancel" style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
@@ -921,7 +933,7 @@ useEffect(() => {
           {loadError ? (
             <p className="mw-empty" role="status">Les alertes seront disponibles avec les indicateurs du dashboard.</p>
           ) : priorityAlerts.some((alert) => alert.count > 0) ? (
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+            <div className="mw-priority-alert-list" style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
               {priorityAlerts.filter((alert) => alert.count > 0).map((alert) => (
                 <a key={alert.label} href={alert.href} className="mw-dialog-cancel" style={{ display: "inline-flex", gap: 8, alignItems: "center", textDecoration: "none" }}>
                   <strong>{alert.count}</strong><span>{alert.label}</span><IconChevronRight size={14} />
@@ -1004,34 +1016,46 @@ useEffect(() => {
               <svg viewBox="0 0 700 190" role="img" aria-label={`${t.chart} · ${t[period === "Annuel" ? "annual" : period === "Mensuel" ? "monthly" : "weekly"]}`} preserveAspectRatio="none">
                 <defs>
                   <linearGradient id="mw-area-fill" x1="0" x2="0" y1="0" y2="1">
-                    <stop offset="0%" stopColor="#286e4d" stopOpacity=".14" />
-                    <stop offset="100%" stopColor="#286e4d" stopOpacity="0" />
+                    <stop offset="0%" stopColor="#165d9c" stopOpacity=".16" />
+                    <stop offset="100%" stopColor="#165d9c" stopOpacity="0" />
                   </linearGradient>
                 </defs>
-                {[26, 67, 108, 149].map((y) => (
-                  <g key={y}>
+                {chartTicks.map((tick) => {
+                  const y = 158 - (tick / chartScaleMaximum) * 132;
+                  return (
+                  <g key={tick}>
                     <line x1="46" x2="687" y1={y} y2={y} className="mw-chart-grid" />
                     {hasChartData && (
                       <text x="1" y={y + 3} className="mw-chart-axis">
-                        {Math.round((180 - y) * (Math.max(1, ...chartData.map((point) => point.savings), ...chartData.map((point) => point.loans)) / 150))}
+                        {tick.toLocaleString("fr-FR")}
                       </text>
                     )}
                   </g>
-                ))}
+                  );
+                })}
                 {(() => {
                   if (!hasChartData || chartData.length === 0) return null;
-                  const max = Math.max(1, ...chartData.flatMap((point) => [point.savings, point.loans]));
+                  const xFor = (index: number) => 48 + (chartData.length < 2 ? 319 : (index * 638) / (chartData.length - 1));
+                  const yFor = (value: number) => 158 - (value / chartScaleMaximum) * 132;
                   const coords = (key: "savings" | "loans") =>
-                    chartData.map((point, index) => `${48 + (chartData.length < 2 ? 319 : (index * 638) / (chartData.length - 1))},${158 - (point[key] / max) * 132}`).join(" ");
-                  const savingsPoints = coords("savings");
+                    chartData.map((point, index) => `${xFor(index)},${yFor(point[key])}`).join(" ");
+                  const savingsCoordinates = chartData.map((point, index) => [xFor(index), yFor(point.savings)] as const);
+                  const savingsPoints = savingsCoordinates.map(([x, y]) => `${x},${y}`).join(" ");
+                  const areaPoints = `${xFor(0)},158 ${savingsPoints} ${xFor(chartData.length - 1)},158`;
                   return (
                     <>
+                      <polygon className="mw-area" points={areaPoints} />
                       <polyline className="mw-line-contribution" points={savingsPoints} fill="none" />
-                      <polyline className={chartMetric === "cashflow" ? "mw-line-loan" : "mw-line-loan"} points={coords("loans")} fill="none" />
+                      <polyline className="mw-line-loan" points={coords("loans")} fill="none" />
+                      {chartData.map((point, index) => (
+                        <circle key={`point-${point.label}-${index}`} className="mw-chart-point" cx={xFor(index)} cy={yFor(point.savings)} r="3.5">
+                          <title>{`${point.label} · ${chartMetric === "contributions" ? t.contributions : "Dépôts"}: ${money(point.savings, currency)}`}</title>
+                        </circle>
+                      ))}
                       {chartData.map((point, index) => (
                         <text
                           key={`${point.label}-${index}`}
-                          x={48 + (chartData.length < 2 ? 319 : (index * 638) / (chartData.length - 1))}
+                          x={xFor(index)}
                           y="184"
                           textAnchor="middle"
                           className={`mw-chart-axis mw-chart-month-label${index % 2 === 1 ? " is-hidden-on-mobile" : ""}`}

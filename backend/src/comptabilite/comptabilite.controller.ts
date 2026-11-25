@@ -13,8 +13,26 @@ export class ComptabiliteController {
     @Query('fin') fin?: string,
     @Query('section') section?: string,
     @Query('type') type?: string,
+    @Query('compteId') compteId?: string,
+    @Query('devise') devise?: string,
+    @Query('statut') statut?: string,
+    @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
   ) {
-    return this.reporting.journal({ debut, fin, section, type });
+    return this.reporting.journal({ debut, fin, section, type, compteId, devise, statut, page, pageSize });
+  }
+
+  @Get('rapprochement-caisse')
+  rapprochementCaisse(
+    @Query('debut') debut?: string,
+    @Query('fin') fin?: string,
+    @Query('devise') devise?: string,
+    @Query('agentId') agentId?: string,
+    @Query('guichet') guichet?: string,
+    @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
+  ) {
+    return this.reporting.rapprochementCaisse({ debut, fin, devise, agentId, guichet, page, pageSize });
   }
 
   @Get('grand-livre/:compteId')
@@ -27,8 +45,12 @@ export class ComptabiliteController {
   }
 
   @Get('balance')
-  balance(@Query('debut') debut?: string, @Query('fin') fin?: string) {
-    return this.reporting.balance({ debut, fin });
+  balance(
+    @Query('debut') debut?: string,
+    @Query('fin') fin?: string,
+    @Query('section') section?: string,
+  ) {
+    return this.reporting.balance({ debut, fin, section });
   }
 
   @Get('compte-resultat')

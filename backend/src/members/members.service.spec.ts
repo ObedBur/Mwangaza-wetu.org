@@ -4,6 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CloudinaryService } from './cloudinary.service';
 import { MemberMailService } from './member-mail.service';
 import { ComptabiliteService } from '../comptabilite/comptabilite.service';
+import { DatService } from '../dat/dat.service';
 import { CreateMemberDto, Sexe, StatutMembre } from './dto/create-member.dto';
 import { BadRequestException } from '@nestjs/common';
 
@@ -16,6 +17,7 @@ describe('MembersService', () => {
         MembersService,
         { provide: PrismaService, useValue: {} },
         { provide: ComptabiliteService, useValue: { enregistrerAdhesion: jest.fn() } },
+        { provide: DatService, useValue: {} },
         { provide: CloudinaryService, useValue: {} },
         { provide: MemberMailService, useValue: { isConfigured: () => false } },
       ],
@@ -39,7 +41,7 @@ describe('MembersService', () => {
       statut: StatutMembre.ACTIF,
     } satisfies CreateMemberDto;
 
-    await expect(service.create(member)).rejects.toThrow(
+    await expect(service.create(member, { userId: 1, role: 'admin' })).rejects.toThrow(
       "L'envoi d'e-mails n'est pas configuré",
     );
   });

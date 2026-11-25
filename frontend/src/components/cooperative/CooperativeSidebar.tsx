@@ -14,6 +14,7 @@ import {
   IconCreditCard,
   IconDashboard,
   IconFileText,
+  IconChartBar,
   IconLogout,
   IconMessageCircle,
   IconPanelLeftClose,
@@ -100,7 +101,10 @@ const navigationGroups: NavigationGroup[] = [
   },
   {
     title: "Administration",
-    items: [{ label: "Agents", href: "/agents", icon: IconUsers }],
+    items: [
+      { label: "Rapports", href: "/rapports", icon: IconChartBar },
+      { label: "Agents", href: "/agents", icon: IconUsers },
+    ],
   },
   {
     title: "Mon compte",
