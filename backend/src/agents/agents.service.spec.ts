@@ -9,15 +9,26 @@ import { ComptabiliteService } from '../comptabilite/comptabilite.service';
 describe('AgentsService', () => {
   let service: AgentsService;
   const findUnique = jest.fn();
+  const tx = {
+    agent: { create: jest.fn().mockResolvedValue({ id: 1 }) },
+    caisseAgent: { create: jest.fn().mockResolvedValue({ id: 10 }) },
+    mouvementCaisseAgent: { create: jest.fn() },
+  };
 
   beforeEach(async () => {
     findUnique.mockReset();
+    tx.agent.create.mockClear();
+    tx.caisseAgent.create.mockClear();
+    tx.mouvementCaisseAgent.create.mockClear();
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AgentsService,
         {
           provide: PrismaService,
-          useValue: { agent: { findUnique } },
+          useValue: {
+            agent: { findUnique },
+            $transaction: jest.fn((callback) => callback(tx)),
+          },
         },
         { provide: CloudinaryService, useValue: {} },
         { provide: ComptabiliteService, useValue: { enregistrerOuvertureCaisse: jest.fn() } },
@@ -27,7 +38,7 @@ describe('AgentsService', () => {
     service = module.get<AgentsService>(AgentsService);
   });
 
-  it('rejects creating an agent without a fingerprint before checking the database', async () => {
+  it('allows creating an agent without a fingerprint', async () => {
     const dto = {
       nom: 'Agent Terrain',
       email: 'agent@example.org',
@@ -35,22 +46,32 @@ describe('AgentsService', () => {
       guichetAssigne: 'Guichet 1',
     } as CreateAgentDto;
 
-    await expect(service.create(dto)).rejects.toBeInstanceOf(
-      BadRequestException,
-    );
-    expect(findUnique).not.toHaveBeenCalled();
+    findUnique.mockResolvedValue(null);
+
+    const result = await service.create(dto);
+
+    expect(result).toMatchObject({ id: 1 });
+    expect(tx.agent.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ userId: null }),
+    }));
+    expect(findUnique).toHaveBeenCalledWith({ where: { email: dto.email } });
   });
 
-  it('rejects a whitespace-only fingerprint', async () => {
-    await expect(
-      service.create({
+  it('normalizes a whitespace-only fingerprint to null', async () => {
+    findUnique.mockResolvedValue(null);
+    const dto = {
         nom: 'Agent Terrain',
         email: 'agent@example.org',
         telephone: '+243000000000',
         guichetAssigne: 'Guichet 1',
         userId: '   ',
-      }),
-    ).rejects.toBeInstanceOf(BadRequestException);
-    expect(findUnique).not.toHaveBeenCalled();
+      };
+
+    await service.create(dto);
+
+    expect(tx.agent.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ userId: null }),
+    }));
+    expect(findUnique).toHaveBeenCalledTimes(1);
   });
 });

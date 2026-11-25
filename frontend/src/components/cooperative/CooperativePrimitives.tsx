@@ -36,6 +36,7 @@ export function CooperativeStatCard({
   trend,
   icon: Icon,
   accent,
+  loading = false,
 }: {
   label: string;
   value: string | number;
@@ -43,6 +44,7 @@ export function CooperativeStatCard({
   trend?: string;
   icon: TablerIcon;
   accent?: string;
+  loading?: boolean;
 }) {
   return (
     <article
@@ -55,7 +57,9 @@ export function CooperativeStatCard({
           <Icon aria-hidden="true" />
         </span>
       </div>
-      <strong>{value}</strong>
+      <strong>
+        {loading ? <span className="coop-stat-value-skeleton" aria-hidden="true" /> : value}
+      </strong>
       {(trend || detail) && (
         <span className="coop-stat-detail">
           {trend && (
@@ -94,17 +98,17 @@ export function CooperativeStatus({
   );
 }
 
-export function AccountPills({ accounts }: { accounts: AccountSlug[] }) {
+export function AccountPills({ accounts, showLabels = false }: { accounts: AccountSlug[]; showLabels?: boolean }) {
   return (
     <span
-      className="coop-account-pills"
+      className={`coop-account-pills${showLabels ? " has-labels" : ""}`}
       aria-label={accounts
         .map((slug) => accountConfigs[slug].shortLabel)
         .join(", ")}
     >
       {accounts.map((slug) => (
         <span
-          className="coop-account-pill"
+          className={`coop-account-pill${showLabels ? " has-label" : ""}`}
           key={slug}
           title={accountConfigs[slug].shortLabel}
           style={
@@ -113,7 +117,8 @@ export function AccountPills({ accounts }: { accounts: AccountSlug[] }) {
             } as React.CSSProperties
           }
         >
-          <span aria-hidden="true" />
+          <span className="coop-account-pill-dot" aria-hidden="true" />
+          {showLabels && <span className="coop-account-pill-label">{accountConfigs[slug].shortLabel}</span>}
         </span>
       ))}
     </span>

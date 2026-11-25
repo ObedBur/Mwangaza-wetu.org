@@ -117,6 +117,28 @@ export class MembersController {
     return this.membersService.search(search ?? '', l);
   }
 
+  @Get(':id/transactions')
+  async getMemberTransactions(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
+    @Query('type') type?: string,
+    @Query('currency') currency?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    const pageNumber = Math.max(1, Number.parseInt(page ?? '1', 10) || 1);
+    const size = Math.min(100, Math.max(1, Number.parseInt(pageSize ?? '10', 10) || 10));
+    return this.membersService.getMemberTransactionsForAdmin(id, {
+      page: pageNumber,
+      pageSize: size,
+      type,
+      currency,
+      from,
+      to,
+    });
+  }
+
   // Membre : uniquement son propre compte (ownership ci-dessous) ;
   // réponse assainie (pas de hash de mot de passe / token d'activation).
   @Roles(...ADMIN_ROLES, 'member')

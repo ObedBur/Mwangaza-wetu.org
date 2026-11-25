@@ -668,6 +668,16 @@
   letter-spacing: -0.8px;
   line-height: 1.2;
 }
+.coop-stat-value-skeleton {
+  display: inline-block;
+  width: 56px;
+  height: 25px;
+  border-radius: 5px;
+  vertical-align: middle;
+  background: linear-gradient(90deg, var(--mw-canvas), var(--mw-line), var(--mw-canvas));
+  background-size: 200% 100%;
+  animation: coop-skeleton-pulse 1.3s ease-in-out infinite;
+}
 .coop-stat-detail {
   display: flex;
   min-height: 16px;
@@ -684,6 +694,24 @@
 }
 .coop-members-panel {
   overflow: hidden;
+}
+.coop-members-heading .mw-export-pdf,
+.coop-members-heading .mw-export-excel {
+  border-color: var(--mw-line);
+  background: var(--mw-paper);
+  color: var(--mw-ink) !important;
+}
+.coop-members-heading .mw-export-pdf:hover,
+.coop-members-heading .mw-export-excel:hover {
+  border-color: color-mix(in srgb, var(--mw-primary) 35%, var(--mw-line));
+  background: var(--mw-canvas);
+}
+.coop-members-stats .coop-stat-icon {
+  background: var(--mw-canvas);
+  color: var(--mw-muted);
+}
+.coop-members-stats .coop-stat-card {
+  box-shadow: 0 1px 2px rgb(20 32 45 / 4%);
 }
 .coop-filter-bar {
   display: flex;
@@ -773,6 +801,34 @@
 .coop-member-primary .coop-biometric-status {
   font-size: 9px;
 }
+.coop-credit-alert {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  border-radius: 999px;
+  background: var(--mw-canvas);
+  padding: 3px 7px;
+  color: var(--mw-muted);
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+.coop-credit-alert.is-overdue {
+  background: color-mix(in srgb, var(--mw-red) 12%, var(--mw-paper));
+  color: var(--mw-red);
+}
+.coop-credit-alert.is-due-soon {
+  background: var(--mw-amber-soft);
+  color: #956b1d;
+}
+.coop-credit-alert.is-current {
+  background: var(--mw-canvas);
+  color: var(--mw-muted);
+}
+.coop-credit-alert.is-complete {
+  background: var(--mw-green-soft);
+  color: var(--mw-green);
+}
 .coop-members-table th,
 .coop-holder-table th {
   white-space: nowrap;
@@ -822,11 +878,38 @@
   border-radius: 50%;
   background: color-mix(in srgb, var(--coop-accent) 15%, var(--mw-paper));
 }
-.coop-account-pill > span {
+.coop-account-pill-dot {
   width: 7px;
   height: 7px;
   border-radius: 50%;
   background: var(--coop-accent);
+  flex: none;
+}
+.coop-account-pill.has-label {
+  display: inline-flex;
+  width: auto;
+  min-height: 22px;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid color-mix(in srgb, var(--coop-accent) 20%, var(--mw-line));
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--coop-accent) 6%, var(--mw-paper));
+  padding: 0 7px;
+}
+.coop-account-pill.has-label > .coop-account-pill-dot {
+  width: 6px;
+  height: 6px;
+}
+.coop-account-pill.has-label .coop-account-pill-label {
+  width: auto;
+  height: auto;
+  border-radius: 0;
+  background: transparent;
+  flex: 0 1 auto;
+  color: var(--mw-ink);
+  font-size: 10px;
+  font-weight: 500;
+  white-space: nowrap;
 }
 .coop-status {
   display: inline-flex;
@@ -976,6 +1059,75 @@
   background-size: 200% 100%;
   animation: coop-skeleton-pulse 1.3s ease-in-out infinite;
 }
+.coop-members-inline-error {
+  margin: 8px 0 0;
+  color: var(--mw-muted);
+  font-size: 11px;
+}
+.coop-members-skeleton-row td {
+  height: 52px;
+}
+.coop-skeleton-member {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+}
+.coop-skeleton-avatar,
+.coop-skeleton-block,
+.coop-skeleton-pill,
+.coop-skeleton-status {
+  display: block;
+  flex: none;
+  background: linear-gradient(90deg, var(--mw-canvas), var(--mw-line), var(--mw-canvas));
+  background-size: 200% 100%;
+  animation: coop-skeleton-pulse 1.3s ease-in-out infinite;
+}
+.coop-skeleton-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+}
+.coop-skeleton-member-copy,
+.coop-skeleton-amounts {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+}
+.coop-skeleton-block {
+  height: 8px;
+  border-radius: 999px;
+}
+.coop-skeleton-name { width: min(120px, 80%); }
+.coop-skeleton-subline { width: 86px; height: 6px; }
+.coop-skeleton-number { width: 95px; }
+.coop-skeleton-phone { width: 78px; }
+.coop-skeleton-date { width: 66px; }
+.coop-skeleton-pill {
+  width: 54px;
+  height: 23px;
+  border-radius: 6px;
+}
+.coop-skeleton-amount { width: 66px; }
+.coop-skeleton-amount-small { width: 43px; height: 6px; }
+.coop-skeleton-status {
+  width: 46px;
+  height: 20px;
+  border-radius: 999px;
+}
+.coop-members-table-state {
+  display: flex;
+  min-height: 76px;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: var(--mw-muted);
+  font-size: 12px;
+}
+.coop-members-table-state .mw-secondary {
+  min-height: 32px;
+  padding-inline: 12px;
+}
 @keyframes coop-skeleton-pulse {
   to {
     background-position: -200% 0;
@@ -1014,9 +1166,14 @@
   --mw-red: #ef8989;
 }
 .coop-drawer-title {
-  margin: 0 36px 16px 0;
+  position: relative;
+  z-index: 1;
+  margin: 0 36px 12px 0;
+  border-bottom: 1px solid var(--mw-line);
+  padding: 0 0 14px;
+  color: var(--mw-ink) !important;
   font-size: 18px !important;
-  font-weight: 650 !important;
+  font-weight: 600 !important;
 }
 .coop-drawer-content {
   min-height: 0;
@@ -1056,6 +1213,333 @@
   margin: 0 0 10px;
   font-size: 11px;
   font-weight: 700;
+}
+.coop-drawer-section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.coop-drawer-section-heading h3 {
+  margin: 0;
+}
+.coop-drawer-section-heading .mw-secondary {
+  min-height: 32px;
+  padding: 0 10px;
+  font-size: 10px;
+}
+.coop-member-overview-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  border: 1px solid var(--mw-line);
+  border-radius: 8px;
+  background: var(--mw-line);
+  gap: 1px;
+  overflow: hidden;
+}
+.coop-member-overview-grid > div {
+  display: grid;
+  min-width: 0;
+  align-content: start;
+  gap: 5px;
+  background: var(--mw-paper);
+  padding: 12px;
+}
+.coop-member-overview-grid > div > span,
+.coop-member-overview-grid > div > small,
+.coop-drawer-security-item h4 {
+  color: var(--mw-muted);
+  font-size: 10px;
+  font-weight: 500;
+}
+.coop-member-overview-grid > div > strong {
+  color: var(--mw-ink);
+  font-size: 11px;
+  font-weight: 600;
+}
+.coop-member-overview-grid > div > small {
+  overflow-wrap: anywhere;
+  line-height: 1.4;
+}
+.coop-member-history-heading,
+.coop-member-credit-heading {
+  align-items: flex-start;
+}
+.coop-member-history-heading {
+  flex-direction: column;
+}
+.coop-member-history-heading > div:first-child,
+.coop-member-credit-heading > div:first-child {
+  display: grid;
+  gap: 4px;
+}
+.coop-member-history-heading > div:first-child > span,
+.coop-member-credit-heading > div:first-child > span {
+  color: var(--mw-muted);
+  font-size: 10px;
+}
+.coop-member-finance-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 5px;
+}
+.coop-member-finance-actions a,
+.coop-member-credit-heading > a {
+  display: inline-flex;
+  min-height: 28px;
+  align-items: center;
+  justify-content: center;
+  color: var(--mw-primary);
+  font-size: 10px;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.coop-member-finance-actions a {
+  border: 1px solid var(--mw-line);
+  border-radius: 6px;
+  background: var(--mw-paper);
+  padding: 0 9px;
+}
+.coop-member-finance-actions a:hover,
+.coop-member-credit-heading > a:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.coop-member-history-filters {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin: 0 0 8px;
+}
+.coop-member-history-filters select {
+  width: 100%;
+  min-width: 0;
+  height: 34px;
+  border: 1px solid var(--mw-line);
+  border-radius: 6px;
+  background: var(--mw-paper);
+  padding: 0 6px;
+  color: var(--mw-ink);
+  font: inherit;
+  font-size: 10px;
+}
+.coop-member-transaction-list,
+.coop-member-credit-list {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.coop-member-transaction-list > li {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-top: 1px solid var(--mw-line);
+  padding: 10px 0;
+}
+.coop-member-transaction-copy,
+.coop-member-transaction-value {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+.coop-member-transaction-copy > strong,
+.coop-member-transaction-value > strong {
+  color: var(--mw-ink);
+  font-size: 11px;
+  font-weight: 600;
+}
+.coop-member-transaction-copy > span {
+  overflow: hidden;
+  color: var(--mw-muted);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.coop-member-transaction-value {
+  flex: none;
+  justify-items: end;
+}
+.coop-member-transaction-status {
+  color: var(--mw-muted);
+  font-size: 9px;
+}
+.coop-member-transaction-status.is-complete {
+  color: var(--mw-green);
+}
+.coop-member-finance-state {
+  display: flex;
+  min-height: 58px;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: var(--mw-muted);
+  font-size: 11px;
+  text-align: center;
+}
+.coop-member-finance-state .mw-secondary {
+  min-height: 30px;
+  padding-inline: 10px;
+  font-size: 10px;
+}
+.coop-member-history-loading {
+  display: grid;
+  gap: 8px;
+  padding: 8px 0;
+}
+.coop-member-history-loading > span {
+  height: 32px;
+  border-radius: 5px;
+  background: linear-gradient(90deg, var(--mw-canvas), var(--mw-line), var(--mw-canvas));
+  background-size: 200% 100%;
+  animation: coop-skeleton-pulse 1.3s ease-in-out infinite;
+}
+.coop-member-credit-list > li {
+  border-top: 1px solid var(--mw-line);
+  padding: 12px 0;
+}
+.coop-member-credit-topline,
+.coop-member-credit-dates {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.coop-member-credit-topline > strong {
+  color: var(--mw-ink);
+  font-size: 11px;
+}
+.coop-member-credit-dates {
+  margin-top: 6px;
+  color: var(--mw-muted);
+  font-size: 9px;
+}
+.coop-member-credit-amounts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+.coop-member-credit-amounts > span {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+.coop-member-credit-amounts small {
+  color: var(--mw-muted);
+  font-size: 9px;
+}
+.coop-member-credit-amounts strong {
+  color: var(--mw-ink);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+.coop-member-credit-progress {
+  height: 4px;
+  overflow: hidden;
+  border-radius: 99px;
+  background: var(--mw-canvas);
+  margin-top: 9px;
+}
+.coop-member-credit-progress > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--mw-green);
+}
+.coop-member-edit-dialog {
+  --mw-canvas: #f6f8f6;
+  width: min(520px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+  border: 1px solid var(--mw-line) !important;
+  border-radius: 9px !important;
+  background: var(--mw-paper) !important;
+  color: var(--mw-ink) !important;
+  padding: 24px !important;
+}
+.coop-member-edit-dialog[data-theme="dark"] {
+  --mw-canvas: #111a15;
+}
+.coop-member-edit-dialog [data-slot="dialog-header"] {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 18px;
+  padding-right: 24px;
+}
+.coop-member-edit-dialog h2 {
+  display: block;
+  margin: 0;
+  color: var(--mw-ink) !important;
+  font-size: 18px;
+  font-weight: 600;
+}
+.coop-member-edit-dialog p {
+  color: var(--mw-muted) !important;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.coop-member-edit-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px 12px;
+}
+.coop-member-edit-form > label {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+  color: var(--mw-ink);
+  font-size: 11px;
+  font-weight: 550;
+}
+.coop-member-edit-form :is(input, select) {
+  width: 100%;
+  min-height: 40px;
+  border: 1px solid var(--mw-line);
+  border-radius: 6px;
+  outline: none;
+  background: var(--mw-paper);
+  padding: 0 10px;
+  color: var(--mw-ink);
+  font: inherit;
+  font-weight: 400;
+}
+.coop-member-edit-form :is(input, select):focus-visible {
+  border-color: var(--mw-primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--mw-primary) 16%, transparent);
+}
+.coop-member-edit-form > .coop-biometric-error,
+.coop-member-edit-actions {
+  grid-column: 1 / -1;
+}
+.coop-member-edit-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  border-top: 1px solid var(--mw-line);
+  margin-top: 4px;
+  padding-top: 16px;
+}
+.coop-member-edit-actions button {
+  min-height: 38px;
+}
+@media (max-width: 480px) {
+  .coop-member-edit-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.coop-drawer-security-item + .coop-drawer-security-item {
+  margin-top: 16px;
+  border-top: 1px solid var(--mw-line);
+  padding-top: 14px;
+}
+.coop-drawer-security-item h4 {
+  margin: 0 0 8px;
 }
 .coop-detail-list,
 .coop-rules-list {
@@ -1622,9 +2106,104 @@
     height: 145px;
   }
   .coop-member-drawer {
-    width: min(430px, 100vw) !important;
-    max-width: min(430px, 100vw) !important;
-    padding: 19px !important;
+    width: 100vw !important;
+    max-width: 100vw !important;
+    padding: 16px 16px max(16px, env(safe-area-inset-bottom)) !important;
+  }
+  .coop-drawer-title {
+    margin-right: 32px;
+    padding-bottom: 12px;
+    font-size: 19px !important;
+  }
+  .coop-drawer-content {
+    padding-right: 2px;
+  }
+  .coop-drawer-member {
+    gap: 12px;
+    padding-bottom: 16px;
+  }
+  .coop-drawer-member > div strong {
+    font-size: 14px;
+  }
+  .coop-drawer-member > div span {
+    font-size: 11px;
+  }
+  .coop-drawer-section {
+    padding: 16px 0;
+  }
+  .coop-drawer-section h3 {
+    font-size: 13px;
+  }
+  .coop-drawer-section-heading .mw-secondary {
+    min-height: 40px;
+    padding-inline: 12px;
+    font-size: 12px;
+  }
+  .coop-member-overview-grid > div {
+    gap: 6px;
+    padding: 12px;
+  }
+  .coop-member-overview-grid > div > span,
+  .coop-member-overview-grid > div > small {
+    font-size: 12px;
+  }
+  .coop-member-overview-grid > div > strong {
+    font-size: 14px;
+  }
+  .coop-detail-list {
+    gap: 13px;
+  }
+  .coop-detail-list > div {
+    display: grid;
+    grid-template-columns: minmax(84px, 0.7fr) minmax(0, 1.3fr);
+    align-items: start;
+    gap: 8px;
+  }
+  .coop-detail-list dt {
+    font-size: 12px;
+    line-height: 1.4;
+  }
+  .coop-detail-list dd {
+    min-width: 0;
+    overflow-wrap: anywhere;
+    font-size: 12px;
+    line-height: 1.4;
+  }
+  .coop-member-edit-dialog {
+    width: calc(100vw - 24px);
+    max-height: calc(100dvh - 24px);
+    padding: 16px !important;
+  }
+  .coop-member-edit-form {
+    gap: 12px;
+  }
+  .coop-member-edit-form > label {
+    font-size: 12px;
+  }
+  .coop-member-edit-actions {
+    padding-top: 12px;
+  }
+  .coop-member-history-heading,
+  .coop-member-credit-heading {
+    flex-direction: column;
+  }
+  .coop-member-finance-actions {
+    justify-content: flex-start;
+  }
+  .coop-member-credit-dates {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .coop-member-credit-amounts {
+    gap: 5px;
+  }
+  .coop-member-credit-amounts small {
+    min-height: 22px;
+    line-height: 1.2;
+  }
+  .coop-member-credit-amounts strong {
+    font-size: 9px;
   }
 }
 
@@ -2298,7 +2877,15 @@
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .coop-skeleton {
+  .coop-skeleton,
+  .coop-stat-value-skeleton,
+  .coop-skeleton-avatar,
+  .coop-skeleton-block,
+  .coop-skeleton-pill,
+  .coop-skeleton-status {
+    animation: none;
+  }
+  .coop-member-history-loading > span {
     animation: none;
   }
 }

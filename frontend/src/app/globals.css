@@ -15,7 +15,7 @@
 }
 
 .login-page {
-  font-family: Inter, "Segoe UI", Roboto, Arial, sans-serif;
+  font-family: "Inter", Inter, "Segoe UI", Roboto, Arial, sans-serif;
 }
 
 .login-page input:-webkit-autofill,

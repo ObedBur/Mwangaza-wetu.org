@@ -13,6 +13,7 @@ import { DatService } from '../dat/dat.service';
 import { MemberMailService } from './member-mail.service';
 import { CloudinaryService } from './cloudinary.service';
 import { CreateMemberDto, Sexe } from './dto/create-member.dto';
+import { UpdateMemberDto } from './dto/update-member.dto';
 import type { AuthUser } from '../common/types/auth-request';
 import { UpdateOwnProfileDto } from './dto/update-own-profile.dto';
 import {
@@ -27,6 +28,7 @@ import {
   Prisma,
   Membre,
   StatutMembre as PrismaStatutMembre,
+  StatutCredit,
   Devise,
   TypeOperationEpargne,
 } from '@prisma/client';
@@ -146,6 +148,7 @@ export class MembersService {
           email: true,
           adresse: true,
           sexe: true,
+          idNationale: true,
           typeCompte: true,
           activite: true,
           statut: true,
@@ -156,7 +159,7 @@ export class MembersService {
     ]);
 
     const accountNumbers = data.map((member) => member.numeroCompte);
-    const [savings, withdrawalFees] = await Promise.all([
+    const [savings, withdrawalFees, creditRows] = await Promise.all([
       this.prisma.epargne.groupBy({
         by: ['compte', 'devise', 'typeOperation'],
         where: { compte: { in: accountNumbers } },
@@ -167,7 +170,31 @@ export class MembersService {
         where: { compte: { in: accountNumbers }, statut: 'COMPLETED' },
         _sum: { frais: true },
       }),
+      this.prisma.credit.findMany({
+        where: { numeroCompte: { in: accountNumbers }, statut: { in: [StatutCredit.actif, StatutCredit.en_retard] } },
+        select: { numeroCompte: true, montant: true, montantRembourse: true, tauxInteret: true, dateEcheance: true, statut: true },
+      }),
     ]);
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const dueSoonLimit = new Date(today);
+    dueSoonLimit.setDate(dueSoonLimit.getDate() + 30);
+    const creditAlertsByMember = new Map<string, { overdue: number; dueSoon: number; nextDueDate: Date | null }>();
+    for (const credit of creditRows) {
+      const totalDue = Number(credit.montant) * (1 + Number(credit.tauxInteret) / 100);
+      const remaining = Math.max(0, totalDue - Number(credit.montantRembourse));
+      if (remaining <= 0) continue;
+      const alert = creditAlertsByMember.get(credit.numeroCompte) ?? { overdue: 0, dueSoon: 0, nextDueDate: null };
+      const dueDate = credit.dateEcheance;
+      if (credit.statut === StatutCredit.en_retard || (dueDate && dueDate < today)) {
+        alert.overdue += 1;
+      } else if (dueDate && dueDate <= dueSoonLimit) {
+        alert.dueSoon += 1;
+      }
+      if (dueDate && (!alert.nextDueDate || dueDate < alert.nextDueDate)) alert.nextDueDate = dueDate;
+      creditAlertsByMember.set(credit.numeroCompte, alert);
+    }
 
     const dataWithBalances = data.map((member) => {
       const sumOperations = (devise: Devise, typeOperation: TypeOperationEpargne) =>
@@ -182,6 +209,7 @@ export class MembersService {
           FC: sumOperations(Devise.FC, TypeOperationEpargne.depot) - sumOperations(Devise.FC, TypeOperationEpargne.retrait) - sumFees(Devise.FC),
           USD: sumOperations(Devise.USD, TypeOperationEpargne.depot) - sumOperations(Devise.USD, TypeOperationEpargne.retrait) - sumFees(Devise.USD),
         },
+        alertesCredits: creditAlertsByMember.get(member.numeroCompte) ?? { overdue: 0, dueSoon: 0, nextDueDate: null },
       };
     });
 
@@ -825,7 +853,7 @@ export class MembersService {
     if (updateDto.telephone) data.telephone = updateDto.telephone;
     if (updateDto.email !== undefined) data.email = updateDto.email;
     if (updateDto.adresse !== undefined) data.adresse = updateDto.adresse;
-    if (updateDto.sexe) data.sexe = updateDto.sexe;
+    if (updateDto.sexe !== undefined) data.sexe = updateDto.sexe;
     if (updateDto.statut) data.statut = updateDto.statut;
     if (updateDto.typeCompte) data.typeCompte = updateDto.typeCompte;
     if (updateDto.activite !== undefined)
@@ -1348,6 +1376,135 @@ export class MembersService {
         totalPages: Math.ceil(total / pageSize),
         hasNextPage: page * pageSize < total,
         hasPrevPage: page > 1,
+      },
+    };
+  }
+
+  async getMemberTransactionsForAdmin(
+    memberId: number,
+    filters: {
+      page: number;
+      pageSize: number;
+      type?: string;
+      currency?: string;
+      from?: string;
+      to?: string;
+    },
+  ) {
+    const membre = await this.prisma.membre.findUnique({
+      where: { id: memberId },
+      select: { numeroCompte: true },
+    });
+    if (!membre) throw new NotFoundException('Membre non trouvé');
+
+    const validTypes = ['depot', 'retrait', 'remboursement'];
+    if (filters.type && !validTypes.includes(filters.type)) {
+      throw new BadRequestException('Type d’opération invalide.');
+    }
+    const currency = filters.currency?.toUpperCase();
+    if (currency && currency !== 'USD' && currency !== 'FC') {
+      throw new BadRequestException('Devise invalide.');
+    }
+    const from = filters.from ? new Date(`${filters.from}T00:00:00.000Z`) : undefined;
+    const to = filters.to ? new Date(`${filters.to}T23:59:59.999Z`) : undefined;
+    if ((from && Number.isNaN(from.getTime())) || (to && Number.isNaN(to.getTime()))) {
+      throw new BadRequestException('Période invalide.');
+    }
+    if (from && to && from > to) {
+      throw new BadRequestException('La date de début doit précéder la date de fin.');
+    }
+
+    const dateFilter = from || to ? { gte: from, lte: to } : undefined;
+    const baseTake = filters.page * filters.pageSize;
+    const includeDeposits = !filters.type || filters.type === 'depot';
+    const includeWithdrawals = !filters.type || filters.type === 'retrait';
+    const includeRepayments = !filters.type || filters.type === 'remboursement';
+
+    const [depots, retraits, remboursements, depotsCount, retraitsCount, remboursementsCount] = await Promise.all([
+      includeDeposits ? this.prisma.epargne.findMany({
+        where: {
+          compte: membre.numeroCompte,
+          typeOperation: 'depot',
+          remboursementId: null,
+          devise: currency as Devise | undefined,
+          dateOperation: dateFilter,
+        },
+        orderBy: { dateOperation: 'desc' },
+        take: baseTake,
+      }) : Promise.resolve([]),
+      includeWithdrawals ? this.prisma.retrait.findMany({
+        where: {
+          compte: membre.numeroCompte,
+          devise: currency as Devise | undefined,
+          dateOperation: dateFilter,
+        },
+        orderBy: { dateOperation: 'desc' },
+        take: baseTake,
+      }) : Promise.resolve([]),
+      includeRepayments ? this.prisma.remboursement.findMany({
+        where: {
+          credit: { numeroCompte: membre.numeroCompte },
+          deletedAt: null,
+          devise: currency as Devise | undefined,
+          dateRemboursement: dateFilter,
+        },
+        orderBy: { dateRemboursement: 'desc' },
+        take: baseTake,
+      }) : Promise.resolve([]),
+      includeDeposits ? this.prisma.epargne.count({
+        where: { compte: membre.numeroCompte, typeOperation: 'depot', remboursementId: null, devise: currency as Devise | undefined, dateOperation: dateFilter },
+      }) : Promise.resolve(0),
+      includeWithdrawals ? this.prisma.retrait.count({
+        where: { compte: membre.numeroCompte, devise: currency as Devise | undefined, dateOperation: dateFilter },
+      }) : Promise.resolve(0),
+      includeRepayments ? this.prisma.remboursement.count({
+        where: { credit: { numeroCompte: membre.numeroCompte }, deletedAt: null, devise: currency as Devise | undefined, dateRemboursement: dateFilter },
+      }) : Promise.resolve(0),
+    ]);
+
+    const transactions = [
+      ...depots.map((row) => ({
+        id: `epargne-${row.id}`,
+        date: row.dateOperation,
+        type: 'depot',
+        devise: row.devise,
+        montant: Number(row.montant),
+        statut: 'COMPLETED',
+        description: row.description ?? 'Dépôt d’épargne',
+      })),
+      ...retraits.map((row) => ({
+        id: `retrait-${row.id}`,
+        date: row.dateOperation,
+        type: 'retrait',
+        devise: row.devise,
+        montant: Number(row.montant),
+        statut: row.statut,
+        description: row.motifAnnulation
+          ? `Annulé : ${row.motifAnnulation}`
+          : row.description ?? 'Retrait au guichet',
+      })),
+      ...remboursements.map((row) => ({
+        id: `remboursement-${row.id}`,
+        date: row.dateRemboursement,
+        type: 'remboursement',
+        devise: row.devise,
+        montant: Number(row.montant),
+        statut: 'COMPLETED',
+        description: row.description ?? 'Remboursement de crédit',
+      })),
+    ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+    const total = depotsCount + retraitsCount + remboursementsCount;
+    const offset = (filters.page - 1) * filters.pageSize;
+    return {
+      data: transactions.slice(offset, offset + filters.pageSize),
+      meta: {
+        total,
+        page: filters.page,
+        pageSize: filters.pageSize,
+        totalPages: Math.ceil(total / filters.pageSize),
+        hasNextPage: filters.page * filters.pageSize < total,
+        hasPrevPage: filters.page > 1,
       },
     };
   }
